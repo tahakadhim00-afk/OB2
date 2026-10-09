@@ -18,8 +18,10 @@ public sealed class StorageContext : IDisposable
         AppSettings settings,
         SqliteConnectionFactory connectionFactory,
         ILoggerFactory loggerFactory,
-        MigrationResult migration)
+        MigrationResult migration,
+        InstanceLock instanceLock)
     {
+        InstanceLock = instanceLock;
         Paths = paths;
         SettingsStore = settingsStore;
         Settings = settings;
@@ -40,8 +42,15 @@ public sealed class StorageContext : IDisposable
 
     public MigrationResult Migration { get; }
 
-    /// <summary>Flushes and closes the log files.</summary>
-    public void Dispose() => LoggerFactory.Dispose();
+    /// <summary>Held for the process lifetime; only the first instance runs startup recovery.</summary>
+    public InstanceLock InstanceLock { get; }
+
+    /// <summary>Releases the instance lock and flushes and closes the log files.</summary>
+    public void Dispose()
+    {
+        InstanceLock.Dispose();
+        LoggerFactory.Dispose();
+    }
 }
 
 /// <summary>
@@ -89,7 +98,7 @@ public static class StorageBootstrapper
                 clock,
                 loggerFactory.CreateLogger<MigrationRunner>()).Run();
 
-            return new StorageContext(paths, settingsStore, load.Settings, connectionFactory, loggerFactory, migration);
+            return new StorageContext(paths, settingsStore, load.Settings, connectionFactory, loggerFactory, migration, InstanceLock.Acquire(paths));
         }
         catch (Exception ex)
         {

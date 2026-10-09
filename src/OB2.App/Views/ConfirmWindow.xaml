@@ -1,0 +1,16 @@
+<Window x:Class="OB2.App.Views.ConfirmWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Icon="/Resources/ob2.ico"
+        Width="440" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
+    <!-- Shared by the delete confirmation (§9.6) and the completion-action countdown (FR-17). -->
+    <StackPanel Margin="16">
+        <TextBlock x:Name="MessageText" TextWrapping="Wrap" Margin="0,0,0,12" />
+        <CheckBox x:Name="Option" Margin="0,0,0,12" Visibility="Collapsed" />
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button x:Name="ConfirmButton" Style="{StaticResource DialogButton}" Click="OnConfirm" />
+            <Button x:Name="CancelButton" Style="{StaticResource DialogButton}" Content="{StaticResource Common_Cancel}" IsCancel="True" IsDefault="True" />
+        </StackPanel>
+    </StackPanel>
+</Window>

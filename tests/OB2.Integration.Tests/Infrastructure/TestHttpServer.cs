@@ -60,13 +60,13 @@ public sealed class TestHttpServer : IAsyncDisposable
     private int _maxConcurrentResponses;
     private int _rejectedResponses;
 
-    public static async Task<TestHttpServer> StartAsync()
+    public static async Task<TestHttpServer> StartAsync(int port = 0)
     {
         var builder = WebApplication.CreateSlimBuilder();
         builder.Logging.ClearProviders();
         builder.WebHost.UseKestrel(o =>
         {
-            o.Listen(IPAddress.Loopback, 0);
+            o.Listen(IPAddress.Loopback, port);
             o.Limits.MinResponseDataRate = null;
             o.Limits.MaxConcurrentConnections = null;
         });

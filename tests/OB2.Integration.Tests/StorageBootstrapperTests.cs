@@ -35,13 +35,13 @@ public sealed class StorageBootstrapperTests : IDisposable
         using (var context = await StorageBootstrapper.InitializeAsync(Environment))
         {
             context.Paths.IsPortable.Should().BeTrue();
-            context.Migration.Applied.Should().Equal(1);
+            context.Migration.Applied.Should().Equal(1, 2);
         }
 
         File.Exists(Path.Combine(_exeDir, "settings.json")).Should().BeTrue();
         File.Exists(Path.Combine(_exeDir, "data", "ob2.db")).Should().BeTrue();
         var log = Directory.GetFiles(Path.Combine(_exeDir, "data", "logs"), LogConfigurator.FilePrefix + "*.log").Should().ContainSingle().Subject;
-        File.ReadAllText(log).Should().Contain("OB2 starting").And.Contain("portable").And.Contain("migrated from version 0 to 1");
+        File.ReadAllText(log).Should().Contain("OB2 starting").And.Contain("portable").And.Contain("migrated from version 0 to 2");
         Directory.GetFileSystemEntries(_roaming).Should().BeEmpty("portable mode must not touch %APPDATA%");
     }
 
@@ -73,9 +73,25 @@ public sealed class StorageBootstrapperTests : IDisposable
         using var second = await StorageBootstrapper.InitializeAsync(Environment);
 
         second.Migration.Applied.Should().BeEmpty();
-        second.Migration.CurrentVersion.Should().Be(1);
+        second.Migration.CurrentVersion.Should().Be(2);
         second.Settings.Downloads.Connections.Should().Be(12);
         second.Settings.Folders.DefaultSaveFolder.Should().Be(@"E:\Incoming");
+    }
+
+    [Fact]
+    public async Task Only_the_first_process_on_a_data_folder_runs_recovery()
+    {
+        File.WriteAllText(Path.Combine(_exeDir, AppPaths.PortableFlagFileName), "");
+
+        using (var first = await StorageBootstrapper.InitializeAsync(Environment))
+        {
+            first.InstanceLock.IsFirstInstance.Should().BeTrue();
+            using var second = await StorageBootstrapper.InitializeAsync(Environment);
+            second.InstanceLock.IsFirstInstance.Should().BeFalse("the window is already running on this folder");
+        }
+
+        using var later = await StorageBootstrapper.InitializeAsync(Environment);
+        later.InstanceLock.IsFirstInstance.Should().BeTrue("the lock is released when the first process exits");
     }
 
     [Fact]

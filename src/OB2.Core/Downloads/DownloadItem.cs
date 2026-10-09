@@ -20,6 +20,9 @@ public sealed class DownloadItem
 
     public long? QueueId { get; set; }
 
+    /// <summary>Order inside the queue (FR-15). Lower runs first.</summary>
+    public long QueuePosition { get; set; }
+
     public DownloadStatus Status { get; set; } = DownloadStatus.Queued;
 
     /// <summary>Null when the server did not report a size.</summary>

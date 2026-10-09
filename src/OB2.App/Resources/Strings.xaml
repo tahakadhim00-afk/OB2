@@ -3,11 +3,194 @@
                     xmlns:sys="clr-namespace:System;assembly=System.Runtime">
     <!-- All user-visible text lives here so it can be translated later (NFR Localization). -->
     <sys:String x:Key="App_Title">OB2</sys:String>
-    <sys:String x:Key="Shell_Empty">No downloads yet.</sys:String>
-    <sys:String x:Key="Status_DataRoot">Data folder: {0}</sys:String>
-    <sys:String x:Key="Status_Portable">Portable</sys:String>
-    <sys:String x:Key="Status_PerUser">Installed (per user)</sys:String>
-    <sys:String x:Key="Status_Schema">Database schema v{0}</sys:String>
+    <sys:String x:Key="Common_Ok">OK</sys:String>
+    <sys:String x:Key="Common_Cancel">Cancel</sys:String>
+    <sys:String x:Key="Common_Save">Save</sys:String>
+    <sys:String x:Key="Common_Close">Close</sys:String>
+    <sys:String x:Key="Common_Browse">Browse…</sys:String>
+    <sys:String x:Key="Common_Add">Add</sys:String>
+    <sys:String x:Key="Common_Remove">Remove</sys:String>
+    <sys:String x:Key="Common_Unknown">Unknown</sys:String>
+
+    <!-- Toolbar (§9.1) -->
+    <sys:String x:Key="Tb_Add">Add URL</sys:String>
+    <sys:String x:Key="Tb_Resume">Resume</sys:String>
+    <sys:String x:Key="Tb_Stop">Stop</sys:String>
+    <sys:String x:Key="Tb_StopAll">Stop All</sys:String>
+    <sys:String x:Key="Tb_ResumeAll">Resume All</sys:String>
+    <sys:String x:Key="Tb_Delete">Delete</sys:String>
+    <sys:String x:Key="Tb_Options">Options</sys:String>
+    <sys:String x:Key="Tb_Scheduler">Scheduler</sys:String>
+    <sys:String x:Key="Tb_StartQueue">Start Queue</sys:String>
+    <sys:String x:Key="Tb_StopQueue">Stop Queue</sys:String>
+    <sys:String x:Key="Tb_Add_Tip">Add a download by address (Ctrl+N)</sys:String>
+    <sys:String x:Key="Tb_Resume_Tip">Start or resume the selected downloads (Space)</sys:String>
+    <sys:String x:Key="Tb_Stop_Tip">Pause the selected downloads (Space)</sys:String>
+    <sys:String x:Key="Tb_StopAll_Tip">Pause every download (Ctrl+Shift+P)</sys:String>
+    <sys:String x:Key="Tb_Delete_Tip">Remove the selected downloads (Del)</sys:String>
+
+    <!-- Navigation tree -->
+    <sys:String x:Key="Nav_All">All Downloads</sys:String>
+    <sys:String x:Key="Nav_Unfinished">Unfinished</sys:String>
+    <sys:String x:Key="Nav_Finished">Finished</sys:String>
+    <sys:String x:Key="Nav_Queues">Queues</sys:String>
+    <sys:String x:Key="Nav_Categories">Categories</sys:String>
+    <sys:String x:Key="Nav_Running">running</sys:String>
+
+    <!-- List columns -->
+    <sys:String x:Key="Col_FileName">File name</sys:String>
+    <sys:String x:Key="Col_Size">Size</sys:String>
+    <sys:String x:Key="Col_Status">Status</sys:String>
+    <sys:String x:Key="Col_Progress">Progress</sys:String>
+    <sys:String x:Key="Col_Speed">Speed</sys:String>
+    <sys:String x:Key="Col_TimeLeft">Time left</sys:String>
+    <sys:String x:Key="Col_DateAdded">Date added</sys:String>
+    <sys:String x:Key="Col_SaveFolder">Save folder</sys:String>
+    <sys:String x:Key="Col_Category">Category</sys:String>
+    <sys:String x:Key="Col_Queue">Queue</sys:String>
+
+    <!-- Statuses -->
+    <sys:String x:Key="Status_Queued">Queued</sys:String>
+    <sys:String x:Key="Status_Probing">Connecting…</sys:String>
+    <sys:String x:Key="Status_Downloading">Downloading</sys:String>
+    <sys:String x:Key="Status_Paused">Paused</sys:String>
+    <sys:String x:Key="Status_Retrying">Waiting for network</sys:String>
+    <sys:String x:Key="Status_Completed">Complete</sys:String>
+    <sys:String x:Key="Status_Failed">Failed</sys:String>
+    <sys:String x:Key="Status_Cancelled">Cancelled</sys:String>
+
+    <!-- Context menu -->
+    <sys:String x:Key="Menu_OpenFile">Open file</sys:String>
+    <sys:String x:Key="Menu_OpenFolder">Open folder</sys:String>
+    <sys:String x:Key="Menu_CopyUrl">Copy address</sys:String>
+    <sys:String x:Key="Menu_MoveUp">Move up in queue</sys:String>
+    <sys:String x:Key="Menu_MoveDown">Move down in queue</sys:String>
+    <sys:String x:Key="Menu_DownloadLater">Put back in queue</sys:String>
+    <sys:String x:Key="Menu_MoveToQueue">Move to queue</sys:String>
+
+    <!-- Details panel -->
+    <sys:String x:Key="Detail_Url">Address</sys:String>
+    <sys:String x:Key="Detail_Destination">Saved to</sys:String>
+    <sys:String x:Key="Detail_Error">Error</sys:String>
+    <sys:String x:Key="Detail_Connections">Connections</sys:String>
+    <sys:String x:Key="Detail_Retry">Retry</sys:String>
+    <sys:String x:Key="Detail_None">Select a download to see its connections.</sys:String>
+
+    <!-- Status bar -->
+    <sys:String x:Key="StatusBar_Speed">Total speed: {0}</sys:String>
+    <sys:String x:Key="StatusBar_Active">{0} active</sys:String>
+    <sys:String x:Key="StatusBar_Queues">Running queues: {0}</sys:String>
+    <sys:String x:Key="StatusBar_NoQueues">No queue running</sys:String>
+    <sys:String x:Key="StatusBar_Tray">Closing hides to the tray</sys:String>
+    <sys:String x:Key="StatusBar_NoTray">Closing exits</sys:String>
+    <sys:String x:Key="Search_Placeholder">Search (Ctrl+F)</sys:String>
+    <sys:String x:Key="Empty_List">No downloads here. Press Ctrl+N or drop a link on this window.</sys:String>
+
+    <!-- Delete -->
+    <sys:String x:Key="Delete_Title">Delete downloads</sys:String>
+    <sys:String x:Key="Delete_Message">Remove {0} download(s) from the list? Unfinished partial files are removed too.</sys:String>
+    <sys:String x:Key="Delete_AlsoFile">Also delete the downloaded files from disk</sys:String>
+    <sys:String x:Key="Delete_Confirm">Delete</sys:String>
+
+    <!-- Add download (§9.2) -->
+    <sys:String x:Key="Add_Title">Add download</sys:String>
+    <sys:String x:Key="Add_Url">Address</sys:String>
+    <sys:String x:Key="Add_SaveAs">Save as</sys:String>
+    <sys:String x:Key="Add_Category">Category</sys:String>
+    <sys:String x:Key="Add_Folder">Save to</sys:String>
+    <sys:String x:Key="Add_Connections">Connections</sys:String>
+    <sys:String x:Key="Add_Queue">Queue</sys:String>
+    <sys:String x:Key="Add_Checksum">Checksum</sys:String>
+    <sys:String x:Key="Add_SpeedLimit">Speed limit (KB/s, 0 = none)</sys:String>
+    <sys:String x:Key="Add_Later">Download Later</sys:String>
+    <sys:String x:Key="Add_Now">Download Now</sys:String>
+    <sys:String x:Key="Add_Probing">Checking the address…</sys:String>
+    <sys:String x:Key="Add_Size">Size: {0}</sys:String>
+    <sys:String x:Key="Add_ResumeYes">Resume supported</sys:String>
+    <sys:String x:Key="Add_ResumeNo">Resume not supported: one connection only</sys:String>
+    <sys:String x:Key="Add_General">General (no category)</sys:String>
+    <sys:String x:Key="Add_ChecksumNone">None</sys:String>
+    <sys:String x:Key="Add_InvalidUrl">Enter an http:// or https:// address.</sys:String>
+    <sys:String x:Key="Add_TooLong">The address is longer than 2048 characters.</sys:String>
+    <sys:String x:Key="Add_InvalidChecksum">The checksum does not look like a valid {0} value.</sys:String>
+    <sys:String x:Key="Add_ProbeFailed">Could not reach the address: {0}</sys:String>
+    <sys:String x:Key="Add_Credentials">This address contains a user name and password. Download it anyway?</sys:String>
+    <sys:String x:Key="Add_FromBrowser">Captured from {0}</sys:String>
+
+    <!-- Download complete (§9.3) -->
+    <sys:String x:Key="Complete_Title">Download complete</sys:String>
+    <sys:String x:Key="Complete_Size">Size: {0}</sys:String>
+    <sys:String x:Key="Complete_Time">Time taken: {0}</sys:String>
+    <sys:String x:Key="Complete_OpenFile">Open File</sys:String>
+    <sys:String x:Key="Complete_OpenFolder">Open Folder</sys:String>
+    <sys:String x:Key="Complete_DontShow">Do not show again for this category</sys:String>
+    <sys:String x:Key="Exec_Title">Open a program?</sys:String>
+    <sys:String x:Key="Exec_Message">"{0}" is a program or script downloaded from the internet. Open it only if you trust where it came from. Open it now?</sys:String>
+
+    <!-- Notifications (FR-27) and tray (§9.4) -->
+    <sys:String x:Key="Notify_Completed">Download complete</sys:String>
+    <sys:String x:Key="Notify_Failed">Download failed</sys:String>
+    <sys:String x:Key="Notify_QueueDone">Queue "{0}" finished</sys:String>
+    <sys:String x:Key="Tray_Show">Show</sys:String>
+    <sys:String x:Key="Tray_PauseAll">Pause All</sys:String>
+    <sys:String x:Key="Tray_ResumeAll">Resume All</sys:String>
+    <sys:String x:Key="Tray_Options">Options</sys:String>
+    <sys:String x:Key="Tray_Exit">Exit</sys:String>
+    <sys:String x:Key="Tray_Tooltip">OB2 · {0} active · {1}</sys:String>
+
+    <!-- Completion actions (FR-17) -->
+    <sys:String x:Key="Countdown_Title">Queue finished</sys:String>
+    <sys:String x:Key="Countdown_Message">{0} in {1} seconds.</sys:String>
+    <sys:String x:Key="Action_None">Do nothing</sys:String>
+    <sys:String x:Key="Action_CloseApp">Close OB2</sys:String>
+    <sys:String x:Key="Action_Sleep">Put the computer to sleep</sys:String>
+    <sys:String x:Key="Action_Shutdown">Shut down the computer</sys:String>
+    <sys:String x:Key="Action_RunCommand">Run a command</sys:String>
+
+    <!-- Settings (FR-29, FR-30) -->
+    <sys:String x:Key="Settings_Title">Options</sys:String>
+    <sys:String x:Key="Settings_General">General</sys:String>
+    <sys:String x:Key="Settings_Connection">Connection</sys:String>
+    <sys:String x:Key="Settings_Categories">Categories</sys:String>
+    <sys:String x:Key="Settings_DefaultFolder">Default save folder</sys:String>
+    <sys:String x:Key="Settings_MinimizeToTray">Closing the window keeps OB2 running in the tray</sys:String>
+    <sys:String x:Key="Settings_ShowComplete">Show the "Download complete" window</sys:String>
+    <sys:String x:Key="Settings_Notifications">Show Windows notifications for finished and failed downloads</sys:String>
+    <sys:String x:Key="Settings_AutoResume">Resume interrupted downloads when OB2 starts</sys:String>
+    <sys:String x:Key="Settings_Connections">Connections per download (1–32)</sys:String>
+    <sys:String x:Key="Settings_PerHost">Connections per server, all downloads (1–64)</sys:String>
+    <sys:String x:Key="Settings_Retries">Retries per connection</sys:String>
+    <sys:String x:Key="Settings_ConnectTimeout">Connect timeout (seconds)</sys:String>
+    <sys:String x:Key="Settings_ReadTimeout">No-data timeout (seconds)</sys:String>
+    <sys:String x:Key="Settings_UserAgent">User agent</sys:String>
+    <sys:String x:Key="Settings_GlobalLimit">Total speed limit (KB/s, 0 = none)</sys:String>
+    <sys:String x:Key="Settings_CategoryName">Name</sys:String>
+    <sys:String x:Key="Settings_CategoryExtensions">Extensions</sys:String>
+    <sys:String x:Key="Settings_CategoryFolder">Folder (empty = default\name)</sys:String>
+    <sys:String x:Key="Settings_NewCategory">New category</sys:String>
+    <sys:String x:Key="Settings_ResetUserAgent">Reset</sys:String>
+    <sys:String x:Key="Settings_CategoryNamesInvalid">Every category needs a name, and no two can share one.</sys:String>
+
+    <!-- Scheduler (FR-13 to FR-17) -->
+    <sys:String x:Key="Scheduler_Title">Scheduler</sys:String>
+    <sys:String x:Key="Scheduler_Queues">Queues</sys:String>
+    <sys:String x:Key="Scheduler_NewQueue">New queue</sys:String>
+    <sys:String x:Key="Scheduler_Name">Name</sys:String>
+    <sys:String x:Key="Scheduler_Concurrency">Downloads at the same time</sys:String>
+    <sys:String x:Key="Scheduler_Enabled">Start and stop this queue on a schedule</sys:String>
+    <sys:String x:Key="Scheduler_StartAt">Start at (HH:mm)</sys:String>
+    <sys:String x:Key="Scheduler_StopAt">Stop at (HH:mm)</sys:String>
+    <sys:String x:Key="Scheduler_UseStop">Stop at a set time</sys:String>
+    <sys:String x:Key="Scheduler_Days">On these days</sys:String>
+    <sys:String x:Key="Scheduler_WhenDone">When the queue finishes</sys:String>
+    <sys:String x:Key="Scheduler_Command">Command</sys:String>
+    <sys:String x:Key="Scheduler_Items">Downloads in this queue</sys:String>
+    <sys:String x:Key="Scheduler_StartNow">Start now</sys:String>
+    <sys:String x:Key="Scheduler_StopNow">Stop now</sys:String>
+    <sys:String x:Key="Scheduler_InvalidTime">Use 24-hour time, for example 01:00 or 23:30.</sys:String>
+    <sys:String x:Key="Scheduler_CannotDeleteLast">At least one queue must remain.</sys:String>
+
+    <!-- Startup / errors -->
     <sys:String x:Key="Startup_FailedTitle">OB2 could not start</sys:String>
     <sys:String x:Key="Startup_FailedMessage">OB2 could not prepare its data folder or database.&#x0a;&#x0a;{0}</sys:String>
     <sys:String x:Key="Error_UnexpectedTitle">Something went wrong</sys:String>

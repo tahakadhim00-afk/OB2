@@ -30,7 +30,7 @@ internal sealed partial class DownloadJob : IDisposable
     private readonly object _statusLock = new();
     private readonly HostConnectionLimiter _hostLimiter;
     private readonly RetryPolicy _retry;
-    private readonly TokenBucket[] _limiters;
+    private TokenBucket[] _limiters;
 
     private DownloadItem _item = null!;
     private List<Segment> _segments = [];
@@ -191,6 +191,11 @@ internal sealed partial class DownloadJob : IDisposable
 
         _item.Connections = Math.Max(1, _segments.Count);
         _connectionLimit = Math.Max(1, _segments.Count(s => !s.IsComplete));
+        if (_item.SpeedLimitBps is > 0)
+        {
+            // FR-9: a per-download limit applies on top of the global one.
+            _limiters = [.. _limiters, new TokenBucket(_item.SpeedLimitBps)];
+        }
         _item.DownloadedBytes = _segments.Sum(s => s.Downloaded);
         _item.StartedAt ??= _clock.UtcNow;
         _lastCheckpointBytes = _item.DownloadedBytes;

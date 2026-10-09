@@ -51,9 +51,12 @@ public sealed partial class DownloadEngine : IDisposable
     /// <summary>Raised on a background thread whenever a download changes status.</summary>
     public event EventHandler<DownloadItem>? StatusChanged;
 
-    public IReadOnlyCollection<long> ActiveIds => [.. _jobs.Keys];
+    /// <summary>Raised after a job has finished and no longer counts as active.</summary>
+    public event EventHandler<long>? JobEnded;
 
-    public bool IsActive(long id) => _jobs.ContainsKey(id);
+    public IReadOnlyCollection<long> ActiveIds => [.. _jobs.Where(j => !j.Value.Completion.IsCompleted).Select(j => j.Key)];
+
+    public bool IsActive(long id) => _jobs.TryGetValue(id, out var job) && !job.Completion.IsCompleted;
 
     public async Task<ProbeResult> ProbeAsync(DownloadRequest request, CancellationToken cancellationToken = default)
     {
@@ -93,6 +96,7 @@ public sealed partial class DownloadEngine : IDisposable
                 DestPath = destination,
                 CategoryId = request.CategoryId,
                 QueueId = request.QueueId,
+                QueuePosition = request.QueuePosition,
                 Status = DownloadStatus.Queued,
                 TotalBytes = probe.TotalBytes,
                 Connections = Math.Clamp(request.Connections ?? _options().Connections, 1, 32),
@@ -127,9 +131,15 @@ public sealed partial class DownloadEngine : IDisposable
     {
         lock (_startLock)
         {
-            if (_jobs.ContainsKey(id))
+            if (_jobs.TryGetValue(id, out var existing))
             {
-                return false;
+                if (!existing.Completion.IsCompleted)
+                {
+                    return false;
+                }
+
+                // Finished but its cleanup continuation has not run yet: it no longer owns the download.
+                _jobs.TryRemove(new KeyValuePair<long, DownloadJob>(id, existing));
             }
 
             var item = _repository.Get(id);
@@ -143,7 +153,13 @@ public sealed partial class DownloadEngine : IDisposable
             _jobs[id] = job;
             job.Start();
             // Remove only this job: a later Start for the same id may already have replaced it.
-            _ = job.Completion.ContinueWith(_ => _jobs.TryRemove(new KeyValuePair<long, DownloadJob>(id, job)), TaskScheduler.Default);
+            _ = job.Completion.ContinueWith(
+                _ =>
+                {
+                    _jobs.TryRemove(new KeyValuePair<long, DownloadJob>(id, job));
+                    JobEnded?.Invoke(this, id);
+                },
+                TaskScheduler.Default);
             return true;
         }
     }
@@ -179,6 +195,27 @@ public sealed partial class DownloadEngine : IDisposable
     }
 
     public Task PauseAllAsync() => Task.WhenAll(_jobs.Keys.Select(PauseAsync));
+
+    /// <summary>Stops a running download and puts it back in its queue (used when a queue stops).</summary>
+    public async Task RequeueAsync(long id)
+    {
+        await PauseAsync(id).ConfigureAwait(false);
+        var item = _repository.Get(id);
+        if (item is { Status: DownloadStatus.Paused })
+        {
+            item.Status = DownloadStatus.Queued;
+            _repository.Update(item);
+            StatusChanged?.Invoke(this, item.Clone());
+        }
+    }
+
+    /// <summary>Writes user edits (queue, category, order, limits) for a download that is not running.</summary>
+    public void Update(DownloadItem item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        _repository.Update(item);
+        StatusChanged?.Invoke(this, item.Clone());
+    }
 
     /// <summary>Removes the record and its partial file; the finished file only when asked (§9.6).</summary>
     public async Task DeleteAsync(long id, bool deleteFile)

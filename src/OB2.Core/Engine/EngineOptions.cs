@@ -48,6 +48,7 @@ public sealed record EngineOptions
             ConnectTimeout = TimeSpan.FromSeconds(d.ConnectTimeoutSeconds),
             ReadIdleTimeout = TimeSpan.FromSeconds(d.ReadIdleTimeoutSeconds),
             UserAgent = d.UserAgent,
+            MaxConnectionsPerHost = d.MaxConnectionsPerHost,
         };
     }
 }

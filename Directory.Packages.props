@@ -1,10 +1,12 @@
-<Project>
-  <!-- All NuGet versions are pinned here (PRD §11.1). Review release notes before bumping. -->
+﻿<Project>
+  <!-- All NuGet versions are pinned here (PRD §11.1). Review release notes before bumping.
+       H.NotifyIcon.Wpf stays on 2.3.x: 2.4 dropped net8.0 builds. -->
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
   <ItemGroup>
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageVersion Include="H.NotifyIcon.Wpf" Version="2.3.2" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="8.0.31" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.3" />

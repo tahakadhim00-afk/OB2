@@ -29,8 +29,8 @@ public sealed class MigrationRunnerTests : IDisposable
         var result = new MigrationRunner(_factory).Run();
 
         result.StartingVersion.Should().Be(0);
-        result.CurrentVersion.Should().Be(1);
-        result.Applied.Should().Equal(1);
+        result.CurrentVersion.Should().Be(2);
+        result.Applied.Should().Equal(1, 2);
 
         Tables().Should().Contain(SchemaV1Tables);
         Indexes().Should().Contain(["idx_downloads_status", "idx_downloads_created"]);
@@ -38,7 +38,7 @@ public sealed class MigrationRunnerTests : IDisposable
             "id", "url", "final_url", "filename", "dest_path", "category_id", "queue_id", "status",
             "total_bytes", "downloaded_bytes", "connections", "supports_ranges", "etag", "last_modified",
             "checksum_algo", "checksum_value", "referrer", "user_agent", "headers_json", "speed_limit_bps",
-            "error_code", "error_message", "created_at", "started_at", "completed_at", "source");
+            "error_code", "error_message", "created_at", "started_at", "completed_at", "source", "queue_position");
         Columns("segments").Should().Equal(
             "download_id", "segment_index", "range_start", "range_end", "downloaded", "status", "retry_count");
     }
@@ -54,9 +54,9 @@ public sealed class MigrationRunnerTests : IDisposable
 
         second.Applied.Should().BeEmpty();
         third.Applied.Should().BeEmpty();
-        second.CurrentVersion.Should().Be(1);
+        second.CurrentVersion.Should().Be(2);
         SchemaSql().Should().Be(schemaBefore);
-        Scalar("SELECT COUNT(*) FROM schema_version").Should().Be(1);
+        Scalar("SELECT COUNT(*) FROM schema_version").Should().Be(2);
     }
 
     [Fact]

@@ -9,6 +9,7 @@
     <AssemblyName>OB2</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <StartupObject>OB2.App.Program</StartupObject>
+    <ApplicationIcon>Resources\ob2.ico</ApplicationIcon>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
@@ -19,7 +20,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Resource Include="Resources\ob2.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="H.NotifyIcon.Wpf" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
   </ItemGroup>
 

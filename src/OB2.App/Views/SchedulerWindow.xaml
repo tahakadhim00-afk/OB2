@@ -1,0 +1,122 @@
+<Window x:Class="OB2.App.Views.SchedulerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:OB2.App.ViewModels"
+        mc:Ignorable="d"
+        d:DataContext="{d:DesignInstance Type=vm:SchedulerViewModel}"
+        Title="{StaticResource Scheduler_Title}"
+        Icon="/Resources/ob2.ico"
+        Width="820" Height="560" MinWidth="680" MinHeight="460"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
+    <DockPanel Margin="12">
+        <DockPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <Button Style="{StaticResource DialogButton}" Content="{StaticResource Common_Save}" Command="{Binding SaveAndCloseCommand}" IsDefault="True" />
+                <Button Style="{StaticResource DialogButton}" Content="{StaticResource Common_Cancel}" Command="{Binding CancelCommand}" IsCancel="True" />
+            </StackPanel>
+            <TextBlock Style="{StaticResource ErrorText}" Text="{Binding ErrorText}" VerticalAlignment="Center" />
+        </DockPanel>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="200" />
+                <ColumnDefinition Width="12" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Top" Style="{StaticResource SectionHeader}" Text="{StaticResource Scheduler_Queues}" />
+                <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,6,0,0">
+                    <Button Content="{StaticResource Common_Add}" Command="{Binding AddQueueCommand}" Padding="12,2" />
+                    <Button Content="{StaticResource Common_Remove}" Command="{Binding RemoveQueueCommand}" Padding="12,2" Margin="6,0,0,0" />
+                </StackPanel>
+                <ListBox ItemsSource="{Binding Queues}" SelectedItem="{Binding SelectedQueue}" DisplayMemberPath="Name"
+                         AutomationProperties.Name="{StaticResource Scheduler_Queues}" />
+            </DockPanel>
+
+            <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto" DataContext="{Binding SelectedQueue}">
+                <StackPanel>
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <Label Content="{StaticResource Scheduler_Name}" Target="{Binding ElementName=QName}" Style="{StaticResource FieldLabel}" />
+                        <TextBox x:Name="QName" Grid.Column="1" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Margin="0,2" />
+                        <Label Grid.Row="1" Content="{StaticResource Scheduler_Concurrency}" Target="{Binding ElementName=QConc}" Style="{StaticResource FieldLabel}" />
+                        <TextBox x:Name="QConc" Grid.Row="1" Grid.Column="1" Width="60" HorizontalAlignment="Left" Text="{Binding Concurrency, UpdateSourceTrigger=PropertyChanged}" Margin="0,2" />
+                    </Grid>
+
+                    <GroupBox Padding="8" Margin="0,0,0,8">
+                        <GroupBox.Header>
+                            <CheckBox Content="{StaticResource Scheduler_Enabled}" IsChecked="{Binding ScheduleEnabled}" />
+                        </GroupBox.Header>
+                        <StackPanel IsEnabled="{Binding ScheduleEnabled}">
+                            <StackPanel Orientation="Horizontal" Margin="0,2">
+                                <Label Content="{StaticResource Scheduler_StartAt}" Target="{Binding ElementName=QStart}" Style="{StaticResource FieldLabel}" Width="130" />
+                                <TextBox x:Name="QStart" Width="70" Text="{Binding StartText, UpdateSourceTrigger=PropertyChanged}" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,2">
+                                <CheckBox Content="{StaticResource Scheduler_UseStop}" IsChecked="{Binding UseStop}" Width="130" VerticalAlignment="Center" />
+                                <TextBox Width="70" Text="{Binding StopText, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding UseStop}"
+                                         AutomationProperties.Name="{StaticResource Scheduler_StopAt}" />
+                            </StackPanel>
+                            <TextBlock Text="{StaticResource Scheduler_Days}" Margin="0,8,0,4" />
+                            <ItemsControl ItemsSource="{Binding Days}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <CheckBox Content="{Binding Label}" IsChecked="{Binding IsChecked}" Margin="0,0,12,0" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </GroupBox>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,2">
+                        <Label Content="{StaticResource Scheduler_WhenDone}" Target="{Binding ElementName=QAction}" Style="{StaticResource FieldLabel}" Width="160" />
+                        <ComboBox x:Name="QAction" Width="240"
+                                  ItemsSource="{Binding DataContext.Actions, RelativeSource={RelativeSource AncestorType=Window}}"
+                                  SelectedValuePath="Value" SelectedValue="{Binding CompletionAction}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,2,0,8">
+                        <Label Content="{StaticResource Scheduler_Command}" Target="{Binding ElementName=QCmd}" Style="{StaticResource FieldLabel}" Width="160" />
+                        <TextBox x:Name="QCmd" Width="340" Text="{Binding Command, UpdateSourceTrigger=PropertyChanged}" />
+                    </StackPanel>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <Button Content="{StaticResource Scheduler_StartNow}" Padding="12,2"
+                                Command="{Binding DataContext.StartNowCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
+                        <Button Content="{StaticResource Scheduler_StopNow}" Padding="12,2" Margin="6,0,0,0"
+                                Command="{Binding DataContext.StopNowCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
+                    </StackPanel>
+
+                    <TextBlock Style="{StaticResource SectionHeader}" Text="{StaticResource Scheduler_Items}" />
+                    <DockPanel DataContext="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}">
+                        <StackPanel DockPanel.Dock="Right" Margin="6,0,0,0">
+                            <Button Content="{StaticResource Menu_MoveUp}" Command="{Binding MoveUpCommand}" Padding="8,2" Margin="0,0,0,4" />
+                            <Button Content="{StaticResource Menu_MoveDown}" Command="{Binding MoveDownCommand}" Padding="8,2" />
+                        </StackPanel>
+                        <ListView ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem}" Height="150"
+                                  AutomationProperties.Name="{StaticResource Scheduler_Items}">
+                            <ListView.View>
+                                <GridView>
+                                    <GridViewColumn Header="{StaticResource Col_FileName}" DisplayMemberBinding="{Binding FileName}" Width="300" />
+                                    <GridViewColumn Header="{StaticResource Col_Status}" DisplayMemberBinding="{Binding StatusText}" Width="120" />
+                                </GridView>
+                            </ListView.View>
+                        </ListView>
+                    </DockPanel>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+    </DockPanel>
+</Window>

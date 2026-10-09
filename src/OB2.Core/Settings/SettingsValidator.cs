@@ -26,6 +26,8 @@ public static class SettingsValidator
         d.MaxRetries = Clamp(d.MaxRetries, 0, 100, "downloads.maxRetries", changes);
         d.ConnectTimeoutSeconds = Clamp(d.ConnectTimeoutSeconds, 1, 600, "downloads.connectTimeoutSeconds", changes);
         d.ReadIdleTimeoutSeconds = Clamp(d.ReadIdleTimeoutSeconds, 1, 3600, "downloads.readIdleTimeoutSeconds", changes);
+        d.MaxConnectionsPerHost = Clamp(d.MaxConnectionsPerHost, 1, 64, "downloads.maxConnectionsPerHost", changes);
+        settings.General.CompleteDialogHiddenCategories ??= [];
         if (string.IsNullOrWhiteSpace(d.UserAgent))
         {
             d.UserAgent = DownloadSettings.DefaultUserAgent;

@@ -62,7 +62,11 @@ internal static partial class CliCommand
         var paths = options.DataRoot is null ? AppPaths.Resolve(AppPathEnvironment.Current) : AppPaths.ForRoot(options.DataRoot);
         using var storage = await StorageBootstrapper.InitializeAsync(paths);
         var repository = new SqliteDownloadRepository(storage.ConnectionFactory);
-        repository.MarkInterruptedAsPaused();
+        if (storage.InstanceLock.IsFirstInstance)
+        {
+            // Another OB2 process may be downloading; only the first one recovers interrupted rows.
+            repository.MarkInterruptedAsPaused();
+        }
 
         var saveFolder = Path.GetFullPath(options.OutputFolder
             ?? storage.Settings.Folders.DefaultSaveFolder

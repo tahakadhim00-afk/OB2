@@ -34,6 +34,8 @@ public sealed record DownloadRequest
 
     public long? QueueId { get; init; }
 
+    public long QueuePosition { get; init; }
+
     public long? CategoryId { get; init; }
 
     public long? SpeedLimitBps { get; init; }

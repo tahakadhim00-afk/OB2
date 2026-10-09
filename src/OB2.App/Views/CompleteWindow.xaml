@@ -1,0 +1,24 @@
+<Window x:Class="OB2.App.Views.CompleteWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="{StaticResource Complete_Title}"
+        Icon="/Resources/ob2.ico"
+        Width="460" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterScreen" Topmost="True" ShowActivated="True">
+    <StackPanel Margin="16">
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+            <TextBlock Style="{StaticResource Glyph}" Text="&#xE73E;" FontSize="28" Margin="0,0,12,0" VerticalAlignment="Top" />
+            <StackPanel>
+                <TextBlock x:Name="NameText" FontWeight="SemiBold" TextWrapping="Wrap" MaxWidth="360" />
+                <TextBlock x:Name="SizeText" Style="{StaticResource Hint}" Margin="0,4,0,0" />
+                <TextBlock x:Name="TimeText" Style="{StaticResource Hint}" />
+            </StackPanel>
+        </StackPanel>
+        <CheckBox x:Name="DontShow" Content="{StaticResource Complete_DontShow}" Margin="0,4,0,12" />
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Style="{StaticResource DialogButton}" Content="{StaticResource Complete_OpenFile}" Click="OnOpenFile" IsDefault="True" />
+            <Button Style="{StaticResource DialogButton}" Content="{StaticResource Complete_OpenFolder}" Click="OnOpenFolder" />
+            <Button Style="{StaticResource DialogButton}" Content="{StaticResource Common_Close}" IsCancel="True" Click="OnClose" />
+        </StackPanel>
+    </StackPanel>
+</Window>

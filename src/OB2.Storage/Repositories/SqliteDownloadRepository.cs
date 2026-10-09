@@ -14,7 +14,7 @@ public sealed class SqliteDownloadRepository : IDownloadRepository
         id, url, final_url, filename, dest_path, category_id, queue_id, status, total_bytes,
         downloaded_bytes, connections, supports_ranges, etag, last_modified, checksum_algo,
         checksum_value, referrer, user_agent, headers_json, speed_limit_bps, error_code,
-        error_message, created_at, started_at, completed_at, source
+        error_message, created_at, started_at, completed_at, source, queue_position
         """;
 
     private readonly SqliteConnectionFactory _factory;
@@ -35,11 +35,11 @@ public sealed class SqliteDownloadRepository : IDownloadRepository
             INSERT INTO downloads (url, final_url, filename, dest_path, category_id, queue_id, status, total_bytes,
               downloaded_bytes, connections, supports_ranges, etag, last_modified, checksum_algo, checksum_value,
               referrer, user_agent, headers_json, speed_limit_bps, error_code, error_message, created_at,
-              started_at, completed_at, source)
+              started_at, completed_at, source, queue_position)
             VALUES ($url, $final_url, $filename, $dest_path, $category_id, $queue_id, $status, $total_bytes,
               $downloaded_bytes, $connections, $supports_ranges, $etag, $last_modified, $checksum_algo, $checksum_value,
               $referrer, $user_agent, $headers_json, $speed_limit_bps, $error_code, $error_message, $created_at,
-              $started_at, $completed_at, $source);
+              $started_at, $completed_at, $source, $queue_position);
             SELECT last_insert_rowid();
             """;
         Bind(command, item);
@@ -59,7 +59,7 @@ public sealed class SqliteDownloadRepository : IDownloadRepository
               checksum_value = $checksum_value, referrer = $referrer, user_agent = $user_agent,
               headers_json = $headers_json, speed_limit_bps = $speed_limit_bps, error_code = $error_code,
               error_message = $error_message, created_at = $created_at, started_at = $started_at,
-              completed_at = $completed_at, source = $source
+              completed_at = $completed_at, source = $source, queue_position = $queue_position
             WHERE id = $id
             """;
         Bind(command, item);
@@ -286,6 +286,7 @@ public sealed class SqliteDownloadRepository : IDownloadRepository
         p.AddWithValue("$started_at", item.StartedAt is { } s ? Format(s) : DBNull.Value);
         p.AddWithValue("$completed_at", item.CompletedAt is { } c ? Format(c) : DBNull.Value);
         p.AddWithValue("$source", item.Source.ToDbString());
+        p.AddWithValue("$queue_position", item.QueuePosition);
     }
 
     private static DownloadItem Read(SqliteDataReader r)
@@ -321,6 +322,7 @@ public sealed class SqliteDownloadRepository : IDownloadRepository
             StartedAt = r.IsDBNull(23) ? null : Parse(r.GetString(23)),
             CompletedAt = r.IsDBNull(24) ? null : Parse(r.GetString(24)),
             Source = DownloadStatusExtensions.ParseDbString<DownloadSource>(r.GetString(25)),
+            QueuePosition = r.GetInt64(26),
         };
     }
 

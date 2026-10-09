@@ -42,6 +42,9 @@ public sealed class DownloadSettings
 
     public string UserAgent { get; set; } = DefaultUserAgent;
 
+    /// <summary>Cap on connections to one server across all downloads (§16.1).</summary>
+    public int MaxConnectionsPerHost { get; set; } = 16;
+
     /// <summary>§11.3 / open question 3: interrupted downloads are not auto-resumed by default.</summary>
     public bool AutoResumeOnStartup { get; set; }
 
@@ -90,6 +93,15 @@ public sealed class GeneralSettings
     public bool MinimizeToTrayOnClose { get; set; } = true;
 
     public bool StartWithWindows { get; set; }
+
+    /// <summary>§9.3 Download Complete dialog.</summary>
+    public bool ShowCompleteDialog { get; set; } = true;
+
+    /// <summary>Categories for which the user ticked "Do not show again for this category".</summary>
+    public List<string> CompleteDialogHiddenCategories { get; set; } = [];
+
+    /// <summary>FR-27 Windows notification on completion or failure.</summary>
+    public bool ShowNotifications { get; set; } = true;
 }
 
 /// <summary>NFR Logging: rolling files, 7 days, 10 MB max each.</summary>

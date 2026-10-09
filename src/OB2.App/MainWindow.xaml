@@ -7,38 +7,258 @@
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:MainViewModel}"
         Title="{StaticResource App_Title}"
-        Width="1000" Height="640" MinWidth="640" MinHeight="400"
+        Icon="Resources/ob2.ico"
+        Width="1180" Height="700" MinWidth="720" MinHeight="420"
         WindowStartupLocation="CenterScreen"
-        UseLayoutRounding="True">
+        UseLayoutRounding="True"
+        AllowDrop="True"
+        DragOver="OnDragOver"
+        Drop="OnDrop">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+    </Window.Resources>
+
+    <!-- §9.6 keyboard shortcuts. Del and Space live on the list so they never fire while typing. -->
+    <Window.InputBindings>
+        <KeyBinding Key="N" Modifiers="Control" Command="{Binding AddUrlCommand}" />
+        <KeyBinding Key="P" Modifiers="Control+Shift" Command="{Binding StopAllCommand}" />
+    </Window.InputBindings>
+
     <DockPanel>
-        <StatusBar DockPanel.Dock="Bottom">
-            <StatusBarItem>
-                <TextBlock Text="{Binding DataRoot, StringFormat={StaticResource Status_DataRoot}}" />
-            </StatusBarItem>
-            <Separator />
-            <StatusBarItem>
-                <TextBlock>
-                    <TextBlock.Style>
-                        <Style TargetType="TextBlock">
-                            <Setter Property="Text" Value="{StaticResource Status_PerUser}" />
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding IsPortable}" Value="True">
-                                    <Setter Property="Text" Value="{StaticResource Status_Portable}" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </TextBlock.Style>
+        <Grid DockPanel.Dock="Top">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <ToolBarTray IsLocked="True" Background="Transparent">
+                <ToolBar ToolBarTray.IsLocked="True" Band="0" Background="Transparent">
+                    <Button Style="{StaticResource ToolbarButton}" Command="{Binding AddUrlCommand}" ToolTip="{StaticResource Tb_Add_Tip}" AutomationProperties.Name="{StaticResource Tb_Add}">
+                        <StackPanel><TextBlock Style="{StaticResource Glyph}" Text="&#xE710;" /><TextBlock Style="{StaticResource ToolbarLabel}" Text="{StaticResource Tb_Add}" /></StackPanel>
+                    </Button>
+                    <Separator />
+                    <Button Style="{StaticResource ToolbarButton}" Command="{Binding ResumeCommand}" ToolTip="{StaticResource Tb_Resume_Tip}" AutomationProperties.Name="{StaticResource Tb_Resume}">
+                        <StackPanel><TextBlock Style="{StaticResource Glyph}" Text="&#xE768;" /><TextBlock Style="{StaticResource ToolbarLabel}" Text="{StaticResource Tb_Resume}" /></StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource ToolbarButton}" Command="{Binding StopCommand}" ToolTip="{StaticResource Tb_Stop_Tip}" AutomationProperties.Name="{StaticResource Tb_Stop}">
+                        <StackPanel><TextBlock Style="{StaticResource Glyph}" Text="&#xE769;" /><TextBlock Style="{StaticResource ToolbarLabel}" Text="{StaticResource Tb_Stop}" /></StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource ToolbarButton}" Command="{Binding StopAllCommand}" ToolTip="{StaticResource Tb_StopAll_Tip}" AutomationProperties.Name="{StaticResource Tb_StopAll}">
+                        <StackPanel><TextBlock Style="{StaticResource Glyph}" Text="&#xE71A;" /><TextBlock Style="{StaticResource ToolbarLabel}" Text="{StaticResource Tb_StopAll}" /></StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource ToolbarButton}" Command="{Binding ResumeAllCommand}" AutomationProperties.Name="{StaticResource Tb_ResumeAll}">
+                        <StackPanel><TextBlock Style="{StaticResource Glyph}" Text="&#xE8EE;" /><TextBlock Style="{StaticResource ToolbarLabel}" Text="{StaticResource Tb_ResumeAll}" /></StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource ToolbarButton}" Command="{Binding DeleteCommand}" ToolTip="{StaticResource Tb_Delete_Tip}" AutomationProperties.Name="{StaticResource Tb_Delete}">
+                        <StackPanel><TextBlock Style="{StaticResource Glyph}" Text="&#xE74D;" /><TextBlock Style="{StaticResource ToolbarLabel}" Text="{StaticResource Tb_Delete}" /></StackPanel>
+                    </Button>
+                    <Separator />
+                    <Button Style="{StaticResource ToolbarButton}" Command="{Binding StartQueueCommand}" AutomationProperties.Name="{StaticResource Tb_StartQueue}">
+                        <StackPanel><TextBlock Style="{StaticResource Glyph}" Text="&#xE8B0;" /><TextBlock Style="{StaticResource ToolbarLabel}" Text="{StaticResource Tb_StartQueue}" /></StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource ToolbarButton}" Command="{Binding StopQueueCommand}" AutomationProperties.Name="{StaticResource Tb_StopQueue}">
+                        <StackPanel><TextBlock Style="{StaticResource Glyph}" Text="&#xE71A;" /><TextBlock Style="{StaticResource ToolbarLabel}" Text="{StaticResource Tb_StopQueue}" /></StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource ToolbarButton}" Command="{Binding SchedulerCommand}" AutomationProperties.Name="{StaticResource Tb_Scheduler}">
+                        <StackPanel><TextBlock Style="{StaticResource Glyph}" Text="&#xE787;" /><TextBlock Style="{StaticResource ToolbarLabel}" Text="{StaticResource Tb_Scheduler}" /></StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource ToolbarButton}" Command="{Binding OptionsCommand}" AutomationProperties.Name="{StaticResource Tb_Options}">
+                        <StackPanel><TextBlock Style="{StaticResource Glyph}" Text="&#xE713;" /><TextBlock Style="{StaticResource ToolbarLabel}" Text="{StaticResource Tb_Options}" /></StackPanel>
+                    </Button>
+                </ToolBar>
+            </ToolBarTray>
+            <Grid Grid.Column="1" Margin="8,0,12,0" VerticalAlignment="Center" Width="240">
+                <TextBox x:Name="SearchBox" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}" Padding="22,4,4,4"
+                         AutomationProperties.Name="{StaticResource Search_Placeholder}" />
+                <TextBlock Style="{StaticResource Glyph}" FontSize="12" Text="&#xE721;" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="6,0,0,0" IsHitTestVisible="False" />
+                <TextBlock Text="{StaticResource Search_Placeholder}" Style="{StaticResource Hint}" Margin="24,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False">
+                    <TextBlock.Visibility>
+                        <Binding Path="Text.IsEmpty" ElementName="SearchBox" Converter="{StaticResource BoolToVisibility}" />
+                    </TextBlock.Visibility>
                 </TextBlock>
-            </StatusBarItem>
+            </Grid>
+        </Grid>
+
+        <StatusBar DockPanel.Dock="Bottom">
+            <StatusBarItem><TextBlock Text="{Binding TotalSpeedText}" /></StatusBarItem>
             <Separator />
-            <StatusBarItem>
-                <TextBlock Text="{Binding SchemaVersion, StringFormat={StaticResource Status_Schema}}" />
-            </StatusBarItem>
+            <StatusBarItem><TextBlock Text="{Binding ActiveCountText}" /></StatusBarItem>
+            <Separator />
+            <StatusBarItem><TextBlock Text="{Binding QueueStatusText}" /></StatusBarItem>
+            <StatusBarItem HorizontalAlignment="Right"><TextBlock Text="{Binding TrayStateText}" Style="{StaticResource Hint}" /></StatusBarItem>
         </StatusBar>
 
-        <TextBlock Text="{StaticResource Shell_Empty}"
-                   HorizontalAlignment="Center"
-                   VerticalAlignment="Center"
-                   Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="210" MinWidth="140" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <TreeView x:Name="NavTree" ItemsSource="{Binding Nav}" BorderThickness="0" Padding="2,4"
+                      SelectedItemChanged="OnNavSelected" AutomationProperties.Name="{StaticResource Nav_All}">
+                <TreeView.ItemContainerStyle>
+                    <Style TargetType="TreeViewItem">
+                        <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+                        <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
+                        <Setter Property="Padding" Value="2,3" />
+                    </Style>
+                </TreeView.ItemContainerStyle>
+                <TreeView.ItemTemplate>
+                    <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                        <TextBlock Text="{Binding Display}" />
+                    </HierarchicalDataTemplate>
+                </TreeView.ItemTemplate>
+            </TreeView>
+
+            <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Center" VerticalAlignment="Stretch" ResizeBehavior="PreviousAndNext" />
+
+            <Grid Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" MinHeight="120" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="170" MinHeight="80" />
+                </Grid.RowDefinitions>
+
+                <DataGrid x:Name="List" ItemsSource="{Binding DownloadsView}" SelectedItem="{Binding SelectedRow}"
+                          SelectionChanged="OnListSelectionChanged" MouseDoubleClick="OnListDoubleClick"
+                          AutomationProperties.Name="{StaticResource Nav_All}">
+                    <DataGrid.InputBindings>
+                        <KeyBinding Key="Delete" Command="{Binding DeleteCommand}" />
+                        <KeyBinding Key="Space" Command="{Binding ToggleSelectedCommand}" />
+                        <KeyBinding Key="Enter" Command="{Binding OpenFileCommand}" />
+                    </DataGrid.InputBindings>
+                    <DataGrid.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="{StaticResource Menu_OpenFile}" Command="{Binding OpenFileCommand}" />
+                            <MenuItem Header="{StaticResource Menu_OpenFolder}" Command="{Binding OpenFolderCommand}" />
+                            <MenuItem Header="{StaticResource Menu_CopyUrl}" Command="{Binding CopyUrlCommand}" />
+                            <Separator />
+                            <MenuItem Header="{StaticResource Tb_Resume}" Command="{Binding ResumeCommand}" />
+                            <MenuItem Header="{StaticResource Tb_Stop}" Command="{Binding StopCommand}" />
+                            <MenuItem Header="{StaticResource Menu_DownloadLater}" Command="{Binding DownloadLaterCommand}" />
+                            <MenuItem Header="{StaticResource Menu_MoveToQueue}" ItemsSource="{Binding QueueList}">
+                                <MenuItem.ItemContainerStyle>
+                                    <Style TargetType="MenuItem">
+                                        <Setter Property="Header" Value="{Binding Name}" />
+                                        <Setter Property="Command" Value="{Binding DataContext.MoveToQueueCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                        <Setter Property="CommandParameter" Value="{Binding Id}" />
+                                    </Style>
+                                </MenuItem.ItemContainerStyle>
+                            </MenuItem>
+                            <MenuItem Header="{StaticResource Menu_MoveUp}" Command="{Binding MoveUpCommand}" />
+                            <MenuItem Header="{StaticResource Menu_MoveDown}" Command="{Binding MoveDownCommand}" />
+                            <Separator />
+                            <MenuItem Header="{StaticResource Tb_Delete}" Command="{Binding DeleteCommand}" InputGestureText="Del" />
+                        </ContextMenu>
+                    </DataGrid.ContextMenu>
+                    <DataGrid.Columns>
+                        <DataGridTemplateColumn Header="{StaticResource Col_FileName}" Width="2*" MinWidth="160" SortMemberPath="FileName">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate><TextBlock Style="{StaticResource CellText}" Text="{Binding FileName}" ToolTip="{Binding FileName}" /></DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Header="{StaticResource Col_Size}" Width="80" SortMemberPath="TotalBytes">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate><TextBlock Style="{StaticResource CellTextRight}" Text="{Binding SizeText}" /></DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Header="{StaticResource Col_Status}" Width="120" SortMemberPath="StatusText">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate><TextBlock Style="{StaticResource CellText}" Text="{Binding StatusText}" ToolTip="{Binding ErrorText}" /></DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Header="{StaticResource Col_Progress}" Width="140" SortMemberPath="Progress">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="4,3">
+                                        <ProgressBar Value="{Binding Progress, Mode=OneWay}" Maximum="100" Height="16" AutomationProperties.Name="{Binding ProgressText}" />
+                                        <TextBlock Text="{Binding ProgressText}" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="11" />
+                                    </Grid>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Header="{StaticResource Col_Speed}" Width="90" SortMemberPath="BytesPerSecond">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate><TextBlock Style="{StaticResource CellTextRight}" Text="{Binding SpeedText}" /></DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Header="{StaticResource Col_TimeLeft}" Width="80" SortMemberPath="TimeLeftText">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate><TextBlock Style="{StaticResource CellTextRight}" Text="{Binding TimeLeftText}" /></DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Header="{StaticResource Col_DateAdded}" Width="130" SortMemberPath="DateAdded">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate><TextBlock Style="{StaticResource CellText}" Text="{Binding DateAdded, StringFormat=g}" /></DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Header="{StaticResource Col_SaveFolder}" Width="*" MinWidth="100" SortMemberPath="SaveFolder">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate><TextBlock Style="{StaticResource CellText}" Text="{Binding SaveFolder}" ToolTip="{Binding SaveFolder}" /></DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Header="{StaticResource Col_Category}" Width="90" SortMemberPath="CategoryName">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate><TextBlock Style="{StaticResource CellText}" Text="{Binding CategoryName}" /></DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Header="{StaticResource Col_Queue}" Width="80" SortMemberPath="QueueName">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate><TextBlock Style="{StaticResource CellText}" Text="{Binding QueueName}" /></DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                    </DataGrid.Columns>
+                </DataGrid>
+
+                <TextBlock Text="{StaticResource Empty_List}" Style="{StaticResource Hint}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                           IsHitTestVisible="False" Visibility="{Binding IsListEmpty, Converter={StaticResource BoolToVisibility}}" />
+
+                <GridSplitter Grid.Row="1" Height="5" HorizontalAlignment="Stretch" ResizeBehavior="PreviousAndNext" />
+
+                <!-- Lower panel: the selected download's connections, address, destination, error. -->
+                <Border Grid.Row="2" BorderBrush="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}" BorderThickness="0,1,0,0" Padding="10,8">
+                    <Grid DataContext="{Binding SelectedRow}">
+                        <TextBlock Text="{StaticResource Detail_None}" Style="{StaticResource Hint}" x:Name="DetailPlaceholder" />
+                        <Grid x:Name="DetailBody">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="2*" />
+                                <ColumnDefinition Width="16" />
+                                <ColumnDefinition Width="3*" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock Text="{Binding FileName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Margin="0,0,0,6" />
+                                <TextBlock Style="{StaticResource Hint}" Text="{StaticResource Detail_Url}" />
+                                <TextBox Text="{Binding Url, Mode=OneWay}" IsReadOnly="True" BorderThickness="0" Background="Transparent" TextWrapping="NoWrap" Margin="0,0,0,4" />
+                                <TextBlock Style="{StaticResource Hint}" Text="{StaticResource Detail_Destination}" />
+                                <TextBox Text="{Binding DestPath, Mode=OneWay}" IsReadOnly="True" BorderThickness="0" Background="Transparent" Margin="0,0,0,4" />
+                                <StackPanel Orientation="Horizontal" Visibility="{Binding HasError, Converter={StaticResource BoolToVisibility}}">
+                                    <TextBlock Style="{StaticResource ErrorText}" Text="{Binding ErrorText}" MaxWidth="360" VerticalAlignment="Center" />
+                                    <Button Content="{StaticResource Detail_Retry}" Margin="8,0,0,0" Padding="10,2"
+                                            Command="{Binding DataContext.ResumeCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
+                                </StackPanel>
+                            </StackPanel>
+                            <DockPanel Grid.Column="2">
+                                <TextBlock DockPanel.Dock="Top" Style="{StaticResource Hint}" Text="{StaticResource Detail_Connections}" Margin="0,0,0,4" />
+                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                    <ItemsControl ItemsSource="{Binding Segments}" AutomationProperties.Name="{StaticResource Detail_Connections}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate><UniformGrid Columns="2" /></ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid Margin="0,1,8,1">
+                                                    <ProgressBar Value="{Binding Percent, Mode=OneWay}" Maximum="100" Height="16" />
+                                                    <TextBlock Text="{Binding Text}" FontSize="11" Margin="6,0" VerticalAlignment="Center" />
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </DockPanel>
+                        </Grid>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Grid>
     </DockPanel>
 </Window>
