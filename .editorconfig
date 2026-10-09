@@ -1,0 +1,17 @@
+root = true
+
+[*]
+charset = utf-8
+indent_style = space
+indent_size = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{csproj,props,targets,xml,xaml,manifest,json,yml,yaml}]
+indent_size = 2
+
+[*.cs]
+# CA1716: "Shared" in OB2.Shared is a VB keyword; the project name is fixed by PRD §7.3 and the code is C#-only.
+dotnet_diagnostic.CA1716.severity = none
+# CA1848: LoggerMessage delegates matter on hot paths only. Kept as a hint so the engine (Phase 2+) can adopt it where it counts.
+dotnet_diagnostic.CA1848.severity = suggestion

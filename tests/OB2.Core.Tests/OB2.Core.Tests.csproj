@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\OB2.Core\OB2.Core.csproj" />
+  </ItemGroup>
+
+</Project>

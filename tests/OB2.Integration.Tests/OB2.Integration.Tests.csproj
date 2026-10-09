@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- End-to-end startup and (from Phase 2) HTTP scenarios. Never references OB2.App. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\OB2.Storage\OB2.Storage.csproj" />
+  </ItemGroup>
+
+</Project>

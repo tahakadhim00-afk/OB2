@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\OB2.Storage\OB2.Storage.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,83 @@
+namespace OB2.Core.Settings;
+
+/// <summary>
+/// Clamps out-of-range values loaded from a hand-edited or older settings file so the
+/// rest of the app can trust them. Returns a description of every change made.
+/// </summary>
+public static class SettingsValidator
+{
+    private static readonly string[] LogLevels = ["Verbose", "Debug", "Information", "Warning", "Error", "Fatal"];
+
+    public static IReadOnlyList<string> Normalize(AppSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        var changes = new List<string>();
+
+        settings.Downloads ??= new DownloadSettings();
+        settings.Folders ??= new FolderSettings();
+        settings.SpeedLimits ??= new SpeedLimitSettings();
+        settings.Capture ??= new CaptureSettings();
+        settings.General ??= new GeneralSettings();
+        settings.Logging ??= new LoggingSettings();
+        settings.History ??= new HistorySettings();
+
+        var d = settings.Downloads;
+        d.Connections = Clamp(d.Connections, DownloadSettings.MinConnections, DownloadSettings.MaxConnections, "downloads.connections", changes);
+        d.MaxRetries = Clamp(d.MaxRetries, 0, 100, "downloads.maxRetries", changes);
+        d.ConnectTimeoutSeconds = Clamp(d.ConnectTimeoutSeconds, 1, 600, "downloads.connectTimeoutSeconds", changes);
+        d.ReadIdleTimeoutSeconds = Clamp(d.ReadIdleTimeoutSeconds, 1, 3600, "downloads.readIdleTimeoutSeconds", changes);
+        if (string.IsNullOrWhiteSpace(d.UserAgent))
+        {
+            d.UserAgent = DownloadSettings.DefaultUserAgent;
+            changes.Add("downloads.userAgent was empty; reset to default");
+        }
+
+        if (settings.SpeedLimits.GlobalBytesPerSecond is <= 0)
+        {
+            settings.SpeedLimits.GlobalBytesPerSecond = null;
+            changes.Add("speedLimits.globalBytesPerSecond was not positive; set to unlimited");
+        }
+
+        var c = settings.Capture;
+        c.Extensions ??= [];
+        c.ExcludedDomains ??= [];
+        if (c.MinSizeBytes < 0)
+        {
+            c.MinSizeBytes = 0;
+            changes.Add("capture.minSizeBytes was negative; set to 0");
+        }
+
+        var l = settings.Logging;
+        if (l.FileSizeLimitBytes < LoggingSettings.MinFileSizeLimitBytes)
+        {
+            l.FileSizeLimitBytes = LoggingSettings.MinFileSizeLimitBytes;
+            changes.Add($"logging.fileSizeLimitBytes raised to {LoggingSettings.MinFileSizeLimitBytes}");
+        }
+
+        l.RetainedDays = Clamp(l.RetainedDays, 1, 365, "logging.retainedDays", changes);
+        if (!LogLevels.Contains(l.MinimumLevel, StringComparer.OrdinalIgnoreCase))
+        {
+            changes.Add($"logging.minimumLevel '{l.MinimumLevel}' is unknown; reset to Information");
+            l.MinimumLevel = "Information";
+        }
+
+        if (settings.History.RetentionDays is <= 0)
+        {
+            settings.History.RetentionDays = null;
+            changes.Add("history.retentionDays was not positive; history is kept indefinitely");
+        }
+
+        return changes;
+    }
+
+    private static int Clamp(int value, int min, int max, string name, List<string> changes)
+    {
+        var clamped = Math.Clamp(value, min, max);
+        if (clamped != value)
+        {
+            changes.Add($"{name} {value} is outside {min}–{max}; set to {clamped}");
+        }
+
+        return clamped;
+    }
+}

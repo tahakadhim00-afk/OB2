@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Chrome Native Messaging host (PRD §7.2). Implemented in Phase 6. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>OB2.Host</RootNamespace>
+    <AssemblyName>host</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OB2.Shared\OB2.Shared.csproj" />
+  </ItemGroup>
+
+</Project>
