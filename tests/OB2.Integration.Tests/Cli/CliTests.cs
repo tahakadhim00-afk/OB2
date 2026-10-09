@@ -69,10 +69,11 @@ public sealed class CliTests : IAsyncLifetime
     public async Task Killed_process_resumes_from_checkpoint_without_corruption()
     {
         // Crash simulation (Phase 2 exit criterion): kill OB2.exe mid-download, run again.
-        const long size = 8 * 1024 * 1024;
-        var url = _server.FileUrl(size, "crash.bin", "bps=1000000").AbsoluteUri;
+        // 4 connections × 250 KB/s ≈ 1 MB/s, so 16 MiB takes ~16 s: time for the 5-second checkpoint.
+        const long size = 16 * 1024 * 1024;
+        var url = _server.FileUrl(size, "crash.bin", "bps=250000").AbsoluteUri;
 
-        using (var process = Ob2Process.Start("get", url, "--out", Out, "--data", Data))
+        using (var process = Ob2Process.Start("get", url, "--out", Out, "--data", Data, "--connections", "4"))
         {
             // The CLI checkpoints every 5 seconds (§11.3); wait for one, then kill without warning.
             await WaitForCheckpointAsync(minBytes: 1);
@@ -84,7 +85,7 @@ public sealed class CliTests : IAsyncLifetime
         killedAt.Should().BeInRange(1, size - 1);
         File.Exists(Path.Combine(Out, "crash.bin.pgpart")).Should().BeTrue();
 
-        var (exit, output) = await Ob2Process.RunAsync(Timeout, "get", url, "--out", Out, "--data", Data);
+        var (exit, output) = await Ob2Process.RunAsync(Timeout, "get", url, "--out", Out, "--data", Data, "--connections", "4");
 
         exit.Should().Be(0, output);
         output.Should().Contain("Resuming");

@@ -16,12 +16,16 @@ internal sealed class SegmentWorker
     private readonly HttpClient _http;
     private readonly EngineOptions _options;
     private readonly SafeFileHandle _file;
+    private readonly IReadOnlyList<TokenBucket> _limiters;
+    private readonly Action _onBytes;
 
-    public SegmentWorker(HttpClient http, EngineOptions options, SafeFileHandle file)
+    public SegmentWorker(HttpClient http, EngineOptions options, SafeFileHandle file, IReadOnlyList<TokenBucket> limiters, Action onBytes)
     {
         _http = http;
         _options = options;
         _file = file;
+        _limiters = limiters;
+        _onBytes = onBytes;
     }
 
     /// <summary>Downloads the rest of <paramref name="segment"/>. Returns bytes received in this attempt.</summary>
@@ -50,14 +54,13 @@ internal sealed class SegmentWorker
         try
         {
             using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, idle.Token).ConfigureAwait(false);
-            Validate(response, segment, position, useRanges);
+            Validate(response, position);
 
             await using var body = await response.Content.ReadAsStreamAsync(idle.Token).ConfigureAwait(false);
             while (true)
             {
-                var want = segment.IsOpenEnded
-                    ? _options.BufferSize
-                    : (int)Math.Min(_options.BufferSize, segment.Length!.Value - segment.Downloaded);
+                var chunk = ChunkSize();
+                var want = segment.IsOpenEnded ? chunk : (int)Math.Min(chunk, segment.Length!.Value - segment.Downloaded);
                 if (want <= 0)
                 {
                     break;
@@ -75,9 +78,15 @@ internal sealed class SegmentWorker
                     throw new IOException($"The connection closed after {received:N0} bytes, {segment.Length - segment.Downloaded:N0} short of the segment end.");
                 }
 
-                await RandomAccess.WriteAsync(_file, buffer.AsMemory(0, read), segment.Position, cancellationToken).ConfigureAwait(false);
+                await WriteAsync(buffer.AsMemory(0, read), segment.Position, cancellationToken).ConfigureAwait(false);
                 segment.AddDownloaded(read);
                 received += read;
+                _onBytes();
+
+                foreach (var limiter in _limiters)
+                {
+                    await limiter.WaitAsync(read, cancellationToken).ConfigureAwait(false);
+                }
             }
 
             segment.Status = SegmentStatus.Done;
@@ -99,7 +108,32 @@ internal sealed class SegmentWorker
         }
     }
 
-    private static void Validate(HttpResponseMessage response, Segment segment, long position, bool useRanges)
+    private int ChunkSize()
+    {
+        var chunk = _options.BufferSize;
+        foreach (var limiter in _limiters)
+        {
+            chunk = limiter.SuggestedChunk(chunk);
+        }
+
+        return chunk;
+    }
+
+    /// <summary>Disk errors are never retried, so they are wrapped to keep them apart from network IOExceptions.</summary>
+    private async Task WriteAsync(ReadOnlyMemory<byte> data, long offset, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await RandomAccess.WriteAsync(_file, data, offset, cancellationToken).ConfigureAwait(false);
+        }
+        catch (IOException ex)
+        {
+            var code = ErrorCodes.From(ex) == ErrorCodes.DiskFull ? ErrorCodes.DiskFull : ErrorCodes.FileError;
+            throw new DownloadFailedException(code, $"Could not write the partial file: {ex.Message}");
+        }
+    }
+
+    private static void Validate(HttpResponseMessage response, long position)
     {
         switch (response.StatusCode)
         {
@@ -113,7 +147,7 @@ internal sealed class SegmentWorker
                 return;
 
             case HttpStatusCode.OK:
-                // A full response is fine only when we wanted the file from its first byte.
+                // A full response is usable only when we wanted the file from its first byte.
                 if (position != 0)
                 {
                     throw new RangeNotSupportedException("The server ignored the Range header and sent the whole file.");
@@ -122,7 +156,7 @@ internal sealed class SegmentWorker
                 return;
 
             default:
-                throw new HttpStatusException(response.StatusCode, response.ReasonPhrase);
+                throw HttpStatusException.From(response);
         }
     }
 }

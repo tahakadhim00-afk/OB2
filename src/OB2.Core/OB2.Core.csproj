@@ -4,6 +4,8 @@
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <RootNamespace>OB2.Core</RootNamespace>
+    <!-- Source-generated P/Invoke (sparse partial files). -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>

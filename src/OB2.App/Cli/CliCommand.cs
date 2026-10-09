@@ -69,6 +69,7 @@ internal static partial class CliCommand
             ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads"));
 
         using var engine = new DownloadEngine(repository, () => EngineOptions.FromSettings(storage.Settings), loggerFactory: storage.LoggerFactory);
+        engine.GlobalLimiter.BytesPerSecond = storage.Settings.SpeedLimits.GlobalBytesPerSecond;
 
         var item = FindResumable(repository, options.Url, saveFolder);
         if (item is null)

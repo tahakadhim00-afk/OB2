@@ -22,6 +22,7 @@ public sealed partial class DownloadEngine : IDisposable
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger _logger;
     private readonly ConcurrentDictionary<long, DownloadJob> _jobs = new();
+    private readonly HostConnectionLimiter _hostLimiter;
 
     // Cookies live only in memory for the life of the process (§11.1).
     private readonly ConcurrentDictionary<long, string> _cookies = new();
@@ -41,7 +42,11 @@ public sealed partial class DownloadEngine : IDisposable
         _clock = clock ?? SystemClock.Instance;
         _loggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
         _logger = _loggerFactory.CreateLogger<DownloadEngine>();
+        _hostLimiter = new HostConnectionLimiter(options().MaxConnectionsPerHost);
     }
+
+    /// <summary>Global speed limit shared by every download (FR-9). Null rate is unlimited.</summary>
+    public TokenBucket GlobalLimiter { get; } = new();
 
     /// <summary>Raised on a background thread whenever a download changes status.</summary>
     public event EventHandler<DownloadItem>? StatusChanged;
@@ -134,7 +139,7 @@ public sealed partial class DownloadEngine : IDisposable
             }
 
             _cookies.TryGetValue(id, out var cookies);
-            var job = new DownloadJob(id, _repository, _http, _options(), _clock, _loggerFactory.CreateLogger<DownloadJob>(), cookies, OnJobStatusChanged);
+            var job = new DownloadJob(id, _repository, _http, _options(), _hostLimiter, GlobalLimiter, _clock, _loggerFactory.CreateLogger<DownloadJob>(), cookies, OnJobStatusChanged);
             _jobs[id] = job;
             job.Start();
             // Remove only this job: a later Start for the same id may already have replaced it.

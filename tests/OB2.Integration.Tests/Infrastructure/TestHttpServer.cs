@@ -54,8 +54,11 @@ public sealed class TestHttpServer : IAsyncDisposable
 
     public int MaxConcurrentResponses => Volatile.Read(ref _maxConcurrentResponses);
 
+    public int RejectedResponses => Volatile.Read(ref _rejectedResponses);
+
     private int _activeResponses;
     private int _maxConcurrentResponses;
+    private int _rejectedResponses;
 
     public static async Task<TestHttpServer> StartAsync()
     {
@@ -155,7 +158,8 @@ public sealed class TestHttpServer : IAsyncDisposable
         var query = request.Query;
         var key = request.Path + request.QueryString;
         var isHead = HttpMethods.IsHead(request.Method);
-        var noRange = query.ContainsKey("norange") || query.ContainsKey("nolength");
+        var rangeLie = query.ContainsKey("rangeLie");
+        var noRange = query.ContainsKey("norange") || query.ContainsKey("nolength") || (rangeLie && !isHead);
         var noLength = query.ContainsKey("nolength");
 
         if (query.TryGetValue("cookie", out var requiredCookie)
@@ -190,6 +194,11 @@ public sealed class TestHttpServer : IAsyncDisposable
         response.ContentType = "application/octet-stream";
 
         long from = 0, to = size - 1;
+        if (rangeLie)
+        {
+            response.Headers.AcceptRanges = "bytes";
+        }
+
         if (!noRange)
         {
             response.Headers.AcceptRanges = "bytes";
@@ -220,7 +229,8 @@ public sealed class TestHttpServer : IAsyncDisposable
         }
 
         var bps = Int(query, "bps", 0);
-        var dropAfter = query.ContainsKey("dropAfter") && Increment(key + "#drop") <= Int(query, "drops", int.MaxValue)
+        var dropApplies = query.ContainsKey("dropAfter") && from >= Int(query, "dropFrom", 0);
+        var dropAfter = dropApplies && Increment(key + "#drop") <= Int(query, "drops", int.MaxValue)
             ? Int(query, "dropAfter", 0)
             : -1;
         var stallAfter = query.ContainsKey("stallAfter") && Increment(key + "#stall") <= Int(query, "stalls", int.MaxValue)
@@ -228,6 +238,17 @@ public sealed class TestHttpServer : IAsyncDisposable
             : -1;
 
         var active = Interlocked.Increment(ref _activeResponses);
+        if (active > Int(query, "maxConcurrent", int.MaxValue))
+        {
+            // Emulates a server that refuses extra connections (§16.1).
+            Interlocked.Decrement(ref _activeResponses);
+            Interlocked.Increment(ref _rejectedResponses);
+            response.Headers.Remove("Content-Range");
+            response.ContentLength = null;
+            response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+            return;
+        }
+
         InterlockedMax(ref _maxConcurrentResponses, active);
         try
         {

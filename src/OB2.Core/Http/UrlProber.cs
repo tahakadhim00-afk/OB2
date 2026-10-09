@@ -120,11 +120,28 @@ public sealed class UrlProber
 /// <summary>A non-success HTTP status from the server.</summary>
 public sealed class HttpStatusException : Exception
 {
-    public HttpStatusException(HttpStatusCode statusCode, string? reason)
+    public HttpStatusException(HttpStatusCode statusCode, string? reason, TimeSpan? retryAfter = null)
         : base($"The server answered {(int)statusCode} {reason}.")
     {
         StatusCode = statusCode;
+        RetryAfter = retryAfter;
     }
+
+    /// <summary>Builds the exception from a response, reading <c>Retry-After</c> if present.</summary>
+    public static HttpStatusException From(HttpResponseMessage response)
+    {
+        ArgumentNullException.ThrowIfNull(response);
+        var header = response.Headers.RetryAfter;
+        TimeSpan? retryAfter = header?.Delta ?? (header?.Date is { } date ? date - DateTimeOffset.UtcNow : null);
+        if (retryAfter < TimeSpan.Zero)
+        {
+            retryAfter = TimeSpan.Zero;
+        }
+
+        return new HttpStatusException(response.StatusCode, response.ReasonPhrase, retryAfter);
+    }
+
+    public TimeSpan? RetryAfter { get; }
 
     public HttpStatusException()
     {

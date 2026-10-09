@@ -14,3 +14,7 @@ Items noticed during a phase but outside its scope (PRD §0). Each one names the
 | Manual HTTP/SOCKS5 proxy (FR-10, P1). The engine uses the system proxy. No phase lists it in scope. | Phase 2 | v1.0 |
 | Retry with the original URL when an expired final (signed) URL returns 403/410 mid-download (§16.1). | Phase 2 | v1.0 |
 | Set the file timestamp from `Last-Modified` (FR-12, P2). The value is already stored. | Phase 2 | v1.1 |
+| Per-download speed limit (FR-9, second half). `downloads.speed_limit_bps` exists and `TokenBucket` supports it; needs one more limiter per job and a UI field. | Phase 3 | Phase 4 (with the Add dialog) |
+| Expose `MaxConnectionsPerHost` in `settings.json` / the settings screen. Today it is the engine default (16). | Phase 3 | Phase 4 |
+| Dynamic segment splitting: when a connection finishes early, split the largest remaining segment (IDM-style). Today segments are fixed at plan time. | Phase 3 | v1.1 |
+| Detect HDD vs SSD and limit segments on rotating disks (§16.1). | Phase 3 | v1.1 |

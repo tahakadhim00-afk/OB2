@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using OB2.Core.Downloads;
@@ -26,6 +27,10 @@ internal sealed partial class DownloadJob : IDisposable
     private readonly CancellationTokenSource _cancellation = new();
     private readonly SpeedMeter _speed = new();
     private readonly object _checkpointLock = new();
+    private readonly object _statusLock = new();
+    private readonly HostConnectionLimiter _hostLimiter;
+    private readonly RetryPolicy _retry;
+    private readonly TokenBucket[] _limiters;
 
     private DownloadItem _item = null!;
     private List<Segment> _segments = [];
@@ -33,12 +38,16 @@ internal sealed partial class DownloadJob : IDisposable
     private long _lastCheckpointBytes;
     private long _lastCheckpointTicks;
     private int _activeConnections;
+    private int _connectionLimit = 1;
+    private int _throttleErrors;
 
     public DownloadJob(
         long id,
         IDownloadRepository repository,
         HttpClient http,
         EngineOptions options,
+        HostConnectionLimiter hostLimiter,
+        TokenBucket globalLimiter,
         IClock clock,
         ILogger logger,
         string? cookies,
@@ -48,6 +57,9 @@ internal sealed partial class DownloadJob : IDisposable
         _repository = repository;
         _http = http;
         _options = options;
+        _hostLimiter = hostLimiter;
+        _limiters = [globalLimiter];
+        _retry = new RetryPolicy(options.MaxRetries, options.RetryBaseDelay, options.RetryMaxDelay);
         _clock = clock;
         _logger = logger;
         _cookies = cookies;
@@ -164,7 +176,11 @@ internal sealed partial class DownloadJob : IDisposable
             _item.TotalBytes = probe.TotalBytes;
             _segments = SegmentPlanner.Plan(probe.TotalBytes, probe.SupportsRanges, PlannedConnections(), _options.MinSegmentBytes);
             EnsureDiskSpace(probe.TotalBytes);
-            _file = OpenPartFile(FileMode.Create);
+
+            // Parallel segments write far into the file at once; a sparse file avoids NTFS
+            // zero-filling everything before the furthest write (decision D-28).
+            PartFile.Create(_item.PartPath, sparse: _segments.Count > 1);
+            _file = OpenPartFile(FileMode.Open);
             if (probe.TotalBytes is { } total)
             {
                 PartFile.Preallocate(_file, total);
@@ -174,6 +190,7 @@ internal sealed partial class DownloadJob : IDisposable
         }
 
         _item.Connections = Math.Max(1, _segments.Count);
+        _connectionLimit = Math.Max(1, _segments.Count(s => !s.IsComplete));
         _item.DownloadedBytes = _segments.Sum(s => s.Downloaded);
         _item.StartedAt ??= _clock.UtcNow;
         _lastCheckpointBytes = _item.DownloadedBytes;
@@ -183,40 +200,51 @@ internal sealed partial class DownloadJob : IDisposable
         LogStarted(_id, LogRedactor.Url(_item.FinalUrl), _item.TotalBytes, _segments.Count, resume);
     }
 
-    /// <summary>Phase 2: a single connection per download.</summary>
-    private static int PlannedConnections() => 1;
+    private int PlannedConnections() => Math.Clamp(_item.Connections, 1, 32);
 
+    /// <summary>
+    /// Runs the segment pool. If the server turns out not to honour ranges, falls back once
+    /// to a single connection from byte zero (FR-4).
+    /// </summary>
     private async Task TransferAsync(CancellationToken ct)
+    {
+        var fellBack = false;
+        while (true)
+        {
+            try
+            {
+                await RunPoolAsync(ct).ConfigureAwait(false);
+                return;
+            }
+            catch (RangeNotSupportedException ex) when (!fellBack && !ct.IsCancellationRequested)
+            {
+                fellBack = true;
+                LogRangeFallback(_id, ex.Message);
+                FallBackToSingleConnection();
+            }
+        }
+    }
+
+    private async Task RunPoolAsync(CancellationToken ct)
     {
         var url = new Uri(_item.FinalUrl ?? _item.Url);
         var context = RequestContext.For(_item, _options.UserAgent, _cookies);
-        var worker = new SegmentWorker(_http, _options, _file!.SafeFileHandle);
+        var worker = new SegmentWorker(_http, _options, _file!.SafeFileHandle, _limiters, OnBytes);
 
         using var stopCheckpoints = CancellationTokenSource.CreateLinkedTokenSource(ct);
         var checkpoints = CheckpointLoopAsync(stopCheckpoints.Token);
         try
         {
-            foreach (var segment in _segments.Where(s => !s.IsComplete))
+            // A worker shed by the adaptive limit re-queues its segment; another pass picks it up.
+            while (_segments.Any(s => !s.IsComplete))
             {
-                segment.Status = SegmentStatus.Active;
-                Interlocked.Increment(ref _activeConnections);
-                try
-                {
-                    await worker.RunAsync(url, context, segment, _item.SupportsRanges, ct).ConfigureAwait(false);
-                }
-                catch (Exception) when (!ct.IsCancellationRequested)
-                {
-                    segment.Status = SegmentStatus.Failed;
-                    throw;
-                }
-                finally
-                {
-                    Interlocked.Decrement(ref _activeConnections);
-                    if (segment.Status == SegmentStatus.Active)
-                    {
-                        segment.Status = SegmentStatus.Pending;
-                    }
-                }
+                var pending = new ConcurrentQueue<Segment>(_segments.Where(s => !s.IsComplete));
+                Volatile.Write(ref _connectionLimit, Math.Min(Math.Max(1, _connectionLimit), pending.Count));
+                using var failFast = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                var workers = Enumerable.Range(0, _connectionLimit)
+                    .Select(i => WorkerLoopAsync(i, pending, worker, url, context, failFast))
+                    .ToArray();
+                await Task.WhenAll(workers).ConfigureAwait(false);
             }
         }
         finally
@@ -228,6 +256,162 @@ internal sealed partial class DownloadJob : IDisposable
             }
             catch (OperationCanceledException)
             {
+            }
+        }
+    }
+
+    private async Task WorkerLoopAsync(int index, ConcurrentQueue<Segment> pending, SegmentWorker worker, Uri url, RequestContext context, CancellationTokenSource failFast)
+    {
+        var ct = failFast.Token;
+        try
+        {
+            while (index < Volatile.Read(ref _connectionLimit) && pending.TryDequeue(out var segment))
+            {
+                if (!await RunSegmentWithRetriesAsync(index, segment, worker, url, context, ct).ConfigureAwait(false))
+                {
+                    pending.Enqueue(segment);
+                    return;
+                }
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // One segment failed for good: stop the others and report this error.
+            await failFast.CancelAsync().ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    /// <returns>True when the segment finished; false when this worker was shed by the adaptive limit.</returns>
+    private async Task<bool> RunSegmentWithRetriesAsync(int index, Segment segment, SegmentWorker worker, Uri url, RequestContext context, CancellationToken ct)
+    {
+        while (true)
+        {
+            ct.ThrowIfCancellationRequested();
+            var before = segment.Downloaded;
+            segment.Status = SegmentStatus.Active;
+            Interlocked.Increment(ref _activeConnections);
+            try
+            {
+                using (await _hostLimiter.AcquireAsync(url, ct).ConfigureAwait(false))
+                {
+                    await worker.RunAsync(url, context, segment, _item.SupportsRanges, ct).ConfigureAwait(false);
+                }
+
+                segment.RetryCount = 0;
+                return true;
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested && RetryPolicy.IsTransient(ex))
+            {
+                var progressed = segment.Downloaded > before;
+                segment.Status = SegmentStatus.Pending;
+                var throttled = RetryPolicy.IsThrottling(ex) || (!progressed && ex is HttpRequestException);
+                if (throttled)
+                {
+                    NoteThrottle();
+                }
+
+                if (index >= Volatile.Read(ref _connectionLimit))
+                {
+                    // Shed by the adaptive limit: hand the segment back without spending a retry.
+                    return false;
+                }
+
+                segment.RetryCount = progressed ? 1 : segment.RetryCount + 1;
+                if (segment.RetryCount > _retry.MaxRetries)
+                {
+                    segment.Status = SegmentStatus.Failed;
+                    throw;
+                }
+
+                EnterRetrying();
+                var delay = _retry.DelayFor(segment.RetryCount, ex);
+                LogRetry(_id, segment.Index, segment.RetryCount, _retry.MaxRetries, delay.TotalMilliseconds, ex.Message);
+                await Task.Delay(delay, ct).ConfigureAwait(false);
+            }
+            catch (Exception) when (!ct.IsCancellationRequested)
+            {
+                segment.Status = SegmentStatus.Failed;
+                throw;
+            }
+            finally
+            {
+                Interlocked.Decrement(ref _activeConnections);
+                if (segment.Status == SegmentStatus.Active)
+                {
+                    segment.Status = SegmentStatus.Pending;
+                }
+            }
+        }
+    }
+
+    /// <summary>§16.1: after repeated throttling errors, halve this download's connections (minimum one).</summary>
+    private void NoteThrottle()
+    {
+        if (Interlocked.Increment(ref _throttleErrors) < 3)
+        {
+            return;
+        }
+
+        Interlocked.Exchange(ref _throttleErrors, 0);
+        int current, reduced;
+        do
+        {
+            current = Volatile.Read(ref _connectionLimit);
+            reduced = Math.Max(1, current / 2);
+        }
+        while (current > 1 && Interlocked.CompareExchange(ref _connectionLimit, reduced, current) != current);
+
+        if (current > 1)
+        {
+            LogConnectionsReduced(_id, current, reduced);
+        }
+    }
+
+    private void FallBackToSingleConnection()
+    {
+        lock (_checkpointLock)
+        {
+            _item.SupportsRanges = false;
+            _item.Connections = 1;
+            _connectionLimit = 1;
+            _segments = SegmentPlanner.Plan(_item.TotalBytes, supportsRanges: false, 1, _options.MinSegmentBytes);
+            _file!.SetLength(0);
+            if (_item.TotalBytes is { } total)
+            {
+                PartFile.Preallocate(_file, total);
+            }
+
+            _repository.SaveSegments(_id, _segments);
+            _repository.Checkpoint(_id, 0, _segments);
+            _item.DownloadedBytes = 0;
+            _lastCheckpointBytes = 0;
+        }
+
+        SetStatus(DownloadStatus.Downloading);
+    }
+
+    private void OnBytes()
+    {
+        if (_item.Status == DownloadStatus.Retrying)
+        {
+            lock (_statusLock)
+            {
+                if (_item.Status == DownloadStatus.Retrying)
+                {
+                    SetStatus(DownloadStatus.Downloading);
+                }
+            }
+        }
+    }
+
+    private void EnterRetrying()
+    {
+        lock (_statusLock)
+        {
+            if (_item.Status == DownloadStatus.Downloading)
+            {
+                SetStatus(DownloadStatus.Retrying);
             }
         }
     }
@@ -247,6 +431,7 @@ internal sealed partial class DownloadJob : IDisposable
         }
 
         CloseFile(checkpoint: true);
+        PartFile.TryClearSparse(_item.PartPath);
 
         if (Checksum.TryCreate(_item.ChecksumAlgo, _item.ChecksumValue, out var checksum))
         {
@@ -437,10 +622,22 @@ internal sealed partial class DownloadJob : IDisposable
 
     private void SetStatus(DownloadStatus status)
     {
-        _item.Status = status;
-        _repository.Update(_item);
-        _onStatusChanged(_item.Clone());
+        lock (_statusLock)
+        {
+            _item.Status = status;
+            _repository.Update(_item);
+            _onStatusChanged(_item.Clone());
+        }
     }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Download {Id}: {Reason} Falling back to one connection from the start.")]
+    private partial void LogRangeFallback(long id, string reason);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Download {Id} segment {Index}: retry {Attempt}/{Max} in {DelayMs:0} ms after: {Error}")]
+    private partial void LogRetry(long id, int index, int attempt, int max, double delayMs, string error);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Download {Id}: server is throttling; connections reduced from {From} to {To}")]
+    private partial void LogConnectionsReduced(long id, int from, int to);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Download {Id} started: {Url}, {Total} bytes, {Segments} segment(s), resume={Resume}")]
     private partial void LogStarted(long id, string url, long? total, int segments, bool resume);
