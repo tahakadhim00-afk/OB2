@@ -50,12 +50,18 @@ public sealed class StorageContext : IDisposable
 /// </summary>
 public static class StorageBootstrapper
 {
-    public static async Task<StorageContext> InitializeAsync(
+    public static Task<StorageContext> InitializeAsync(
         AppPathEnvironment environment,
+        IClock? clock = null,
+        CancellationToken cancellationToken = default) =>
+        InitializeAsync(AppPaths.Resolve(environment), clock, cancellationToken);
+
+    public static async Task<StorageContext> InitializeAsync(
+        AppPaths paths,
         IClock? clock = null,
         CancellationToken cancellationToken = default)
     {
-        var paths = AppPaths.Resolve(environment);
+        ArgumentNullException.ThrowIfNull(paths);
         paths.EnsureCreated();
 
         // Settings come first because they configure logging; their issues are logged afterwards.

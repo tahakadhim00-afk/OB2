@@ -5,8 +5,9 @@
     <TargetFramework>net8.0</TargetFramework>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
-    <!-- Test naming uses underscores; tests do not need ConfigureAwait or public-type rules. -->
-    <NoWarn>$(NoWarn);CA1707;CA2007;CA1515;CA1001;CA1861</NoWarn>
+    <!-- Test naming uses underscores; tests do not need ConfigureAwait or public-type rules.
+         CA5351: MD5 is a supported checksum (FR-11), so tests compute it. -->
+    <NoWarn>$(NoWarn);CA1707;CA2007;CA1515;CA1001;CA1861;CA5351</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

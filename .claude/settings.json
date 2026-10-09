@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(gh run list --repo tahakadhim00-afk/OB2 --limit 5 2>&1 | ForEach-Object { \"$_\" })",
+      "PowerShell(Start-Sleep -Seconds 20; $r = Invoke-RestMethod \"https://api.github.com/repos/tahakadhim00-afk/OB2/actions/runs?per_page=5\"; $r.workflow_runs | ForEach-Object { \"$\\($_.name\\) | $\\($_.head_branch\\) | $\\($_.status\\) | $\\($_.conclusion\\) | $\\($_.html_url\\)\" }; \"total: $\\($r.total_count\\)\")",
+      "PowerShell(git checkout -q -b phase-2 phase-1-stable)"
+    ]
+  }
+}

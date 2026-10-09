@@ -8,6 +8,8 @@
     <RootNamespace>OB2.App</RootNamespace>
     <AssemblyName>OB2</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <StartupObject>OB2.App.Program</StartupObject>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>

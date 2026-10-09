@@ -38,6 +38,13 @@ public sealed record AppPaths(string Root, bool IsPortable)
         return new AppPaths(Path.Combine(Path.GetFullPath(environment.AppDataDirectory), AppFolderName), IsPortable: false);
     }
 
+    /// <summary>An explicit data root (the <c>--data</c> option), laid out like a portable install.</summary>
+    public static AppPaths ForRoot(string root)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(root);
+        return new AppPaths(Path.TrimEndingDirectorySeparator(Path.GetFullPath(root)), IsPortable: true);
+    }
+
     public void EnsureCreated()
     {
         Directory.CreateDirectory(Root);

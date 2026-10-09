@@ -1,0 +1,245 @@
+using System.Collections.Concurrent;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using OB2.Core.Downloads;
+using OB2.Core.Files;
+using OB2.Core.Http;
+using OB2.Core.Time;
+
+namespace OB2.Core.Engine;
+
+/// <summary>
+/// Owns the lifecycle of all downloads: add, start, pause, delete, and live progress. Has no
+/// UI dependency (§7.2); the UI and the CLI both drive it.
+/// </summary>
+public sealed partial class DownloadEngine : IDisposable
+{
+    private readonly IDownloadRepository _repository;
+    private readonly HttpClient _http;
+    private readonly bool _ownsHttp;
+    private readonly Func<EngineOptions> _options;
+    private readonly IClock _clock;
+    private readonly ILoggerFactory _loggerFactory;
+    private readonly ILogger _logger;
+    private readonly ConcurrentDictionary<long, DownloadJob> _jobs = new();
+
+    // Cookies live only in memory for the life of the process (§11.1).
+    private readonly ConcurrentDictionary<long, string> _cookies = new();
+    private readonly object _startLock = new();
+
+    public DownloadEngine(
+        IDownloadRepository repository,
+        Func<EngineOptions> options,
+        HttpClient? http = null,
+        IClock? clock = null,
+        ILoggerFactory? loggerFactory = null)
+    {
+        _repository = repository ?? throw new ArgumentNullException(nameof(repository));
+        _options = options ?? throw new ArgumentNullException(nameof(options));
+        _ownsHttp = http is null;
+        _http = http ?? DownloadHttpClient.Create(options().ConnectTimeout);
+        _clock = clock ?? SystemClock.Instance;
+        _loggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
+        _logger = _loggerFactory.CreateLogger<DownloadEngine>();
+    }
+
+    /// <summary>Raised on a background thread whenever a download changes status.</summary>
+    public event EventHandler<DownloadItem>? StatusChanged;
+
+    public IReadOnlyCollection<long> ActiveIds => [.. _jobs.Keys];
+
+    public bool IsActive(long id) => _jobs.ContainsKey(id);
+
+    public async Task<ProbeResult> ProbeAsync(DownloadRequest request, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var options = _options();
+        var context = new RequestContext(request.UserAgent ?? options.UserAgent, request.Referrer, request.Cookies, request.Headers);
+        return await new UrlProber(_http, options.ConnectTimeout + options.ReadIdleTimeout)
+            .ProbeAsync(request.Url, context, request.FileName ?? request.FileNameHint, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>Creates the download record. Probes first unless <paramref name="probe"/> is supplied.</summary>
+    public async Task<DownloadItem> AddAsync(DownloadRequest request, ProbeResult? probe = null, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        UrlValidator.EnsureDownloadable(request.Url);
+        probe ??= await ProbeAsync(request, cancellationToken).ConfigureAwait(false);
+
+        Directory.CreateDirectory(request.SaveFolder);
+        var name = string.IsNullOrWhiteSpace(request.FileName) ? probe.SuggestedFileName : request.FileName;
+        var preferred = SafePath.Combine(request.SaveFolder, name);
+
+        DownloadItem item;
+        lock (_startLock)
+        {
+            var taken = _repository.List()
+                .Where(d => d.Status != DownloadStatus.Completed)
+                .Select(d => d.DestPath)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var destination = UniquePath.Allocate(preferred, taken.Contains);
+
+            item = new DownloadItem
+            {
+                Url = request.Url.AbsoluteUri,
+                FinalUrl = probe.FinalUrl.AbsoluteUri,
+                FileName = Path.GetFileName(destination),
+                DestPath = destination,
+                CategoryId = request.CategoryId,
+                QueueId = request.QueueId,
+                Status = DownloadStatus.Queued,
+                TotalBytes = probe.TotalBytes,
+                Connections = Math.Clamp(request.Connections ?? _options().Connections, 1, 32),
+                SupportsRanges = probe.SupportsRanges,
+                ETag = probe.ETag,
+                LastModified = probe.LastModified,
+                ChecksumAlgo = request.Checksum?.AlgorithmName,
+                ChecksumValue = request.Checksum?.HexValue,
+                Referrer = request.Referrer,
+                UserAgent = request.UserAgent,
+                Headers = DownloadHttpClient.PersistableHeaders(request.Headers),
+                SpeedLimitBps = request.SpeedLimitBps,
+                CreatedAt = _clock.UtcNow,
+                Source = request.Source,
+            };
+            item.Id = _repository.Insert(item);
+        }
+
+        if (!string.IsNullOrEmpty(request.Cookies))
+        {
+            _cookies[item.Id] = request.Cookies;
+        }
+
+        _repository.AddHistoryEvent(item.Id, "added", item.Source.ToDbString());
+        LogAdded(item.Id, item.FileName);
+        StatusChanged?.Invoke(this, item.Clone());
+        return item;
+    }
+
+    /// <summary>Starts (or resumes) a download in the background. False if it is already running or finished.</summary>
+    public bool Start(long id)
+    {
+        lock (_startLock)
+        {
+            if (_jobs.ContainsKey(id))
+            {
+                return false;
+            }
+
+            var item = _repository.Get(id);
+            if (item is null || item.Status == DownloadStatus.Completed)
+            {
+                return false;
+            }
+
+            _cookies.TryGetValue(id, out var cookies);
+            var job = new DownloadJob(id, _repository, _http, _options(), _clock, _loggerFactory.CreateLogger<DownloadJob>(), cookies, OnJobStatusChanged);
+            _jobs[id] = job;
+            job.Start();
+            // Remove only this job: a later Start for the same id may already have replaced it.
+            _ = job.Completion.ContinueWith(_ => _jobs.TryRemove(new KeyValuePair<long, DownloadJob>(id, job)), TaskScheduler.Default);
+            return true;
+        }
+    }
+
+    /// <summary>Waits until the download's current job ends and returns the final record.</summary>
+    public async Task<DownloadItem?> WaitAsync(long id, CancellationToken cancellationToken = default)
+    {
+        if (_jobs.TryGetValue(id, out var job))
+        {
+            await job.Completion.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        return _repository.Get(id);
+    }
+
+    /// <summary>Stops a running download after checkpointing; a waiting one becomes paused.</summary>
+    public async Task PauseAsync(long id)
+    {
+        if (_jobs.TryGetValue(id, out var job))
+        {
+            job.Cancel();
+            await job.Completion.ConfigureAwait(false);
+            return;
+        }
+
+        var item = _repository.Get(id);
+        if (item is { Status: DownloadStatus.Queued })
+        {
+            item.Status = DownloadStatus.Paused;
+            _repository.Update(item);
+            StatusChanged?.Invoke(this, item.Clone());
+        }
+    }
+
+    public Task PauseAllAsync() => Task.WhenAll(_jobs.Keys.Select(PauseAsync));
+
+    /// <summary>Removes the record and its partial file; the finished file only when asked (§9.6).</summary>
+    public async Task DeleteAsync(long id, bool deleteFile)
+    {
+        await PauseAsync(id).ConfigureAwait(false);
+        var item = _repository.Get(id);
+        if (item is null)
+        {
+            return;
+        }
+
+        TryDeleteFile(item.PartPath);
+        if (deleteFile && item.Status == DownloadStatus.Completed)
+        {
+            TryDeleteFile(item.DestPath);
+        }
+
+        _cookies.TryRemove(id, out _);
+        _repository.Delete(id);
+        _repository.AddHistoryEvent(null, "deleted", item.FileName);
+        item.Status = DownloadStatus.Cancelled;
+        StatusChanged?.Invoke(this, item);
+    }
+
+    public DownloadProgress? GetProgress(long id) => _jobs.TryGetValue(id, out var job) ? job.Snapshot() : null;
+
+    /// <summary>Startup recovery (§11.3): interrupted downloads become paused, not auto-resumed.</summary>
+    public IReadOnlyList<long> RecoverInterrupted() => _repository.MarkInterruptedAsPaused();
+
+    public void Dispose()
+    {
+        foreach (var job in _jobs.Values)
+        {
+            job.Cancel();
+        }
+
+        try
+        {
+            Task.WaitAll([.. _jobs.Values.Select(j => j.Completion)], TimeSpan.FromSeconds(10));
+        }
+        catch (AggregateException)
+        {
+        }
+
+        if (_ownsHttp)
+        {
+            _http.Dispose();
+        }
+    }
+
+    private void OnJobStatusChanged(DownloadItem item) => StatusChanged?.Invoke(this, item);
+
+    private static void TryDeleteFile(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+    }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Download {Id} added as {FileName}")]
+    private partial void LogAdded(long id, string fileName);
+}

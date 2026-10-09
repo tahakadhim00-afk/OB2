@@ -1,8 +1,15 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- End-to-end startup and (from Phase 2) HTTP scenarios. Never references OB2.App. -->
+  <!-- End-to-end startup, engine-over-HTTP, and CLI scenarios. The WPF app is only launched in CLI mode. -->
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\OB2.Core\OB2.Core.csproj" />
     <ProjectReference Include="..\..\src\OB2.Storage\OB2.Storage.csproj" />
+    <!-- Build OB2.exe first so the CLI tests can run it; no assembly reference. -->
+    <ProjectReference Include="..\..\src\OB2.App\OB2.App.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
   </ItemGroup>
 
 </Project>
