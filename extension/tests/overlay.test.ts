@@ -125,6 +125,25 @@ describe('button over videos (FR-24)', () => {
   });
 });
 
+describe('button fallback: addresses in the page code (D-70)', () => {
+  it('offers a video address written in a script when nothing else is known', () => {
+    doc.body.insertAdjacentHTML('beforeend', '<script>cfg = {"file":"https:\\/\\/cdn.e.com\\/movie.mp4"}</script>');
+    const video = addVideo(doc, { src: 'blob:https://e.com/9' });
+
+    expect(overlay.show(video)).toBe(true);
+    mainButton().click();
+
+    expect(send).toHaveBeenCalledWith({ url: 'https://cdn.e.com/movie.mp4' });
+  });
+
+  it("doesn't offer another video's file", () => {
+    addVideo(doc, { src: 'https://e.com/other.mp4' });
+    const blobVideo = addVideo(doc, { src: 'blob:https://e.com/9' });
+
+    expect(overlay.show(blobVideo)).toBe(false);
+  });
+});
+
 describe('context menu on a media element', () => {
   it('resolves a blob: element to the newest file the frame loaded', () => {
     const video = addVideo(doc, { src: 'blob:https://e.com/1' });

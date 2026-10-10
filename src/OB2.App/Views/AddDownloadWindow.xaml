@@ -36,6 +36,20 @@
         <StackPanel Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,2,0,8">
             <TextBlock Text="{Binding InfoText}" Style="{StaticResource Hint}" />
             <TextBlock Text="{Binding SourceText}" Style="{StaticResource Hint}" />
+            <DockPanel Margin="0,4,0,0">
+                <DockPanel.Style>
+                    <Style TargetType="DockPanel">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsVideoPage}" Value="True">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </DockPanel.Style>
+                <Button DockPanel.Dock="Right" Content="{StaticResource Add_OpenAsVideo}" Command="{Binding OpenAsVideoCommand}" Padding="10,2" Margin="8,0,0,0" />
+                <TextBlock Text="{StaticResource Add_VideoPage}" TextWrapping="Wrap" VerticalAlignment="Center" />
+            </DockPanel>
         </StackPanel>
 
         <Label Grid.Row="2" Content="{StaticResource Add_SaveAs}" Target="{Binding ElementName=NameBox}" Style="{StaticResource FieldLabel}" />

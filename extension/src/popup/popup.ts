@@ -1,11 +1,12 @@
 // Popup (§6 Phase 6 scope): connection state, active and recent downloads, Pause all / Resume all.
 // Untrusted text (file names) is only ever set through textContent.
 
-import { fetchStatus } from '../capture';
+import { fetchStatus, type CaptureOutcome } from '../capture';
 import { formatBytes } from '../format';
 import { HostError, STATUS_TIMEOUT_MS, sendToHost, type HostFailure } from '../native';
 import { createMessage, MessageType, type DownloadSummary, type StatusPayload } from '../protocol';
 import { loadMediaButtonEnabled, loadSettings, setCaptureEnabled, setMediaButtonEnabled } from '../rules';
+import { isPageScan, SCAN_GLOBAL, type FoundKind, type FoundLink, type PageScan } from '../scan';
 
 export type View =
   | { kind: 'connected'; status: StatusPayload }
@@ -99,6 +100,106 @@ export function formatSpeed(bytesPerSecond: number): string {
   return `${formatBytes(bytesPerSecond)}/s`;
 }
 
+// D-70: "Find downloads on this page". The list stays in the popup; a picked link goes through the
+// background, which outlives the popup (it closes when OB2's window takes the focus).
+
+export type FoundView =
+  | { kind: 'scanning' }
+  | { kind: 'failed'; message: string }
+  | { kind: 'found'; tabId: number; scans: PageScan[] };
+
+export type FoundSender = (tabId: number, link: FoundLink, pageUrl: string) => Promise<CaptureOutcome | undefined>;
+
+const KIND_TEXT: Record<FoundKind, string> = { video: 'Video', audio: 'Audio', file: 'File', stream: 'Stream: not supported yet' };
+const KIND_ORDER: FoundKind[] = ['video', 'audio', 'file', 'stream'];
+
+/** One row per address across all frames, videos first, streams last. */
+export function mergeScans(scans: readonly PageScan[]): Array<{ link: FoundLink; pageUrl: string }> {
+  const rows = new Map<string, { link: FoundLink; pageUrl: string }>();
+  for (const scan of scans) {
+    for (const link of scan.links) {
+      if (!rows.has(link.url)) rows.set(link.url, { link, pageUrl: scan.pageUrl });
+    }
+  }
+  return [...rows.values()].sort((a, b) => KIND_ORDER.indexOf(a.link.kind) - KIND_ORDER.indexOf(b.link.kind));
+}
+
+export function renderFound(doc: Document, view: FoundView, send: FoundSender = sendFound): void {
+  const list = doc.getElementById('found')!;
+  const message = doc.getElementById('scan-message')!;
+  (doc.getElementById('scan') as HTMLButtonElement).disabled = view.kind === 'scanning';
+  message.hidden = false;
+  if (view.kind !== 'found') {
+    list.replaceChildren();
+    message.textContent = view.kind === 'scanning' ? 'Reading the page…' : view.message;
+    return;
+  }
+
+  const rows = mergeScans(view.scans);
+  message.textContent = rows.length === 0 ? 'No download links found on this page.' : `${rows.length} found`;
+  list.replaceChildren(
+    ...rows.map(({ link, pageUrl }) => {
+      const li = doc.createElement('li');
+      const text = doc.createElement('div');
+      text.className = 'text';
+      const name = doc.createElement('span');
+      name.className = 'name';
+      name.textContent = link.name;
+      name.title = link.url;
+      const detail = doc.createElement('span');
+      detail.className = 'detail';
+      detail.textContent = `${KIND_TEXT[link.kind]} · ${new URL(link.url).hostname}`;
+      text.append(name, detail);
+      const button = doc.createElement('button');
+      button.type = 'button';
+      button.textContent = 'Download';
+      button.disabled = link.kind === 'stream';
+      button.setAttribute('aria-label', `Download ${link.name} with OB2`);
+      button.addEventListener('click', () => {
+        button.disabled = true;
+        button.textContent = 'Sending…';
+        void send(view.tabId, link, pageUrl)
+          .catch(() => undefined)
+          .then((outcome) => (button.textContent = resultText(outcome)));
+      });
+      li.append(text, button);
+      return li;
+    }),
+  );
+}
+
+function resultText(outcome: CaptureOutcome | undefined): string {
+  if (outcome?.action === 'captured') return 'Sent';
+  if (outcome?.action === 'left-to-chrome') return 'In browser';
+  return 'Failed';
+}
+
+async function sendFound(tabId: number, link: FoundLink, pageUrl: string): Promise<CaptureOutcome | undefined> {
+  return (await chrome.runtime.sendMessage({ type: 'ob2-download-found', tabId, link, pageUrl })) as CaptureOutcome | undefined;
+}
+
+/** Runs in each frame (serialized by chrome.scripting), so it may only use its argument. */
+function callScan(name: string): unknown {
+  const scan = (globalThis as Record<string, unknown>)[name];
+  return typeof scan === 'function' ? (scan as () => unknown)() : null;
+}
+
+async function scanActiveTab(): Promise<FoundView> {
+  const failed = (message: string): FoundView => ({ kind: 'failed', message });
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (tab?.id === undefined) return failed('There is no page to read.');
+  if (tab.incognito) return failed('OB2 does not read Incognito pages.');
+  let results: chrome.scripting.InjectionResult<unknown>[];
+  try {
+    results = await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, func: callScan, args: [SCAN_GLOBAL] });
+  } catch {
+    return failed("The browser doesn't let extensions read this page (for example chrome:// pages or the Web Store).");
+  }
+  const scans = results.map((r) => r.result).filter(isPageScan);
+  // No answer from any frame: the page was open before the extension was installed or reloaded.
+  return scans.length > 0 ? { kind: 'found', tabId: tab.id, scans } : failed('Reload the page (F5), then try again.');
+}
+
 let refreshing = false;
 
 async function refresh(doc: Document): Promise<void> {
@@ -129,6 +230,10 @@ export async function start(doc: Document): Promise<void> {
   const mediaButton = doc.getElementById('media-button') as HTMLInputElement;
   mediaButton.checked = await loadMediaButtonEnabled();
   mediaButton.addEventListener('change', () => void setMediaButtonEnabled(mediaButton.checked));
+  doc.getElementById('scan')!.addEventListener('click', () => {
+    renderFound(doc, { kind: 'scanning' });
+    void scanActiveTab().then((view) => renderFound(doc, view));
+  });
   doc.getElementById('pause-all')!.addEventListener('click', () => void command(doc, MessageType.PauseAll));
   doc.getElementById('resume-all')!.addEventListener('click', () => void command(doc, MessageType.ResumeAll));
 

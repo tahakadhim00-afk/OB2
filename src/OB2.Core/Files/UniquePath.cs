@@ -35,5 +35,6 @@ public static class UniquePath
         !File.Exists(path)
         && !Directory.Exists(path)
         && !File.Exists(path + DownloadItem.PartSuffix)
+        && !Directory.Exists(path + ".parts") // a media download's parts (D-71)
         && (isTaken is null || !isTaken(path));
 }

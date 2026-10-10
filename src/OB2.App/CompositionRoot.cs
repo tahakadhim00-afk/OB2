@@ -4,6 +4,7 @@ using OB2.App.Services;
 using OB2.App.ViewModels;
 using OB2.Core.Downloads;
 using OB2.Core.Engine;
+using OB2.Core.Media;
 using OB2.Core.Organization;
 using OB2.Core.Services;
 using OB2.Core.Time;
@@ -38,12 +39,18 @@ internal static class CompositionRoot
         services.AddSingleton<ICategoryRepository>(sp => sp.GetRequiredService<SqliteOrganizationRepository>());
         services.AddSingleton<IQueueRepository>(sp => sp.GetRequiredService<SqliteOrganizationRepository>());
 
+        // D-71: yt-dlp, Deno and ffmpeg for video pages, downloaded into the data root on first use.
+        services.AddSingleton(_ => new MediaTools(storage.Paths.ToolsDirectory));
+        services.AddSingleton(sp => new MediaInspector(sp.GetRequiredService<MediaTools>()));
+        services.AddSingleton(sp => new MediaToolInstaller(sp.GetRequiredService<MediaTools>(), storage.LoggerFactory));
+
         services.AddSingleton(sp => new DownloadEngine(
             sp.GetRequiredService<IDownloadRepository>(),
             () => EngineOptions.FromSettings(storage.Settings),
             clock: sp.GetRequiredService<IClock>(),
             loggerFactory: storage.LoggerFactory,
-            cookieStore: new DpapiCookieStore(storage.ConnectionFactory, sp.GetRequiredService<IClock>())));
+            cookieStore: new DpapiCookieStore(storage.ConnectionFactory, sp.GetRequiredService<IClock>()),
+            mediaTools: sp.GetRequiredService<MediaTools>()));
         services.AddSingleton<QueueManager>();
         services.AddSingleton(sp => new QueueScheduler(sp.GetRequiredService<QueueManager>(), sp.GetRequiredService<IQueueRepository>(), sp.GetRequiredService<IClock>()));
         services.AddSingleton(sp => new DownloadService(

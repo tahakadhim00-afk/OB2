@@ -3,7 +3,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { formatBytes, render } from '../src/popup/popup';
+import { formatBytes, render, renderFound } from '../src/popup/popup';
 
 function loadPopup(): Document {
   const html = readFileSync(join(__dirname, '..', 'src', 'popup', 'popup.html'), 'utf8');
@@ -125,6 +125,56 @@ describe('popup', () => {
     render(doc, { kind: 'failed', failure: 'app-not-running' });
 
     expect(doc.getElementById('message')!.textContent).toContain('starts by itself');
+  });
+
+  describe('Find downloads on this page (D-70)', () => {
+    const scans = [
+      { pageUrl: 'https://e.com/', title: 'E', links: [
+        { url: 'https://e.com/setup.exe', name: 'setup.exe', kind: 'file' as const },
+        { url: 'https://e.com/live.m3u8', name: 'live.m3u8', kind: 'stream' as const },
+      ] },
+      { pageUrl: 'https://player.e.com/embed', title: 'Player', links: [
+        { url: 'https://cdn.e.com/movie.mp4', name: '<b>movie</b>.mp4', kind: 'video' as const },
+        { url: 'https://e.com/setup.exe', name: 'setup.exe', kind: 'file' as const },
+      ] },
+    ];
+
+    it('lists each address once, videos first and streams last, which cannot be downloaded', () => {
+      const doc = loadPopup();
+      render(doc, { kind: 'failed', failure: 'app-not-running' });
+      renderFound(doc, { kind: 'found', tabId: 4, scans });
+
+      const rows = Array.from(doc.querySelectorAll('#found li'));
+      expect(doc.getElementById('scan-message')!.textContent).toBe('3 found');
+      expect(rows.map((r) => r.querySelector('.name')!.textContent)).toEqual(['<b>movie</b>.mp4', 'setup.exe', 'live.m3u8']);
+      expect(doc.querySelector('#found b')).toBeNull();
+      expect(rows[2].querySelector('.detail')!.textContent).toBe('Stream: not supported yet · e.com');
+      expect(rows[2].querySelector('button')!.disabled).toBe(true);
+    });
+
+    it('sends a picked link with the frame it came from, and shows the result', async () => {
+      const doc = loadPopup();
+      const send = jest.fn().mockResolvedValue({ action: 'captured', status: 'confirming' });
+      renderFound(doc, { kind: 'found', tabId: 4, scans }, send);
+
+      const button = doc.querySelector('#found li button') as HTMLButtonElement;
+      button.click();
+      expect(button.textContent).toBe('Sending…');
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(send).toHaveBeenCalledWith(4, scans[1].links[0], 'https://player.e.com/embed');
+      expect(button.textContent).toBe('Sent');
+    });
+
+    it('explains an empty page or a page it cannot read', () => {
+      const doc = loadPopup();
+      renderFound(doc, { kind: 'found', tabId: 1, scans: [{ pageUrl: 'https://e.com/', title: '', links: [] }] });
+      expect(doc.getElementById('scan-message')!.textContent).toBe('No download links found on this page.');
+
+      renderFound(doc, { kind: 'failed', message: 'Reload the page (F5), then try again.' });
+      expect(doc.getElementById('found')!.children).toHaveLength(0);
+      expect(doc.getElementById('scan-message')!.textContent).toContain('Reload the page');
+    });
   });
 
   it.each([

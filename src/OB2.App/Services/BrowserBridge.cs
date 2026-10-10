@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using OB2.Core.Downloads;
 using OB2.Core.Files;
 using OB2.Core.Http;
+using OB2.Core.Media;
 using OB2.Core.Services;
 using OB2.Core.Settings;
 using OB2.Shared;
@@ -84,11 +85,14 @@ public sealed partial class BrowserBridge : IIpcHandler
             Headers = payload.Headers,
             FileSizeHint = payload.FileSizeHint,
             Source = source,
+            MediaPage = payload.MediaPage == true,
         };
 
         // §11.1: a URL with embedded credentials (user:pass@host) is only accepted after the user confirms it.
         var hasCredentials = new Uri(url).UserInfo.Length > 0;
-        var confirm = source == DownloadSource.Cli || hasCredentials || (_settings.Capture.ConfirmBeforeAdding && !payload.AutoStart);
+        // D-71: a video page always needs the user's choice of quality and audio.
+        var mediaPage = prefill.MediaPage || VideoSites.YouTubeVideo(new Uri(url)) is not null;
+        var confirm = mediaPage || source == DownloadSource.Cli || hasCredentials || (_settings.Capture.ConfirmBeforeAdding && !payload.AutoStart);
         if (confirm)
         {
             // FR-22: show the Add dialog; reply now so the browser can cancel its own download.

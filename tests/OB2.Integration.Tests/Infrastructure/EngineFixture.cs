@@ -124,5 +124,8 @@ public sealed class EngineFixture : IAsyncDisposable
         Engine = CreateEngine();
     }
 
-    private DownloadEngine CreateEngine() => new(Repository, () => Options, cookieStore: CookieStore);
+    /// <summary>yt-dlp and friends for video pages (D-71); used by engines created after it is set.</summary>
+    public OB2.Core.Media.MediaTools? MediaTools { get; set; }
+
+    private DownloadEngine CreateEngine() => new(Repository, () => Options, cookieStore: CookieStore, mediaTools: MediaTools);
 }

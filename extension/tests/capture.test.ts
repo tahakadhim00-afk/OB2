@@ -1,4 +1,4 @@
-import { BypassList, buildPayload, captureDownload, cookieHeader, downloadLinkWithOb2, downloadMediaWithOb2, fetchStatus } from '../src/capture';
+import { BypassList, buildPayload, captureDownload, cookieHeader, downloadFoundWithOb2, downloadLinkWithOb2, downloadMediaWithOb2, downloadVideoPageWithOb2, fetchStatus } from '../src/capture';
 import { loadSettings } from '../src/rules';
 import { download, installChrome, replyWith, type ChromeMock } from './chromeMock';
 
@@ -182,6 +182,52 @@ describe('media button and media menu (FR-24)', () => {
 
     expect(outcome).toEqual({ action: 'left-to-chrome', reason: 'not-registered' });
     expect(chromeMock.downloads.download).toHaveBeenCalledWith({ url: 'https://e.com/clip.webm' });
+  });
+});
+
+describe('video pages for the quality chooser (D-71)', () => {
+  it('sends the page marked as a video page, without cookies', async () => {
+    chromeMock.sendNativeMessage.mockImplementation(replyWith('ack', { downloadId: null, status: 'confirming' }));
+    chromeMock.cookies.getAll.mockResolvedValue([{ name: 'SID', value: 'secret' }]);
+
+    const outcome = await downloadMediaWithOb2({ url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', page: true }, 'https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=1', 'Title');
+
+    expect(outcome).toEqual({ action: 'captured', downloadId: null, status: 'confirming' });
+    const payload = sentMessages()[0].payload;
+    expect(payload).toMatchObject({ url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', mediaPage: true, source: 'chrome-media', autoStart: false });
+    expect(payload).not.toHaveProperty('cookies');
+    expect(payload).not.toHaveProperty('filenameHint');
+  });
+
+  it('never lets Chrome save the web page when OB2 cannot be reached', async () => {
+    chromeMock.sendNativeMessage.mockRejectedValue(new Error('Specified native messaging host not found.'));
+
+    const outcome = await downloadVideoPageWithOb2('https://www.youtube.com/watch?v=dQw4w9WgXcQ', undefined);
+
+    expect(outcome).toEqual({ action: 'failed', reason: 'not-registered' });
+    expect(chromeMock.downloads.download).not.toHaveBeenCalled();
+  });
+});
+
+describe('links found on the page (D-70)', () => {
+  it('sends the link with the frame as referrer and the page’s own file name', async () => {
+    chromeMock.sendNativeMessage.mockImplementation(replyWith('ack', { downloadId: 8, status: 'confirming' }));
+
+    const link = { url: 'https://e.com/get?id=7', name: 'Manual.pdf', kind: 'file' as const, downloadName: 'Manual.pdf' };
+    const outcome = await downloadFoundWithOb2(link, 'https://e.com/docs');
+
+    expect(outcome).toEqual({ action: 'captured', downloadId: 8, status: 'confirming' });
+    expect(sentMessages()[0].payload).toMatchObject({ url: link.url, referrer: 'https://e.com/docs', filenameHint: 'Manual.pdf', source: 'chrome-page' });
+  });
+
+  it('refuses streams and Incognito pages without contacting OB2 or Chrome', async () => {
+    const stream = await downloadFoundWithOb2({ url: 'https://e.com/a.m3u8', name: 'a.m3u8', kind: 'stream' }, undefined);
+    const incognito = await downloadFoundWithOb2({ url: 'https://e.com/a.zip', name: 'a.zip', kind: 'file' }, undefined, true);
+
+    expect(stream).toEqual({ action: 'ignored', reason: 'file-type' });
+    expect(incognito).toEqual({ action: 'ignored', reason: 'incognito' });
+    expect(chromeMock.sendNativeMessage).not.toHaveBeenCalled();
+    expect(chromeMock.downloads.download).not.toHaveBeenCalled();
   });
 });
 

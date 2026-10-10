@@ -5,9 +5,10 @@
 // CSS and scripts can't restyle or read it, and it is built without innerHTML (Trusted Types).
 
 import { formatBytes } from './format';
-import { isDownloadableMediaUrl, mediaLabel, type MediaCandidate } from './media';
+import { isDownloadableMediaUrl, isYouTubeHost, mediaLabel, youTubeVideoPage, type MediaCandidate } from './media';
+import { scanPage } from './scan';
 
-export type SendResult = 'sent' | 'browser' | 'incognito' | 'failed';
+export type SendResult = 'sent' | 'browser' | 'unreachable' | 'incognito' | 'failed';
 
 const MIN_WIDTH = 200;
 const MIN_HEIGHT = 100;
@@ -16,10 +17,13 @@ const HIDE_DELAY_MS = 1200;
 const PLAY_SHOW_MS = 4000;
 const RESULT_SHOW_MS = 2500;
 const MAX_DETECTED = 30;
+/** The page-code fallback rescans at most this often while the pointer moves over videos. */
+const SCAN_REUSE_MS = 5000;
 
 const RESULT_TEXT: Record<SendResult, string> = {
   sent: 'Sent to OB2',
   browser: 'OB2 not reachable: the browser is downloading it',
+  unreachable: 'OB2 not reachable. Is it set up? (OB2 popup)',
   incognito: 'Not available in Incognito',
   failed: 'Could not send to OB2',
 };
@@ -76,6 +80,7 @@ export class MediaOverlay {
   private hideTimer?: ReturnType<typeof setTimeout>;
   private busy = false;
   private contextMedia?: HTMLMediaElement;
+  private pageScan?: { at: number; media: MediaCandidate[] };
 
   /** `shadowMode` is open only in tests, which need to reach the button. */
   constructor(
@@ -108,16 +113,39 @@ export class MediaOverlay {
     if (this.target && !this.busy) this.show(this.target); // refresh the count on the button
   }
 
+  /** What the background saw this frame load, oldest first. */
+  detectedMedia(): readonly MediaCandidate[] {
+    return this.detected;
+  }
+
   /** For "Download media with OB2" on an element whose src Chrome can't hand over (blob:). */
   mediaForContextMenu(): MediaCandidate | undefined {
     const media = this.contextMedia ?? this.doc.querySelector('video') ?? undefined;
-    return media ? candidatesFor(media, this.detected)[0] : this.detected.at(-1);
+    return media ? this.offersFor(media)[0] : (this.detected.at(-1) ?? this.mediaInPageCode()[0]);
+  }
+
+  /**
+   * Everything the button offers for this element, best first. On a YouTube video page that is
+   * the page itself (D-71). Elsewhere: the element's own file, else the files this frame loaded,
+   * else addresses in the page code (D-70); and when the element plays a blob: or a stream, the
+   * page last, for OB2's quality chooser.
+   */
+  offersFor(media: HTMLMediaElement): MediaCandidate[] {
+    const page = this.doc.URL;
+    const youTube = youTubeVideoPage(page);
+    if (youTube) return [{ url: youTube, page: true }];
+    let offers = candidatesFor(media, this.detected);
+    if (offers.length === 0) offers = this.mediaInPageCode();
+    if (ownSources(media).length === 0 && /^https?:/i.test(page) && !isYouTubeHost(page)) {
+      offers = [...offers, { url: page, page: true }];
+    }
+    return offers;
   }
 
   /** Shows the button over this video. False when it isn't big enough or there is nothing to offer. */
   show(video: HTMLVideoElement): boolean {
     if (!this.enabled || !isLargeEnough(video.getBoundingClientRect())) return false;
-    const candidates = candidatesFor(video, this.detected);
+    const candidates = this.offersFor(video);
     if (candidates.length === 0) return false;
     const ui = (this.ui ??= this.build());
     this.target = video;
@@ -142,6 +170,18 @@ export class MediaOverlay {
 
   get visibleFor(): HTMLVideoElement | undefined {
     return this.target;
+  }
+
+  /** Video and audio files whose addresses are written in the page (links, scripts, meta tags). */
+  private mediaInPageCode(): MediaCandidate[] {
+    const now = Date.now();
+    if (!this.pageScan || now - this.pageScan.at > SCAN_REUSE_MS) {
+      // A file another <video>/<audio> on the page plays belongs to that element, not this one.
+      const elsewhere = new Set(Array.from(this.doc.querySelectorAll<HTMLMediaElement>('video, audio')).flatMap(ownSources));
+      const links = scanPage(this.doc).links.filter((l) => (l.kind === 'video' || l.kind === 'audio') && !elsewhere.has(l.url));
+      this.pageScan = { at: now, media: links.map((l) => ({ url: l.url })) };
+    }
+    return this.pageScan.media;
   }
 
   private onPointerMove(event: PointerEvent): void {

@@ -3,11 +3,13 @@
 // the clicked link's address, only when Shift is held; reads nothing else.
 // FR-24: the "Download with OB2" button over videos (overlay.ts). The background tells this frame
 // which media files it loaded; nothing about the page is sent anywhere until the button is clicked.
+// D-70: the popup's "Find downloads" reads the page's links through scanPage (scan.ts).
 
 import type { CaptureOutcome } from './capture';
 import { isMediaCandidate, type MediaCandidate } from './media';
 import { MediaOverlay, type SendResult } from './overlay';
 import { loadMediaButtonEnabled, MEDIA_BUTTON_KEY } from './rules';
+import { SCAN_GLOBAL, scanPage, type PageScan } from './scan';
 
 export function shiftClickedLink(event: MouseEvent): string | undefined {
   if (!event.shiftKey) return undefined;
@@ -39,6 +41,7 @@ document.addEventListener('auxclick', onClick, true);
 export function sendResultOf(outcome: CaptureOutcome | undefined): SendResult {
   if (outcome?.action === 'captured') return 'sent';
   if (outcome?.action === 'left-to-chrome') return 'browser';
+  if (outcome?.action === 'failed' && outcome.reason !== 'unknown') return 'unreachable';
   if (outcome?.action === 'ignored' && outcome.reason === 'incognito') return 'incognito';
   return 'failed';
 }
@@ -53,6 +56,8 @@ function startMediaButton(): void {
   if ((chrome.extension as { inIncognitoContext?: boolean } | undefined)?.inIncognitoContext) return;
 
   const overlay = new MediaOverlay(document, sendMedia);
+  // D-70: the popup's "Find downloads". Lives in the extension's isolated world, out of the page's reach.
+  (globalThis as Record<string, unknown>)[SCAN_GLOBAL] = (): PageScan => scanPage(document, overlay.detectedMedia());
   chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
     const m = message as { type?: string; media?: unknown } | undefined;
     if (sender.id !== chrome.runtime.id) return false;

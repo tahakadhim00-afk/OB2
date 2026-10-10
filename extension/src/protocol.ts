@@ -43,9 +43,14 @@ export interface AddDownloadPayload {
   /** Cookie header value. Sent to the host only; never logged or stored by the extension. */
   cookies?: string;
   headers?: Record<string, string>;
-  /** `chrome-media`: the button over a video or the video/audio context menu (FR-24). */
-  source: 'chrome-downloads' | 'chrome-context-menu' | 'chrome-media';
+  /**
+   * `chrome-media`: the button over a video or the video/audio context menu (FR-24).
+   * `chrome-page`: a link picked from the popup's "Find downloads" list (D-70).
+   */
+  source: 'chrome-downloads' | 'chrome-context-menu' | 'chrome-media' | 'chrome-page';
   autoStart: boolean;
+  /** A video page (YouTube and others) for OB2's quality chooser, not a file (D-71). */
+  mediaPage?: boolean;
 }
 
 export interface AckPayload {

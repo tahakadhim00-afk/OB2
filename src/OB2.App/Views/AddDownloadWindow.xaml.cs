@@ -22,10 +22,18 @@ public partial class AddDownloadWindow : Window
             Result = item;
             Close();
         };
+        viewModel.SwitchToVideoRequested += (_, page) =>
+        {
+            SwitchToVideo = page;
+            Close();
+        };
         Closed += (_, _) => viewModel.Dispose();
     }
 
     public DownloadItem? Result { get; private set; }
+
+    /// <summary>Set when the user chose "Choose quality…" for a video page (D-71).</summary>
+    public Uri? SwitchToVideo { get; private set; }
 
     private void OnBrowse(object sender, RoutedEventArgs e)
     {

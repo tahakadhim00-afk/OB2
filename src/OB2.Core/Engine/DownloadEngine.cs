@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using OB2.Core.Downloads;
 using OB2.Core.Files;
 using OB2.Core.Http;
+using OB2.Core.Media;
 using OB2.Core.Time;
 
 namespace OB2.Core.Engine;
@@ -21,13 +22,14 @@ public sealed partial class DownloadEngine : IDisposable
     private readonly IClock _clock;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger _logger;
-    private readonly ConcurrentDictionary<long, DownloadJob> _jobs = new();
+    private readonly ConcurrentDictionary<long, IDownloadJob> _jobs = new();
     private readonly HostConnectionLimiter _hostLimiter;
 
     // Cookies live in memory for the life of the process (§11.1); with "remember auth" on they
     // are also kept encrypted in the cookie store until the download finishes (D-67).
     private readonly ConcurrentDictionary<long, string> _cookies = new();
     private readonly ICookieStore? _cookieStore;
+    private readonly MediaTools? _mediaTools;
     private readonly object _startLock = new();
 
     public DownloadEngine(
@@ -36,9 +38,11 @@ public sealed partial class DownloadEngine : IDisposable
         HttpClient? http = null,
         IClock? clock = null,
         ILoggerFactory? loggerFactory = null,
-        ICookieStore? cookieStore = null)
+        ICookieStore? cookieStore = null,
+        MediaTools? mediaTools = null)
     {
         _cookieStore = cookieStore;
+        _mediaTools = mediaTools;
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _ownsHttp = http is null;
@@ -118,6 +122,8 @@ public sealed partial class DownloadEngine : IDisposable
                 SpeedLimitBps = request.SpeedLimitBps,
                 CreatedAt = _clock.UtcNow,
                 Source = request.Source,
+                MediaFormat = request.MediaFormat,
+                MediaContainer = request.MediaContainer,
             };
             item.Id = _repository.Insert(item);
         }
@@ -150,7 +156,7 @@ public sealed partial class DownloadEngine : IDisposable
                 }
 
                 // Finished but its cleanup continuation has not run yet: it no longer owns the download.
-                _jobs.TryRemove(new KeyValuePair<long, DownloadJob>(id, existing));
+                _jobs.TryRemove(new KeyValuePair<long, IDownloadJob>(id, existing));
             }
 
             var item = _repository.Get(id);
@@ -165,14 +171,17 @@ public sealed partial class DownloadEngine : IDisposable
                 cookies = _cookies[id] = saved;
             }
 
-            var job = new DownloadJob(id, _repository, _http, _options(), _hostLimiter, GlobalLimiter, _clock, _loggerFactory.CreateLogger<DownloadJob>(), cookies, OnJobStatusChanged);
+            // A video page goes through yt-dlp (D-71); everything else through the segment engine.
+            IDownloadJob job = item.IsMedia
+                ? new MediaJob(id, _repository, _mediaTools, _clock, _loggerFactory.CreateLogger<MediaJob>(), OnJobStatusChanged)
+                : new DownloadJob(id, _repository, _http, _options(), _hostLimiter, GlobalLimiter, _clock, _loggerFactory.CreateLogger<DownloadJob>(), cookies, OnJobStatusChanged);
             _jobs[id] = job;
             job.Start();
             // Remove only this job: a later Start for the same id may already have replaced it.
             _ = job.Completion.ContinueWith(
                 finished =>
                 {
-                    _jobs.TryRemove(new KeyValuePair<long, DownloadJob>(id, job));
+                    _jobs.TryRemove(new KeyValuePair<long, IDownloadJob>(id, job));
                     if (finished.IsCompletedSuccessfully && finished.Result?.Status == DownloadStatus.Completed)
                     {
                         TryDeleteSavedCookies(id); // a finished download never needs them again
@@ -249,6 +258,11 @@ public sealed partial class DownloadEngine : IDisposable
         }
 
         TryDeleteFile(item.PartPath);
+        if (item.IsMedia)
+        {
+            TryDeleteFolder(item.MediaPartsFolder);
+        }
+
         if (deleteFile && item.Status == DownloadStatus.Completed)
         {
             TryDeleteFile(item.DestPath);
@@ -352,6 +366,23 @@ public sealed partial class DownloadEngine : IDisposable
     }
 
     private void OnJobStatusChanged(DownloadItem item) => StatusChanged?.Invoke(this, item);
+
+    private static void TryDeleteFolder(string path)
+    {
+        try
+        {
+            if (Directory.Exists(path))
+            {
+                Directory.Delete(path, recursive: true);
+            }
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+    }
 
     private static void TryDeleteFile(string path)
     {

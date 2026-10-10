@@ -5,6 +5,7 @@ using OB2.App.Infrastructure;
 using OB2.App.ViewModels;
 using OB2.App.Views;
 using OB2.Core.Downloads;
+using OB2.Core.Media;
 using OB2.Core.Organization;
 using OB2.Core.Services;
 using OB2.Core.Settings;
@@ -29,9 +30,13 @@ public sealed class DialogService : IDialogService
 
     private readonly OB2.Shared.Ipc.NativeHostRegistration _registration;
     private readonly OB2.Storage.Paths.StartupRegistration _startup;
+    private readonly MediaInspector _inspector;
+    private readonly MediaToolInstaller _installer;
 
-    public DialogService(DownloadService service, AppSettings settings, JsonSettingsStore store, ICategoryRepository categories, IQueueRepository queues, OB2.Shared.Ipc.NativeHostRegistration registration, OB2.Storage.Paths.StartupRegistration startup)
+    public DialogService(DownloadService service, AppSettings settings, JsonSettingsStore store, ICategoryRepository categories, IQueueRepository queues, OB2.Shared.Ipc.NativeHostRegistration registration, OB2.Storage.Paths.StartupRegistration startup, MediaInspector inspector, MediaToolInstaller installer)
     {
+        _inspector = inspector;
+        _installer = installer;
         _registration = registration;
         _startup = startup;
         _service = service;
@@ -45,7 +50,41 @@ public sealed class DialogService : IDialogService
 
     public DownloadItem? ShowAddDownload(AddDownloadPrefill prefill)
     {
+        ArgumentNullException.ThrowIfNull(prefill);
+        if (MediaPageOf(prefill) is { } page)
+        {
+            return ShowMediaDownload(prefill, page);
+        }
+
         var window = new AddDownloadWindow(new AddDownloadViewModel(_service, _settings, prefill));
+        Place(window, prefill);
+        window.ShowDialog();
+
+        // "Choose quality…" on a video address typed into the Add window.
+        return window.SwitchToVideo is { } video ? ShowMediaDownload(prefill with { Url = video.AbsoluteUri, MediaPage = true }, video) : window.Result;
+    }
+
+    /// <summary>D-71: the Download Video window, for YouTube and pages the extension marks as video pages.</summary>
+    private DownloadItem? ShowMediaDownload(AddDownloadPrefill prefill, Uri page)
+    {
+        var window = new MediaDownloadWindow(new MediaDownloadViewModel(_service, _inspector, _installer, prefill, page));
+        Place(window, prefill);
+        window.ShowDialog();
+        return window.Result;
+    }
+
+    private static Uri? MediaPageOf(AddDownloadPrefill prefill)
+    {
+        if (!Uri.TryCreate(prefill.Url?.Trim(), UriKind.Absolute, out var url) || url.Scheme is not ("http" or "https"))
+        {
+            return null;
+        }
+
+        return VideoSites.YouTubeVideo(url) ?? (prefill.MediaPage ? url : null);
+    }
+
+    private static void Place(Window window, AddDownloadPrefill prefill)
+    {
         if (Owner is { } owner)
         {
             window.Owner = owner;
@@ -55,9 +94,6 @@ public sealed class DialogService : IDialogService
             window.WindowStartupLocation = WindowStartupLocation.CenterScreen;
             window.Topmost = prefill.Source == DownloadSource.Chrome;
         }
-
-        window.ShowDialog();
-        return window.Result;
     }
 
     public bool? ConfirmDelete(int count, bool anyCompleted)

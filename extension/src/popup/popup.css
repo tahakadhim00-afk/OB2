@@ -60,6 +60,13 @@ kbd { font: inherit; padding: 0 4px; border: 1px solid var(--line); border-radiu
 .bar > span { display: block; height: 100%; background: var(--accent); }
 .empty { margin: 0; color: var(--muted); }
 
+.wide { width: 100%; }
+.scan-message { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
+.found { max-height: 220px; overflow-y: auto; margin-top: 4px; }
+.found li { display: flex; align-items: center; gap: 8px; }
+.found .text { flex: 1; min-width: 0; }
+.found button { flex: none; padding: 3px 8px; font-size: 12px; }
+
 footer { display: flex; gap: 8px; margin-top: 12px; }
 button {
   flex: 1;

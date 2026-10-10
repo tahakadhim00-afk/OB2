@@ -10,16 +10,50 @@ export interface MediaCandidate {
   mime?: string;
   /** Size of the whole file in bytes, when the response revealed it. */
   size?: number;
+  /**
+   * D-71: `url` is a video page, not a file. OB2 asks yt-dlp what it offers and lets the user
+   * pick quality and audio (YouTube, and players that stream in pieces).
+   */
+  page?: boolean;
+}
+
+const YOUTUBE_HOSTS = new Set(['youtube.com', 'www.youtube.com', 'm.youtube.com', 'music.youtube.com', 'youtube-nocookie.com', 'www.youtube-nocookie.com']);
+
+/**
+ * The address of one YouTube video (watch, Shorts, live, embed, youtu.be) as
+ * `https://www.youtube.com/watch?v=ID`; mirrors VideoSites.YouTubeVideo in the app.
+ */
+export function youTubeVideoPage(value: string | undefined): string | undefined {
+  const url = parseHttpUrl(value);
+  if (!url) return undefined;
+  const segments = url.pathname.replace(/^\/+|\/+$/g, '').split('/');
+  let id: string | null | undefined;
+  if (url.hostname === 'youtu.be') {
+    id = segments[0];
+  } else if (YOUTUBE_HOSTS.has(url.hostname)) {
+    if (url.pathname === '/watch') id = url.searchParams.get('v');
+    else if (segments.length >= 2 && ['shorts', 'live', 'embed', 'v'].includes(segments[0])) id = segments[1];
+  }
+  if (!id || !/^[A-Za-z0-9_-]{11}$/.test(id)) return undefined;
+  const host = url.hostname === 'music.youtube.com' ? 'music.youtube.com' : 'www.youtube.com';
+  return `https://${host}/watch?v=${id}`;
+}
+
+/** YouTube pages that are not one video (home, search, channels): no page entry there. */
+export function isYouTubeHost(value: string | undefined): boolean {
+  const url = parseHttpUrl(value);
+  return !!url && (YOUTUBE_HOSTS.has(url.hostname) || url.hostname === 'youtu.be');
 }
 
 /** Smaller responses are previews, thumbnails or segments, not something worth a download button. */
 export const MEDIA_MIN_BYTES = 1024 * 1024;
 
-const MEDIA_EXTENSIONS = new Set([
-  '3gp', 'aac', 'avi', 'flac', 'flv', 'm4a', 'm4v', 'mkv', 'mov', 'mp3', 'mp4', 'oga', 'ogg', 'ogv',
-  'opus', 'wav', 'webm', 'wma', 'wmv',
-]);
-const STREAM_EXTENSIONS = new Set(['f4m', 'ism', 'm3u8', 'm4s', 'mpd', 'ts']);
+export const VIDEO_EXTENSIONS = new Set(['3gp', 'avi', 'flv', 'm4v', 'mkv', 'mov', 'mp4', 'ogv', 'webm', 'wmv']);
+export const AUDIO_EXTENSIONS = new Set(['aac', 'flac', 'm4a', 'mp3', 'oga', 'ogg', 'opus', 'wav', 'wma']);
+const MEDIA_EXTENSIONS = new Set([...VIDEO_EXTENSIONS, ...AUDIO_EXTENSIONS]);
+/** Playlists a page may name; worth listing (so the user sees why they can't be downloaded). */
+export const STREAM_MANIFEST_EXTENSIONS = new Set(['f4m', 'm3u8', 'mpd']);
+const STREAM_EXTENSIONS = new Set([...STREAM_MANIFEST_EXTENSIONS, 'ism', 'm4s', 'ts']);
 const STREAM_MIMES = new Set([
   'application/dash+xml', 'application/vnd.apple.mpegurl', 'application/x-mpegurl', 'audio/mpegurl',
   'audio/x-mpegurl', 'audio/iso.segment', 'video/iso.segment', 'video/mp2t', 'video/vnd.mpeg.dash.mpd',
@@ -91,7 +125,8 @@ export function isMediaCandidate(value: unknown): value is MediaCandidate {
     typeof m.url === 'string' &&
     isDownloadableMediaUrl(m.url) &&
     (m.mime === undefined || typeof m.mime === 'string') &&
-    (m.size === undefined || (typeof m.size === 'number' && m.size > 0))
+    (m.size === undefined || (typeof m.size === 'number' && m.size > 0)) &&
+    (m.page === undefined || typeof m.page === 'boolean')
   );
 }
 
@@ -111,6 +146,7 @@ export function mediaFileName(media: MediaCandidate, pageTitle: string | undefin
 
 /** "clip.mp4 · 24 MB" for the button's menu; the host name stands in for a missing file name. */
 export function mediaLabel(media: MediaCandidate, formatBytes: (bytes: number) => string): string {
+  if (media.page) return 'Choose quality… (whole video)';
   const url = parseHttpUrl(media.url);
   const name = (url ? safeDecode(url.pathname.split('/').pop() ?? '') : '') || url?.hostname || media.url;
   const kind = media.mime ? media.mime.split('/')[0] : undefined;
@@ -120,7 +156,7 @@ export function mediaLabel(media: MediaCandidate, formatBytes: (bytes: number) =
   return parts.join(' · ');
 }
 
-function urlExtension(url: URL): string | undefined {
+export function urlExtension(url: URL): string | undefined {
   const base = safeDecode(url.pathname).split('/').pop() ?? '';
   const dot = base.lastIndexOf('.');
   return dot > 0 && dot < base.length - 1 ? base.slice(dot + 1).toLowerCase() : undefined;
@@ -136,7 +172,7 @@ function positive(value: string | undefined): number | undefined {
   return value && Number.isFinite(n) && n > 0 ? n : undefined;
 }
 
-function safeDecode(path: string): string {
+export function safeDecode(path: string): string {
   try {
     return decodeURIComponent(path);
   } catch {

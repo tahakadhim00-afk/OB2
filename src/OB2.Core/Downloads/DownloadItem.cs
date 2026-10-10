@@ -64,7 +64,21 @@ public sealed class DownloadItem
 
     public DownloadSource Source { get; set; } = DownloadSource.Manual;
 
+    /// <summary>
+    /// A video page downloaded through yt-dlp (D-71): the format selector the user picked, for
+    /// example <c>137+140</c> (video + audio). Null for an ordinary file.
+    /// </summary>
+    public string? MediaFormat { get; set; }
+
+    /// <summary>What the parts are merged into (mp4, webm, mkv), or the single format's extension.</summary>
+    public string? MediaContainer { get; set; }
+
+    public bool IsMedia => MediaFormat is not null;
+
     public string PartPath => DestPath + PartSuffix;
+
+    /// <summary>Where yt-dlp keeps the parts of a media download until they are merged.</summary>
+    public string MediaPartsFolder => DestPath + ".parts";
 
     public string SaveFolder => Path.GetDirectoryName(DestPath) ?? string.Empty;
 

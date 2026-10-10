@@ -14,7 +14,7 @@ namespace OB2.Core.Engine;
 /// Runs one download from probe to rename. Owns the partial file while running and is the
 /// only writer of its download row until it finishes.
 /// </summary>
-internal sealed partial class DownloadJob : IDisposable
+internal sealed partial class DownloadJob : IDownloadJob, IDisposable
 {
     private readonly long _id;
     private readonly IDownloadRepository _repository;

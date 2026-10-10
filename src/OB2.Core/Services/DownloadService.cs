@@ -41,6 +41,11 @@ public sealed record AddDownloadOptions
     public IReadOnlyDictionary<string, string> Headers { get; init; } = new Dictionary<string, string>();
 
     public DownloadSource Source { get; init; } = DownloadSource.Manual;
+
+    /// <summary>A video page for yt-dlp: the format selector from the Download Video window (D-71).</summary>
+    public string? MediaFormat { get; init; }
+
+    public string? MediaContainer { get; init; }
 }
 
 /// <summary>
@@ -211,6 +216,8 @@ public sealed class DownloadService
         QueueId = o.QueueId,
         CategoryId = o.CategoryId,
         SpeedLimitBps = o.SpeedLimitBps,
+        MediaFormat = o.MediaFormat,
+        MediaContainer = o.MediaContainer,
     };
 
     private void OnStatusChanged(object? sender, DownloadItem item)

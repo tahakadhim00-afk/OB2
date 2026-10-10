@@ -17,6 +17,12 @@ public static class ErrorCodes
     public const string RangeNotSupported = "RANGE_NOT_SUPPORTED";
     public const string Internal = "INTERNAL_ERROR";
 
+    /// <summary>yt-dlp, ffmpeg or Deno is missing for a video page (D-71).</summary>
+    public const string ToolsMissing = "TOOLS_MISSING";
+
+    /// <summary>yt-dlp reported the site's refusal or a change it can't handle (D-71).</summary>
+    public const string SiteError = "SITE_ERROR";
+
     public static string Http(int status) => $"HTTP_{status}";
 
     public static string From(Exception ex) => ex switch

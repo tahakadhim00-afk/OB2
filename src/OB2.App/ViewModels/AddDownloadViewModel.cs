@@ -8,6 +8,7 @@ using OB2.App.Services;
 using OB2.Core.Downloads;
 using OB2.Core.Http;
 using OB2.Core.Integrity;
+using OB2.Core.Media;
 using OB2.Core.Services;
 using OB2.Core.Settings;
 
@@ -67,6 +68,11 @@ public sealed partial class AddDownloadViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private string? _errorText;
 
+    /// <summary>D-71: the address is a YouTube video; the window offers the Download Video window instead.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsVideoPage))]
+    private Uri? _videoPage;
+
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(DownloadNowCommand), nameof(DownloadLaterCommand))]
     private bool _isBusy;
@@ -121,6 +127,11 @@ public sealed partial class AddDownloadViewModel : ObservableObject, IDisposable
 
     public string? SourceText { get; }
 
+    public bool IsVideoPage => VideoPage is not null;
+
+    /// <summary>Raised when the user picks "Choose quality…" for a video page.</summary>
+    public event EventHandler<Uri>? SwitchToVideoRequested;
+
     public void Dispose()
     {
         _probeCts?.Cancel();
@@ -130,7 +141,24 @@ public sealed partial class AddDownloadViewModel : ObservableObject, IDisposable
     partial void OnUrlChanged(string value)
     {
         ErrorText = null;
+        VideoPage = Uri.TryCreate(value.Trim(), UriKind.Absolute, out var url) ? VideoSites.YouTubeVideo(url) : null;
+        if (VideoPage is not null)
+        {
+            _probeCts?.Cancel(); // the page is not the file; don't probe it
+            InfoText = string.Empty;
+            return;
+        }
+
         _ = ProbeAfterPauseAsync(value);
+    }
+
+    [RelayCommand]
+    private void OpenAsVideo()
+    {
+        if (VideoPage is { } page)
+        {
+            SwitchToVideoRequested?.Invoke(this, page);
+        }
     }
 
     partial void OnFileNameChanged(string value)

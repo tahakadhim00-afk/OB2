@@ -14,7 +14,8 @@ public sealed class SqliteDownloadRepository : IDownloadRepository
         id, url, final_url, filename, dest_path, category_id, queue_id, status, total_bytes,
         downloaded_bytes, connections, supports_ranges, etag, last_modified, checksum_algo,
         checksum_value, referrer, user_agent, headers_json, speed_limit_bps, error_code,
-        error_message, created_at, started_at, completed_at, source, queue_position
+        error_message, created_at, started_at, completed_at, source, queue_position, media_format,
+        media_container
         """;
 
     private readonly SqliteConnectionFactory _factory;
@@ -35,11 +36,11 @@ public sealed class SqliteDownloadRepository : IDownloadRepository
             INSERT INTO downloads (url, final_url, filename, dest_path, category_id, queue_id, status, total_bytes,
               downloaded_bytes, connections, supports_ranges, etag, last_modified, checksum_algo, checksum_value,
               referrer, user_agent, headers_json, speed_limit_bps, error_code, error_message, created_at,
-              started_at, completed_at, source, queue_position)
+              started_at, completed_at, source, queue_position, media_format, media_container)
             VALUES ($url, $final_url, $filename, $dest_path, $category_id, $queue_id, $status, $total_bytes,
               $downloaded_bytes, $connections, $supports_ranges, $etag, $last_modified, $checksum_algo, $checksum_value,
               $referrer, $user_agent, $headers_json, $speed_limit_bps, $error_code, $error_message, $created_at,
-              $started_at, $completed_at, $source, $queue_position);
+              $started_at, $completed_at, $source, $queue_position, $media_format, $media_container);
             SELECT last_insert_rowid();
             """;
         Bind(command, item);
@@ -59,7 +60,8 @@ public sealed class SqliteDownloadRepository : IDownloadRepository
               checksum_value = $checksum_value, referrer = $referrer, user_agent = $user_agent,
               headers_json = $headers_json, speed_limit_bps = $speed_limit_bps, error_code = $error_code,
               error_message = $error_message, created_at = $created_at, started_at = $started_at,
-              completed_at = $completed_at, source = $source, queue_position = $queue_position
+              completed_at = $completed_at, source = $source, queue_position = $queue_position,
+              media_format = $media_format, media_container = $media_container
             WHERE id = $id
             """;
         Bind(command, item);
@@ -287,6 +289,8 @@ public sealed class SqliteDownloadRepository : IDownloadRepository
         p.AddWithValue("$completed_at", item.CompletedAt is { } c ? Format(c) : DBNull.Value);
         p.AddWithValue("$source", item.Source.ToDbString());
         p.AddWithValue("$queue_position", item.QueuePosition);
+        p.AddWithValue("$media_format", Db(item.MediaFormat));
+        p.AddWithValue("$media_container", Db(item.MediaContainer));
     }
 
     private static DownloadItem Read(SqliteDataReader r)
@@ -323,6 +327,8 @@ public sealed class SqliteDownloadRepository : IDownloadRepository
             CompletedAt = r.IsDBNull(24) ? null : Parse(r.GetString(24)),
             Source = DownloadStatusExtensions.ParseDbString<DownloadSource>(r.GetString(25)),
             QueuePosition = r.GetInt64(26),
+            MediaFormat = Str(r, 27),
+            MediaContainer = Str(r, 28),
         };
     }
 

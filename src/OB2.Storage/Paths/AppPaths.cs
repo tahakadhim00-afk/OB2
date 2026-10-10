@@ -49,6 +49,9 @@ public sealed record AppPaths(string Root, bool IsPortable)
 
     public string LogsDirectory => Path.Combine(DataDirectory, "logs");
 
+    /// <summary>yt-dlp, Deno and ffmpeg for video pages, downloaded on first use (D-71).</summary>
+    public string ToolsDirectory => Path.Combine(Root, "tools");
+
     public static AppPaths Resolve(AppPathEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(environment);

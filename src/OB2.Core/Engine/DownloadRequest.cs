@@ -39,4 +39,9 @@ public sealed record DownloadRequest
     public long? CategoryId { get; init; }
 
     public long? SpeedLimitBps { get; init; }
+
+    /// <summary>A video page for yt-dlp: the format selector (D-71). Null for a file.</summary>
+    public string? MediaFormat { get; init; }
+
+    public string? MediaContainer { get; init; }
 }

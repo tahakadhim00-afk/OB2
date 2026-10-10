@@ -114,6 +114,12 @@ public sealed record AddDownloadPayload
     public string? Source { get; init; }
 
     public bool AutoStart { get; init; }
+
+    /// <summary>
+    /// The address is a video page for yt-dlp, not a file (D-71): the app opens the Download Video
+    /// window to choose quality and audio. Optional; v stays 1 (an added field, like D-50).
+    /// </summary>
+    public bool? MediaPage { get; init; }
 }
 
 public sealed record AckPayload(long? DownloadId, string Status);

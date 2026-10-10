@@ -5,7 +5,8 @@
 import { mediaFileName, type MediaCandidate } from './media';
 import { CAPTURE_TIMEOUT_MS, HostError, STATUS_TIMEOUT_MS, sendToHost } from './native';
 import { createMessage, MessageType, type AckPayload, type AddDownloadPayload, type StatusPayload } from './protocol';
-import { decide, knownSize, loadSettings, RULES_MAX_AGE_MS, saveRules, type SkipReason } from './rules';
+import { decide, knownSize, loadSettings, parseHttpUrl, RULES_MAX_AGE_MS, saveRules, type SkipReason } from './rules';
+import type { FoundLink } from './scan';
 
 /** Links clicked with Shift held, remembered briefly so the download they start is left to Chrome. */
 export class BypassList {
@@ -38,7 +39,9 @@ export class BypassList {
 export type CaptureOutcome =
   | { action: 'ignored'; reason: SkipReason | 'pause-failed' }
   | { action: 'captured'; downloadId?: number | null; status: string }
-  | { action: 'left-to-chrome'; reason: string };
+  | { action: 'left-to-chrome'; reason: string }
+  /** OB2 could not be reached and the browser can't take over (a video page, D-71). */
+  | { action: 'failed'; reason: string };
 
 export async function captureDownload(item: chrome.downloads.DownloadItem, bypass: BypassList): Promise<CaptureOutcome> {
   const settings = await loadSettings();
@@ -102,10 +105,38 @@ export async function downloadLinkWithOb2(linkUrl: string, pageUrl: string | und
  */
 export async function downloadMediaWithOb2(media: MediaCandidate, pageUrl: string | undefined, pageTitle: string | undefined, incognito = false): Promise<CaptureOutcome> {
   if (incognito) return { action: 'ignored', reason: 'incognito' }; // D-61
+  if (media.page) return downloadVideoPageWithOb2(media.url, pageUrl);
   return downloadLinkWithOb2(media.url, pageUrl, { source: 'chrome-media', filename: mediaFileName(media, pageTitle), mime: media.mime, size: media.size });
 }
 
-type PayloadSource =Pick<chrome.downloads.DownloadItem, 'url'> & Partial<Pick<chrome.downloads.DownloadItem, 'finalUrl' | 'referrer' | 'filename' | 'mime' | 'totalBytes' | 'fileSize'>>;
+/**
+ * D-71: a video page (YouTube, or a player that streams in pieces) for OB2's Download Video
+ * window, where the user picks quality and audio. No cookies: yt-dlp fetches the page itself.
+ * There is no browser fallback, because Chrome would save the web page, not the video.
+ */
+export async function downloadVideoPageWithOb2(videoPage: string, referrer: string | undefined): Promise<CaptureOutcome> {
+  const payload: AddDownloadPayload = { url: videoPage, source: 'chrome-media', autoStart: false, mediaPage: true, userAgent: navigator.userAgent };
+  if (referrer && referrer !== videoPage) payload.referrer = referrer;
+  try {
+    const reply = await sendToHost<AckPayload>(createMessage(MessageType.AddDownload, payload), CAPTURE_TIMEOUT_MS);
+    return { action: 'captured', downloadId: reply.payload?.downloadId, status: reply.payload?.status ?? 'confirming' };
+  } catch (error) {
+    return { action: 'failed', reason: error instanceof HostError ? error.failure : 'unknown' };
+  }
+}
+
+/**
+ * D-70: a link picked from the popup's "Find downloads" list. Streams are listed there but can't
+ * be downloaded as one file, so they are refused here too. Same fail-open rule as a link.
+ */
+export async function downloadFoundWithOb2(link: FoundLink, pageUrl: string | undefined, incognito = false): Promise<CaptureOutcome> {
+  if (incognito) return { action: 'ignored', reason: 'incognito' }; // D-61
+  if (link.kind === 'stream' || !parseHttpUrl(link.url)) return { action: 'ignored', reason: 'file-type' };
+  // Only the page's own name (<a download="…">); otherwise OB2 names it from the server's reply.
+  return downloadLinkWithOb2(link.url, pageUrl, { source: 'chrome-page', filename: link.downloadName });
+}
+
+type PayloadSource = Pick<chrome.downloads.DownloadItem, 'url'> & Partial<Pick<chrome.downloads.DownloadItem, 'finalUrl' | 'referrer' | 'filename' | 'mime' | 'totalBytes' | 'fileSize'>>;
 
 export async function buildPayload(item: PayloadSource, source: AddDownloadPayload['source']): Promise<AddDownloadPayload> {
   const target = item.finalUrl || item.url;

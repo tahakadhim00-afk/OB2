@@ -55,6 +55,8 @@ public sealed class SqliteDownloadRepositoryTests : IDisposable
         item.StartedAt = item.CreatedAt.AddMinutes(1);
         item.CompletedAt = item.CreatedAt.AddMinutes(2);
         item.Source = DownloadSource.Chrome;
+        item.MediaFormat = "137+140";
+        item.MediaContainer = "mp4";
 
         item.Id = _repository.Insert(item);
         var loaded = _repository.Get(item.Id);

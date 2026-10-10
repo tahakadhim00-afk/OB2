@@ -1,8 +1,11 @@
 // MV3 service worker: wires Chrome events to the capture logic. Listeners are registered at the
 // top level so Chrome can wake the worker for them.
 
-import { BypassList, captureDownload, downloadLinkWithOb2, downloadMediaWithOb2, refreshRules } from './capture';
-import { isDownloadableMediaUrl, isMediaCandidate, mediaFromResponse, type MediaCandidate } from './media';
+import {
+  BypassList, captureDownload, downloadFoundWithOb2, downloadLinkWithOb2, downloadMediaWithOb2, downloadVideoPageWithOb2, refreshRules, type CaptureOutcome,
+} from './capture';
+import { isDownloadableMediaUrl, isMediaCandidate, mediaFromResponse, youTubeVideoPage, type MediaCandidate } from './media';
+import { isFoundLink, type FoundLink } from './scan';
 
 const LINK_MENU_ID = 'ob2-download-link';
 const MEDIA_MENU_ID = 'ob2-download-media';
@@ -25,7 +28,10 @@ chrome.downloads.onCreated.addListener((item) => {
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (info.menuItemId === LINK_MENU_ID && info.linkUrl) {
-    void downloadLinkWithOb2(info.linkUrl, info.pageUrl ?? tab?.url);
+    // D-71: a link to a YouTube video opens OB2's quality chooser instead of saving the web page.
+    const video = youTubeVideoPage(info.linkUrl);
+    if (video && !tab?.incognito) void downloadVideoPageWithOb2(video, info.pageUrl ?? tab?.url);
+    else if (!video) void downloadLinkWithOb2(info.linkUrl, info.pageUrl ?? tab?.url);
   } else if (info.menuItemId === MEDIA_MENU_ID) {
     void downloadMediaFromMenu(info, tab);
   }
@@ -48,16 +54,25 @@ chrome.webRequest.onResponseStarted.addListener(
 
 chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
   if (sender.id !== chrome.runtime.id) return false;
-  const m = message as { type?: string; url?: unknown; media?: unknown } | undefined;
+  const m = message as { type?: string; url?: unknown; media?: unknown; link?: unknown; tabId?: unknown; pageUrl?: unknown } | undefined;
   // §8.4: the content script reports links clicked with Shift held.
   if (m?.type === 'ob2-bypass' && typeof m.url === 'string') {
     bypass.add(m.url);
   } else if (m?.type === 'ob2-download-media' && sender.tab && isMediaCandidate(m.media)) {
     void downloadMediaWithOb2(m.media, sender.url ?? sender.tab.url, sender.tab.title, sender.tab.incognito).then(sendResponse);
     return true; // the reply comes after OB2 answers
+  } else if (m?.type === 'ob2-download-found' && !sender.tab && isFoundLink(m.link) && typeof m.tabId === 'number') {
+    // From the popup's list (D-70). Handled here because the popup closes when OB2's window opens.
+    void downloadFound(m.tabId, m.link, typeof m.pageUrl === 'string' ? m.pageUrl : undefined).then(sendResponse);
+    return true;
   }
   return false;
 });
+
+async function downloadFound(tabId: number, link: FoundLink, pageUrl: string | undefined): Promise<CaptureOutcome> {
+  const tab = await chrome.tabs.get(tabId).catch(() => undefined);
+  return downloadFoundWithOb2(link, pageUrl ?? tab?.url, tab?.incognito ?? false);
+}
 
 /** Chrome gives the element's src; a blob: src is resolved by the frame from what it loaded. */
 async function downloadMediaFromMenu(info: chrome.contextMenus.OnClickData, tab: chrome.tabs.Tab | undefined): Promise<void> {

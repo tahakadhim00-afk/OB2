@@ -210,6 +210,31 @@
     <sys:String x:Key="Browser_Extensions">File types</sys:String>
     <sys:String x:Key="Browser_Excluded">Never capture from</sys:String>
 
+    <!-- Download Video window: video pages through yt-dlp (D-71) -->
+    <sys:String x:Key="Media_Title">Download Video</sys:String>
+    <sys:String x:Key="Media_Page">Page</sys:String>
+    <sys:String x:Key="Media_Loading">Getting the available qualities…</sys:String>
+    <sys:String x:Key="Media_Video">Video quality</sys:String>
+    <sys:String x:Key="Media_Audio">Audio</sys:String>
+    <sys:String x:Key="Media_AudioOnly">Audio only (no picture)</sys:String>
+    <sys:String x:Key="Media_WithSound">with sound</sys:String>
+    <sys:String x:Key="Media_Size">Size: about {0}</sys:String>
+    <sys:String x:Key="Media_SizeUnknown">Size: shown once the download starts</sys:String>
+    <sys:String x:Key="Media_Duration">Length: {0}</sys:String>
+    <sys:String x:Key="Media_NoFormats">yt-dlp found no video or audio on this page.</sys:String>
+    <sys:String x:Key="Media_Failed">yt-dlp could not read this page: {0}</sys:String>
+    <sys:String x:Key="Media_FailedHint">If the site changed recently, a newer yt-dlp usually fixes it.</sys:String>
+    <sys:String x:Key="Media_Retry">Try again</sys:String>
+    <sys:String x:Key="Media_UpdateYtDlp">Update yt-dlp</sys:String>
+    <sys:String x:Key="Media_ToolsHeading">One-time setup for video sites</sys:String>
+    <sys:String x:Key="Media_ToolsBody">To download from YouTube and other video sites, OB2 needs three free tools: yt-dlp (reads the site), Deno (YouTube needs it) and ffmpeg (joins picture and sound). OB2 downloads them once from their official GitHub releases, about {0}, checks their checksums, and keeps them in {1}.</sys:String>
+    <sys:String x:Key="Media_ToolsInstall">Download the tools</sys:String>
+    <sys:String x:Key="Media_ToolsProgress">Downloading {0}… {1} of {2}  {3}</sys:String>
+    <sys:String x:Key="Media_ToolsResume">If you close this window, the download stops and continues from the same point next time.</sys:String>
+    <sys:String x:Key="Media_ToolsFailed">The tools could not be downloaded: {0}</sys:String>
+    <sys:String x:Key="Add_VideoPage">This is a video page. Choose the quality and audio in the Download Video window.</sys:String>
+    <sys:String x:Key="Add_OpenAsVideo">Choose quality…</sys:String>
+
     <!-- First run (Flow D) -->
     <sys:String x:Key="FirstRun_Title">Welcome to OB2</sys:String>
     <sys:String x:Key="FirstRun_Heading">Where should downloads go?</sys:String>
