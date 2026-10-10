@@ -71,6 +71,38 @@
                 </Grid>
             </TabItem>
 
+            <TabItem Header="{StaticResource Browser_Tab}">
+                <StackPanel Margin="12">
+                    <TextBlock Style="{StaticResource SectionHeader}" Text="{StaticResource Browser_Integration}" />
+                    <TextBlock Text="{Binding BrowserStatus}" TextWrapping="Wrap" Margin="0,0,0,8" />
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <Button Content="{StaticResource Browser_Register}" Command="{Binding RegisterBrowserCommand}" Padding="12,2" />
+                        <Button Content="{StaticResource Browser_Unregister}" Command="{Binding UnregisterBrowserCommand}" Padding="12,2" Margin="6,0,0,0" />
+                    </StackPanel>
+                    <TextBlock Style="{StaticResource Hint}" Text="{StaticResource Browser_Help}" Margin="0,0,0,16" />
+
+                    <TextBlock Style="{StaticResource SectionHeader}" Text="{StaticResource Browser_Rules}" />
+                    <CheckBox Content="{StaticResource Browser_Confirm}" IsChecked="{Binding ConfirmCapture}" Margin="0,0,0,8" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <Label Content="{StaticResource Browser_MinSize}" Target="{Binding ElementName=B1}" Style="{StaticResource FieldLabel}" />
+                        <TextBox x:Name="B1" Grid.Column="1" Width="80" HorizontalAlignment="Left" Text="{Binding CaptureMinSizeMb, UpdateSourceTrigger=PropertyChanged}" Margin="0,3" />
+                        <Label Grid.Row="1" Content="{StaticResource Browser_Extensions}" Target="{Binding ElementName=B2}" Style="{StaticResource FieldLabel}" />
+                        <TextBox x:Name="B2" Grid.Row="1" Grid.Column="1" Text="{Binding CaptureExtensions, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap" Margin="0,3" />
+                        <Label Grid.Row="2" Content="{StaticResource Browser_Excluded}" Target="{Binding ElementName=B3}" Style="{StaticResource FieldLabel}" />
+                        <TextBox x:Name="B3" Grid.Row="2" Grid.Column="1" Text="{Binding ExcludedDomains, UpdateSourceTrigger=PropertyChanged}" Margin="0,3" />
+                    </Grid>
+                </StackPanel>
+            </TabItem>
+
             <TabItem Header="{StaticResource Settings_Categories}">
                 <DockPanel Margin="12">
                     <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,8,0,0">

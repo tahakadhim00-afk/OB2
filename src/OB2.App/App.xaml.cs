@@ -12,11 +12,15 @@ using OB2.Core.Engine;
 using OB2.Core.Organization;
 using OB2.Core.Services;
 using OB2.Core.Settings;
+using OB2.Shared.Ipc;
+using OB2.Shared.Protocol;
 using OB2.Storage;
 using OB2.Storage.Paths;
+using System.IO;
 
 namespace OB2.App;
 
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001", Justification = "WPF owns the Application lifetime; every disposable field is released in OnExit.")]
 public partial class App : Application
 {
     private StorageContext? _storage;
@@ -25,6 +29,7 @@ public partial class App : Application
     private DispatcherTimer? _schedulerTimer;
     private DispatcherTimer? _trayTimer;
     private DispatcherTimer? _memoryTimer;
+    private PipeServer? _pipeServer;
     private MainWindow? _window;
     private bool _exiting;
 
@@ -52,10 +57,69 @@ public partial class App : Application
             return;
         }
 
+        var settings = _storage.Settings;
+        if (string.IsNullOrEmpty(settings.Ipc.PipeName))
+        {
+            // §11.1: per-install random pipe name, read by host.exe from settings.json.
+            settings.Ipc.PipeName = IpcSettings.NewPipeName();
+            await _storage.SettingsStore.SaveAsync(settings);
+        }
+
+        if (!_storage.InstanceLock.IsFirstInstance && await ForwardToRunningInstanceAsync(settings.Ipc.PipeName))
+        {
+            // §8.5: a second ob2.exe hands its URL (or just "show yourself") to the running one.
+            _storage.Dispose();
+            _storage = null;
+            Shutdown(0);
+            return;
+        }
+
         _services = CompositionRoot.Build(_storage);
         _logger = _services.GetRequiredService<ILogger<App>>();
         RegisterErrorBoundary();
         StartServices();
+        StartBrowserBridge(settings.Ipc.PipeName);
+    }
+
+    private async Task<bool> ForwardToRunningInstanceAsync(string pipeName)
+    {
+        var request = Arguments.Url is { } url
+            ? ProtocolMessage.Create(MessageTypes.AddDownload, new AddDownloadPayload { Url = url, Source = "cli" })
+            : ProtocolMessage.Simple(MessageTypes.Activate);
+        try
+        {
+            var reply = await PipeClient.SendAsync(pipeName, request, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5));
+            return reply.Type != MessageTypes.Error;
+        }
+        catch (Exception ex) when (ex is TimeoutException or IOException or ProtocolException)
+        {
+            // The other process holds the folder but is not answering (still starting, or a CLI run): open normally.
+            return false;
+        }
+    }
+
+    private void StartBrowserBridge(string pipeName)
+    {
+        var services = _services!;
+        var bridge = services.GetRequiredService<BrowserBridge>();
+        bridge.ActivateWindow = () => _window?.ShowAndActivate();
+        _pipeServer = new PipeServer(pipeName, bridge, ex => _logger?.LogError(ex, "Pipe request failed"));
+        _pipeServer.Start();
+
+        // §12.6: the folder moved since registration; point Chrome at this copy.
+        var registration = services.GetRequiredService<NativeHostRegistration>();
+        try
+        {
+            if (registration.HostExists && registration.NeedsRepair())
+            {
+                registration.Register();
+                _logger?.LogInformation("Browser integration re-registered for {Path}", registration.HostPath);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            _logger?.LogWarning(ex, "Browser integration could not be re-registered");
+        }
     }
 
     protected override void OnExit(ExitEventArgs e)
@@ -64,6 +128,7 @@ public partial class App : Application
         _schedulerTimer?.Stop();
         _trayTimer?.Stop();
         _memoryTimer?.Stop();
+        _pipeServer?.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(2));
 
         // Disposing the engine checkpoints and pauses every running download (§11.3).
         _services?.Dispose();

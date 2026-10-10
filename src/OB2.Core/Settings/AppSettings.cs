@@ -24,6 +24,19 @@ public sealed class AppSettings
     public LoggingSettings Logging { get; set; } = new();
 
     public HistorySettings History { get; set; } = new();
+
+    public IpcSettings Ipc { get; set; } = new();
+}
+
+/// <summary>§11.1: the app/host pipe name carries a per-install random suffix.</summary>
+public sealed class IpcSettings
+{
+    public const string DefaultPrefix = "OB2-";
+
+    /// <summary>Generated on first start of the app; read by host.exe from settings.json.</summary>
+    public string? PipeName { get; set; }
+
+    public static string NewPipeName() => DefaultPrefix + Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(8)).ToLowerInvariant();
 }
 
 /// <summary>FR-3, FR-6, FR-30, §11.3.</summary>

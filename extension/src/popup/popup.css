@@ -1,0 +1,76 @@
+:root {
+  --bg: #ffffff;
+  --fg: #1f2328;
+  --muted: #59636e;
+  --line: #d1d9e0;
+  --accent: #2563eb;
+  --bar-bg: #e6ebf1;
+  --ok: #1a7f37;
+  --warn: #9a6700;
+  --error: #cf222e;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1f2328;
+    --fg: #e6edf3;
+    --muted: #9198a1;
+    --line: #3d444d;
+    --accent: #4c8dff;
+    --bar-bg: #2f353d;
+    --ok: #3fb950;
+    --warn: #d29922;
+    --error: #f85149;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  width: 340px;
+  margin: 0;
+  padding: 12px 14px;
+  background: var(--bg);
+  color: var(--fg);
+  font: 13px/1.4 "Segoe UI", system-ui, sans-serif;
+}
+
+header { display: flex; align-items: center; gap: 8px; }
+h1 { font-size: 15px; margin: 0; }
+h2 { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin: 12px 0 4px; }
+
+.state { margin-left: auto; font-size: 12px; color: var(--muted); }
+.state.ok { color: var(--ok); }
+.state.warn { color: var(--warn); }
+.state.error { color: var(--error); }
+
+.message { margin: 10px 0 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; }
+
+.switch { display: flex; align-items: center; gap: 8px; margin-top: 12px; cursor: pointer; }
+.hint { margin: 4px 0 0 24px; color: var(--muted); font-size: 12px; }
+kbd { font: inherit; padding: 0 4px; border: 1px solid var(--line); border-radius: 3px; }
+
+.downloads { list-style: none; margin: 0; padding: 0; }
+.downloads li { padding: 6px 0; border-top: 1px solid var(--line); }
+.downloads li:first-child { border-top: none; }
+.name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.detail { display: block; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.bar { height: 4px; margin: 4px 0 2px; background: var(--bar-bg); border-radius: 2px; overflow: hidden; }
+.bar > span { display: block; height: 100%; background: var(--accent); }
+.empty { margin: 0; color: var(--muted); }
+
+footer { display: flex; gap: 8px; margin-top: 12px; }
+button {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button:disabled { opacity: .5; cursor: default; }

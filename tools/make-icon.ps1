@@ -1,11 +1,15 @@
-# Generates src/OB2.App/Resources/ob2.ico: a blue rounded square with a white download arrow.
+# Generates src/OB2.App/Resources/ob2.ico and the Chrome extension icons (extension/icons/icon-N.png):
+# a blue rounded square with a white download arrow.
 # Original artwork (PRD: no IDM assets). Run from the repo root: powershell -File tools/make-icon.ps1
 Add-Type -AssemblyName System.Drawing
 
 $sizes = 16, 20, 24, 32, 40, 48, 64, 256
+$extensionSizes = 16, 32, 48, 128
+$extensionDir = Join-Path (Get-Location) 'extension/icons'
+New-Item -ItemType Directory -Force $extensionDir | Out-Null
 $pngs = @()
 
-foreach ($size in $sizes) {
+foreach ($size in ($sizes + $extensionSizes | Sort-Object -Unique)) {
     $bmp = New-Object System.Drawing.Bitmap $size, $size
     $g = [System.Drawing.Graphics]::FromImage($bmp)
     $g.SmoothingMode = 'AntiAlias'
@@ -37,6 +41,14 @@ foreach ($size in $sizes) {
     )
     $g.FillPolygon($white, $head)
     $g.FillRectangle($white, [float]($size * 0.22), [float]($size * 0.79), [float]($size * 0.56), [float]([Math]::Max(1, $size * 0.08)))
+
+    if ($extensionSizes -contains $size) {
+        $bmp.Save((Join-Path $extensionDir "icon-$size.png"), [System.Drawing.Imaging.ImageFormat]::Png)
+    }
+    if ($sizes -notcontains $size) {
+        $g.Dispose(); $bmp.Dispose()
+        continue
+    }
 
     $ms = New-Object System.IO.MemoryStream
     if ($size -ge 256) {

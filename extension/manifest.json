@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "OB2 Download Capture",
+  "short_name": "OB2",
+  "version": "0.6.0",
+  "description": "Sends Chrome downloads to the OB2 download manager on this PC.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAw0HlMUCkCu8asUIzRKCzC8MfHmIbcFOqm/+vAUB6xOmZ7YGkoTkwqG4x1ij6+1JltBxPNUf5xeo7AesqRfWPw+H6I/L0JZQZ4x0Ce5bTIZfU7BX9NiqVqdq02jgupg/HjPNl+mfLb5MQs+AyzEYY6XRX/kZjMfDDT4+YWaDw5oV6iB+MViJYKJpKgkyYRKR0Aq1+xonl96mcfDNY8NnBZHW2ECPZqvpgZQtLbfz6jdZqQsD/AS951iyHXrBuTwQTSNvnHnwY2NirgOc1uiwxcQR4Qic0WCDi1O4AW/J8h+hJlCLnJjnqEBbSlU40HwHvpMlGkLaG46sJ+uN7G58KuQIDAQAB",
+  "minimum_chrome_version": "116",
+  "permissions": ["downloads", "cookies", "contextMenus", "nativeMessaging", "storage"],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["content.js"],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ],
+  "action": {
+    "default_title": "OB2",
+    "default_popup": "popup/popup.html",
+    "default_icon": { "16": "icons/icon-16.png", "32": "icons/icon-32.png" }
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'"
+  }
+}

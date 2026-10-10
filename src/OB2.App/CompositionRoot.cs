@@ -7,6 +7,7 @@ using OB2.Core.Engine;
 using OB2.Core.Organization;
 using OB2.Core.Services;
 using OB2.Core.Time;
+using OB2.Shared.Ipc;
 using OB2.Storage;
 using OB2.Storage.Repositories;
 
@@ -50,6 +51,11 @@ internal static class CompositionRoot
             () => storage.Settings));
 
         services.AddSingleton<IDialogService, DialogService>();
+        services.AddSingleton<BrowserBridge>();
+        services.AddSingleton(_ => new NativeHostRegistration(
+            AppContext.BaseDirectory,
+            // The manifest lives next to host.exe unless that folder is read-only (§8.2, §12.3).
+            storage.Paths.FellBackFromReadOnly ? storage.Paths.DataDirectory : AppContext.BaseDirectory));
         services.AddSingleton<TrayService>();
         services.AddSingleton<CompletionActionService>();
         services.AddSingleton<MainViewModel>();

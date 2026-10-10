@@ -9,3 +9,7 @@ publish/
 TestResults/
 *.user
 .vs/
+
+# Chrome extension (npm install / npm run build in extension/)
+node_modules/
+extension/dist/

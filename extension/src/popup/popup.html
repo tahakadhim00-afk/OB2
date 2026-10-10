@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>OB2</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <img src="../icons/icon-32.png" alt="" width="20" height="20">
+    <h1>OB2</h1>
+    <span id="state" class="state" role="status" aria-live="polite">Connecting…</span>
+  </header>
+
+  <p id="message" class="message" hidden></p>
+
+  <label class="switch">
+    <input type="checkbox" id="capture">
+    <span>Capture downloads from Chrome</span>
+  </label>
+  <p class="hint">Hold <kbd>Shift</kbd> while clicking a link to let Chrome download it.</p>
+
+  <section aria-labelledby="active-title">
+    <h2 id="active-title">Active</h2>
+    <ul id="active" class="downloads"></ul>
+    <p id="active-empty" class="empty">No active downloads.</p>
+  </section>
+
+  <section aria-labelledby="recent-title">
+    <h2 id="recent-title">Recent</h2>
+    <ul id="recent" class="downloads"></ul>
+    <p id="recent-empty" class="empty">Nothing yet.</p>
+  </section>
+
+  <footer>
+    <button id="pause-all" type="button">Pause all</button>
+    <button id="resume-all" type="button">Resume all</button>
+  </footer>
+
+  <script src="popup.js"></script>
+</body>
+</html>

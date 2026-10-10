@@ -8,8 +8,10 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\OB2.Core\OB2.Core.csproj" />
     <ProjectReference Include="..\..\src\OB2.Storage\OB2.Storage.csproj" />
-    <!-- Build OB2.exe first so the CLI tests can run it; no assembly reference. -->
+    <ProjectReference Include="..\..\src\OB2.Shared\OB2.Shared.csproj" />
+    <!-- Build OB2.exe and host.exe first so the CLI and bridge tests can run them; no assembly reference. -->
     <ProjectReference Include="..\..\src\OB2.App\OB2.App.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
+    <ProjectReference Include="..\..\src\OB2.Host\OB2.Host.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
   </ItemGroup>
 
 </Project>

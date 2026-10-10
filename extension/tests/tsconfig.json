@@ -1,0 +1,11 @@
+{
+  // Tests run in Node (Jest), so they may use Node APIs; the extension source may not.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "types": ["chrome", "jest", "node"],
+    // Jest runs CommonJS; esbuild bundles the real extension from ES modules.
+    "module": "CommonJS",
+    "moduleResolution": "Node10"
+  },
+  "include": ["../src", "."]
+}

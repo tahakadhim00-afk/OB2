@@ -27,8 +27,11 @@ public sealed class DialogService : IDialogService
     private readonly ICategoryRepository _categories;
     private readonly IQueueRepository _queues;
 
-    public DialogService(DownloadService service, AppSettings settings, JsonSettingsStore store, ICategoryRepository categories, IQueueRepository queues)
+    private readonly OB2.Shared.Ipc.NativeHostRegistration _registration;
+
+    public DialogService(DownloadService service, AppSettings settings, JsonSettingsStore store, ICategoryRepository categories, IQueueRepository queues, OB2.Shared.Ipc.NativeHostRegistration registration)
     {
+        _registration = registration;
         _service = service;
         _settings = settings;
         _store = store;
@@ -64,7 +67,7 @@ public sealed class DialogService : IDialogService
 
     public void ShowSettings()
     {
-        var window = new SettingsWindow(new SettingsViewModel(_settings, _store, _categories, _service.Engine, _service.DefaultSaveFolder)) { Owner = Owner };
+        var window = new SettingsWindow(new SettingsViewModel(_settings, _store, _categories, _service.Engine, _service.DefaultSaveFolder, _registration)) { Owner = Owner };
         if (window.Owner is null)
         {
             window.WindowStartupLocation = WindowStartupLocation.CenterScreen;

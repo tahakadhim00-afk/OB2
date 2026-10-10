@@ -1,9 +1,9 @@
 # Builds the portable release (PRD §12.2, §12.4):
-#   publish/OB2-portable/   OB2.exe (single-file, self-contained), host.exe (when present),
-#                           portable.flag, README.txt
+#   publish/OB2-portable/   OB2.exe (single-file, self-contained), portable.flag, README.txt,
+#                           and with -IncludeHost: host.exe and chrome-extension/ (needs Node.js/npm)
 #   publish/OB2-portable.zip
 #   publish/SHA256SUMS.txt
-# Usage (repo root):  powershell -ExecutionPolicy Bypass -File build/publish.ps1 [-Version 1.0.0]
+# Usage (repo root):  powershell -ExecutionPolicy Bypass -File build/publish.ps1 [-Version 1.0.0] [-IncludeHost]
 param([string]$Version = "0.5.0", [switch]$IncludeHost)
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
@@ -33,8 +33,20 @@ if ($IncludeHost -and (Test-Path $hostProject)) {
     Copy-Item (Join-Path $out "host/host.exe") $stage
 }
 
-if (Test-Path (Join-Path $root "extension/dist")) {
-    Copy-Item -Recurse (Join-Path $root "extension/dist") (Join-Path $stage "chrome-extension")
+$extension = Join-Path $root "extension"
+if ($IncludeHost -and (Get-Command npm -ErrorAction SilentlyContinue)) {
+    # The unpacked Chrome extension (§12.5), built from source so the zip never carries a stale copy.
+    Push-Location $extension
+    try {
+        & npm ci --no-fund --no-audit --loglevel=error
+        if ($LASTEXITCODE -ne 0) { throw "npm ci failed" }
+        & npm run --silent build
+        if ($LASTEXITCODE -ne 0) { throw "extension build failed" }
+    }
+    finally { Pop-Location }
+}
+if ($IncludeHost -and (Test-Path (Join-Path $extension "dist"))) {
+    Copy-Item -Recurse (Join-Path $extension "dist") (Join-Path $stage "chrome-extension")
 }
 
 Set-Content -Path (Join-Path $stage "portable.flag") -Value "Settings, history, and logs are stored next to OB2.exe while this file exists." -Encoding ascii

@@ -20,6 +20,7 @@ public static class SettingsValidator
         settings.General ??= new GeneralSettings();
         settings.Logging ??= new LoggingSettings();
         settings.History ??= new HistorySettings();
+        settings.Ipc ??= new IpcSettings();
 
         var d = settings.Downloads;
         d.Connections = Clamp(d.Connections, DownloadSettings.MinConnections, DownloadSettings.MaxConnections, "downloads.connections", changes);

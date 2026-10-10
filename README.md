@@ -9,7 +9,8 @@ A personal Windows download manager. The requirements are in [OB2_PRD.md](OB2_PR
 - **Verification**: MD5 / SHA-256 checksum checks.
 - **Organization**: categories with per-extension rules and folders; named queues with concurrency limits, ordering, weekday schedules, and after-completion actions (close, sleep, shut down, run a command).
 - **Window and tray**: the IDM-style window with a details panel, a tray icon, Windows notifications, and a global or per-download speed limit.
-- **Portable**: put `portable.flag` next to `OB2.exe` and everything stays in that folder.
+- **Portable**: put `portable.flag` next to `OB2.exe` and everything stays in that folder. The release is a single self-contained exe; no .NET install needed.
+- **Chrome integration**: an MV3 extension hands browser downloads (with their cookies and referrer) to OB2 through a Native Messaging host. If OB2 can't be reached, Chrome downloads normally. Shift-click bypasses capture; "Download with OB2" is on every link's context menu.
 
 ## Layout
 
@@ -18,15 +19,19 @@ src/
   OB2.Core/      engine, queues, scheduler, categories, services (no UI references)
   OB2.Storage/   SQLite + migrations, settings.json, paths, logging, startup sequence
   OB2.App/       WPF window, dialogs, tray, DI composition root, CLI (builds OB2.exe)
-  OB2.Host/      Chrome Native Messaging host (builds host.exe, Phase 6)
-  OB2.Shared/    IPC contracts
+  OB2.Host/      Chrome Native Messaging host (builds host.exe)
+  OB2.Shared/    protocol messages and framing, named pipe, host registration
+extension/       Chrome MV3 extension (TypeScript, esbuild, Jest)
 tests/
-  OB2.Core.Tests/  OB2.Storage.Tests/  OB2.Integration.Tests/
+  OB2.Core.Tests/  OB2.Storage.Tests/  OB2.Integration.Tests/ (includes IPC and host/app end-to-end)
+build/
+  publish.ps1      portable release: single-file exes, zip, SHA256SUMS.txt
+  README.txt       the README that ships in the zip
 tools/
   OB2.TestServer/  local HTTP server for manual checks (ranges, throttling, failures)
-  make-icon.ps1    regenerates the app icon
+  make-icon.ps1    regenerates the app icon and the extension icons
 docs/
-  decisions.md  backlog.md  phase-N-report.md
+  protocol.md  decisions.md  backlog.md  phase-N-report.md
 ```
 
 ## Build and test
@@ -38,7 +43,27 @@ dotnet build OB2.sln -c Release
 dotnet test  OB2.sln -c Release
 # Large tests (1 GiB AC-1 download, throughput benchmark):
 $env:OB2_RUN_LARGE = "1"; dotnet test OB2.sln -c Release --filter "FullyQualifiedName~AC1|FullyQualifiedName~Benchmark"
+
+# Chrome extension (Node.js 22):
+cd extension; npm ci; npm run typecheck; npm test; npm run build   # → extension/dist
 ```
+
+The end-to-end bridge tests start the real `host.exe` and a tray-only `OB2.exe` from a temporary portable copy, so an OB2 tray icon appears for a few seconds while they run.
+
+## Portable release
+
+```powershell
+powershell -ExecutionPolicy Bypass -File build/publish.ps1 -Version 0.6.0 -IncludeHost
+```
+
+This writes `publish/OB2-portable/` (OB2.exe, host.exe, chrome-extension/, portable.flag, README.txt), `publish/OB2-portable.zip`, and `publish/SHA256SUMS.txt`. `-IncludeHost` needs Node.js for the extension build.
+
+## Chrome integration
+
+1. Run OB2 from the portable folder, open **Options > Browser**, click **Register**. This writes `host-manifest.json` and one per-user registry value (`HKCU\Software\Google\Chrome\NativeMessagingHosts\com.ob2.host`), no admin rights needed.
+2. In Chrome, open `chrome://extensions`, turn on Developer mode, click **Load unpacked**, and choose the `chrome-extension` folder (or `extension/dist` in a dev checkout). The extension ID is always `mgmmgplfngnhcencbhpfagnjcnenflpm`.
+
+The message protocol is described in [docs/protocol.md](docs/protocol.md).
 
 ## Run
 
@@ -52,8 +77,9 @@ src\OB2.App\bin\Release\net8.0-windows\OB2.exe get "https://…" --out D:\Downlo
 |--------|---------|
 | `--data <dir>` | Use `<dir>` for settings, database, and logs (handy for testing) |
 | `--minimized` | Start in the tray |
+| `--from-host` | Started by host.exe for a browser capture (tray only, no first-run wizard) |
 
-Without `portable.flag` next to `OB2.exe`, settings, the database, and logs go to `%APPDATA%\OB2\`.
+Without `portable.flag` next to `OB2.exe`, settings, the database, and logs go to `%APPDATA%\OB2\`. If OB2 is already running for the same data folder, a second `OB2.exe "https://…"` hands the URL to it and exits.
 
 ### Keyboard
 

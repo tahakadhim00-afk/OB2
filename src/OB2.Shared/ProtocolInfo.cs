@@ -9,6 +9,9 @@ public static class ProtocolInfo
     /// <summary>Chrome Native Messaging host name registered under HKCU (§8.2).</summary>
     public const string HostName = "com.ob2.host";
 
+    /// <summary>The pinned extension id from the manifest's <c>key</c> (decision D-51).</summary>
+    public const string ExtensionId = "mgmmgplfngnhcencbhpfagnjcnenflpm";
+
     /// <summary>Messages above 1 MB are rejected.</summary>
     public const int MaxMessageBytes = 1024 * 1024;
 }
