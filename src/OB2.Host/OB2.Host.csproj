@@ -10,12 +10,19 @@
          All JSON goes through source-generated metadata (ProtocolJsonContext); reflection is off.
          ReadyToRun matters: trimming drops the framework's precompiled code, and without it every
          launch JITs (measured 250-350 ms per message vs 65-100 ms with it; 16.8 MB vs 70 MB untrimmed). -->
-    <PublishTrimmed>true</PublishTrimmed>
-    <PublishReadyToRun>true</PublishReadyToRun>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
     <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
     <InvariantGlobalization>true</InvariantGlobalization>
     <UseSystemResourceKeys>true</UseSystemResourceKeys>
     <EventSourceSupport>false</EventSourceSupport>
+  </PropertyGroup>
+
+  <!-- Only when publishing for a runtime (build/publish.ps1 passes -r win-x64). ReadyToRun needs that
+       runtime's pack, so setting it unconditionally breaks plain restores and builds (NETSDK1094),
+       including the IDE's. The trim analyzer above still runs on every build. -->
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' != ''">
+    <PublishTrimmed>true</PublishTrimmed>
+    <PublishReadyToRun>true</PublishReadyToRun>
   </PropertyGroup>
 
   <ItemGroup>
