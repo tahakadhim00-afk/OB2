@@ -1,5 +1,6 @@
 using System.Runtime.Versioning;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Win32;
 
 namespace OB2.Shared.Ipc;
@@ -21,8 +22,6 @@ public sealed class NativeHostRegistration
 
     /// <summary>Chrome first: it decides what "registered" means when the keys disagree.</summary>
     public static readonly IReadOnlyList<string> BrowserKeyPaths = [ChromeKeyPath, EdgeKeyPath];
-
-    private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true };
 
     private readonly IReadOnlyList<string> _keyPaths;
     private readonly string _manifestFolder;
@@ -78,16 +77,9 @@ public sealed class NativeHostRegistration
     public void Register()
     {
         Directory.CreateDirectory(_manifestFolder);
-        var manifest = new
-        {
-            name = ProtocolInfo.HostName,
-            description = "OB2 download manager bridge",
-            path = HostPath,
-            type = "stdio",
-            // Edge uses the same origin scheme for extensions as Chrome.
-            allowed_origins = new[] { $"chrome-extension://{ExtensionId}/" },
-        };
-        File.WriteAllText(ManifestPath, JsonSerializer.Serialize(manifest, Indented));
+        // Edge uses the same origin scheme for extensions as Chrome.
+        var manifest = new HostManifest(ProtocolInfo.HostName, "OB2 download manager bridge", HostPath, "stdio", [$"chrome-extension://{ExtensionId}/"]);
+        File.WriteAllText(ManifestPath, JsonSerializer.Serialize(manifest, HostManifestJsonContext.Default.HostManifest));
         foreach (var keyPath in _keyPaths)
         {
             using var key = Registry.CurrentUser.CreateSubKey(keyPath, writable: true);
@@ -138,3 +130,10 @@ public sealed class NativeHostRegistration
         }
     }
 }
+
+/// <summary>The Native Messaging host manifest Chrome and Edge read (§8.2).</summary>
+internal sealed record HostManifest(string Name, string Description, string Path, string Type, string[] AllowedOrigins);
+
+[JsonSourceGenerationOptions(WriteIndented = true, PropertyNamingPolicy = JsonKnownNamingPolicy.SnakeCaseLower)]
+[JsonSerializable(typeof(HostManifest))]
+internal sealed partial class HostManifestJsonContext : JsonSerializerContext;

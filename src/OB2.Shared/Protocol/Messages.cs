@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 
 namespace OB2.Shared.Protocol;
 
@@ -47,13 +48,13 @@ public sealed record ProtocolMessage
     public JsonElement? Payload { get; init; }
 
     public T? PayloadAs<T>() =>
-        Payload is { ValueKind: JsonValueKind.Object } payload ? payload.Deserialize<T>(ProtocolJson.Options) : default;
+        Payload is { ValueKind: JsonValueKind.Object } payload ? payload.Deserialize(ProtocolJson.TypeInfo<T>()) : default;
 
     public static ProtocolMessage Create<T>(string type, T payload, string? id = null) => new()
     {
         Type = type,
         Id = id ?? Guid.NewGuid().ToString(),
-        Payload = JsonSerializer.SerializeToElement(payload, ProtocolJson.Options),
+        Payload = JsonSerializer.SerializeToElement(payload, ProtocolJson.TypeInfo<T>()),
     };
 
     public static ProtocolMessage Simple(string type, string? id = null) => new() { Type = type, Id = id ?? Guid.NewGuid().ToString() };
@@ -62,15 +63,31 @@ public sealed record ProtocolMessage
         Create(MessageTypes.Error, new ErrorPayload(code, message), id);
 }
 
+/// <summary>
+/// JSON for the protocol uses source-generated metadata only, so host.exe can be trimmed
+/// (decision D-68): camelCase names, nulls left out, names matched case-insensitively.
+/// </summary>
 public static class ProtocolJson
 {
-    public static JsonSerializerOptions Options { get; } = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        PropertyNameCaseInsensitive = true,
-    };
+    public static JsonSerializerOptions Options => ProtocolJsonContext.Default.Options;
+
+    /// <exception cref="InvalidOperationException"><typeparamref name="T"/> is not listed in <see cref="ProtocolJsonContext"/>.</exception>
+    public static JsonTypeInfo<T> TypeInfo<T>() =>
+        ProtocolJsonContext.Default.GetTypeInfo(typeof(T)) as JsonTypeInfo<T>
+        ?? throw new InvalidOperationException($"{typeof(T).Name} is not a protocol type; add it to ProtocolJsonContext.");
 }
+
+[JsonSourceGenerationOptions(
+    PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
+    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    PropertyNameCaseInsensitive = true)]
+[JsonSerializable(typeof(ProtocolMessage))]
+[JsonSerializable(typeof(AddDownloadPayload))]
+[JsonSerializable(typeof(AckPayload))]
+[JsonSerializable(typeof(ErrorPayload))]
+[JsonSerializable(typeof(PongPayload))]
+[JsonSerializable(typeof(StatusPayload))]
+public sealed partial class ProtocolJsonContext : JsonSerializerContext;
 
 /// <summary><c>add_download</c> payload, exactly as in §8.3.</summary>
 public sealed record AddDownloadPayload

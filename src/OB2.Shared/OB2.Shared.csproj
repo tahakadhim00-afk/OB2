@@ -4,6 +4,8 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>OB2.Shared</RootNamespace>
+    <!-- host.exe is published trimmed (D-68): the trim analyzer turns any reflection here into a build error. -->
+    <IsTrimmable>true</IsTrimmable>
   </PropertyGroup>
 
 </Project>

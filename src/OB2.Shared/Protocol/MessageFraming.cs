@@ -40,7 +40,7 @@ public static class MessageFraming
 
         try
         {
-            var message = JsonSerializer.Deserialize<ProtocolMessage>(body, ProtocolJson.Options);
+            var message = JsonSerializer.Deserialize(body, ProtocolJsonContext.Default.ProtocolMessage);
             if (message is null || string.IsNullOrWhiteSpace(message.Type))
             {
                 throw new ProtocolException("The message has no type.");
@@ -57,7 +57,7 @@ public static class MessageFraming
     public static async Task WriteAsync(Stream stream, ProtocolMessage message, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(stream);
-        var body = JsonSerializer.SerializeToUtf8Bytes(message, ProtocolJson.Options);
+        var body = JsonSerializer.SerializeToUtf8Bytes(message, ProtocolJsonContext.Default.ProtocolMessage);
         if (body.Length > ProtocolInfo.MaxMessageBytes)
         {
             throw new ProtocolException("Refusing to send a message above 1 MB.");

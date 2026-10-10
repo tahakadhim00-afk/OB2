@@ -109,7 +109,7 @@ Validation, done by both the host and the app (`ProtocolValidator`): the URL mus
 - If OB2 is not running and the request is `add_download`, it starts `OB2.exe --from-host` from its own folder. Then it connects as soon as the app creates its pipe; the connect call waits for the pipe instead of polling.
 - Logs nothing, so no cookie or URL can leak from it.
 
-Measured with the published single-file exes (Phase 6 report): **170–250 ms** per round trip with OB2 running, including starting `host.exe`; **1.8–2.0 s** for a capture that has to start OB2; **3.9 s** on the very first run of a freshly unpacked copy.
+Measured with the published exes in v1.0 (trimmed, ReadyToRun 16.8 MB `host.exe`, D-68): **66–83 ms** per round trip with OB2 running, including starting `host.exe`; **1.2–1.4 s** for a capture that has to start OB2. (Phase 6, with a 64.5 MB untrimmed host on .NET 8: 170–250 ms and 1.8–2.0 s.)
 
 ## Named pipe
 

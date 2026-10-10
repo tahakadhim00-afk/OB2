@@ -16,7 +16,6 @@ Items noticed during a phase but outside its scope (PRD §0). Each one names the
 | History CSV export (FR-26, P2) and clipboard monitor (FR-28, P2). | Phase 4 | v1.1 |
 | A dark theme (open question 2). The UI uses system colours, so Windows high contrast works, but there is no dark palette. | Phase 4 | Owner decision |
 | Firefox support (a different extension format and registry key). Edge is done (D-65). | Phase 6 (out of scope) | v1.1 |
-| host.exe is 64.5 MB because it is self-contained. Trimming (with System.Text.Json source generation for the protocol types) should shrink it a lot and may start it faster; not measured yet. | Phase 6 | v1.0 |
 | Shift-click bypass state lives in the extension's service worker. If Chrome stops the worker between the click and the download (rare, within 15 s), the download is captured anyway. | Phase 6 | v1.1 |
 | When the user cancels a confirmation dialog for a captured download, the browser download is already gone (D-53). Offer "Let Chrome download it" in the dialog, which would need a reply channel to the extension. | Phase 6 | v1.1 |
 | Start the pipe server before the window is created (with requests waiting for start-up to finish) to shave a few hundred ms off captures that start the app. | Phase 6 | v1.1 |
