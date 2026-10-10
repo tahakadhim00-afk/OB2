@@ -22,7 +22,7 @@ A personal, IDM-style download manager for Windows. It does segmented, resumable
 | Browser bridge | Chrome Native Messaging host (`host.exe`) ↔ app over a per-user named pipe |
 | Chrome extension | Manifest V3, TypeScript 5, esbuild |
 | Tests | xUnit, FluentAssertions, Kestrel test server; Jest with jsdom for the extension |
-| Packaging and CI | Single-file self-contained publish, PowerShell; GitHub Actions |
+| Packaging | Single-file self-contained publish, PowerShell |
 
 ## Quick start
 
