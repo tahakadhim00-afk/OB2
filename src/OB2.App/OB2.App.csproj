@@ -3,7 +3,7 @@
   <!-- WPF desktop app and DI composition root. UI only: no network I/O or file writes here (PRD §7.2). -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFramework>net10.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
     <RootNamespace>OB2.App</RootNamespace>
     <AssemblyName>OB2</AssemblyName>

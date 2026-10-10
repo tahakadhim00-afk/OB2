@@ -224,7 +224,7 @@ public sealed class BrowserBridgeEndToEndTests : IAsyncLifetime
     {
         var appBin = new DirectoryInfo(Path.GetDirectoryName(Ob2Process.ExePath)!); // src/OB2.App/bin/<config>/net8.0-windows
         var src = appBin.Parent!.Parent!.Parent!.Parent!.FullName;
-        var folder = Path.Combine(src, "OB2.Host", "bin", appBin.Parent.Name, "net8.0");
+        var folder = Path.Combine(src, "OB2.Host", "bin", appBin.Parent.Name, "net10.0");
         return File.Exists(Path.Combine(folder, "host.exe")) ? folder : throw new FileNotFoundException("Build OB2.Host first.", folder);
     }
 

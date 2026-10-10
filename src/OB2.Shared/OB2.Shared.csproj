@@ -2,7 +2,7 @@
 
   <!-- IPC shared by OB2.App and OB2.Host (PRD §8.3): message DTOs, framing, named pipe, host registration. No UI, no storage. -->
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>OB2.Shared</RootNamespace>
   </PropertyGroup>
 

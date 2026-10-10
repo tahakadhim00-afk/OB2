@@ -2,7 +2,7 @@
 
   <!-- Engine, models, and interfaces. Must never reference UI assemblies (PRD §0, §7.2). -->
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>OB2.Core</RootNamespace>
     <!-- Source-generated P/Invoke (sparse partial files). -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>

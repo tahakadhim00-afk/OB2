@@ -63,7 +63,7 @@ public static class Ob2Process
             throw new FileNotFoundException("Could not find the repository root (OB2.sln).");
         }
 
-        var exe = Path.Combine(dir.FullName, "src", "OB2.App", "bin", configuration, "net8.0-windows", "OB2.exe");
+        var exe = Path.Combine(dir.FullName, "src", "OB2.App", "bin", configuration, "net10.0-windows", "OB2.exe");
         return File.Exists(exe) ? exe : throw new FileNotFoundException("Build OB2.App first.", exe);
     }
 }

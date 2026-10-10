@@ -15,7 +15,7 @@ A personal, IDM-style download manager for Windows. It does segmented, resumable
 
 | Part | Stack |
 |------|-------|
-| Desktop app | C# 12, .NET 8, WPF, CommunityToolkit.Mvvm, H.NotifyIcon |
+| Desktop app | C# 14, .NET 10 (LTS), WPF, CommunityToolkit.Mvvm, H.NotifyIcon |
 | Download engine | `HttpClient` / `SocketsHttpHandler`, token-bucket rate limiting, sparse files |
 | Storage | SQLite (Microsoft.Data.Sqlite, WAL) with versioned migrations, JSON settings |
 | Logging | Serilog (rolling files; cookies and URL queries are redacted) |
@@ -25,6 +25,8 @@ A personal, IDM-style download manager for Windows. It does segmented, resumable
 | Packaging | Single-file self-contained publish, PowerShell |
 
 ## Quick start
+
+Needs the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) (`winget install Microsoft.DotNet.SDK.10`) and, for the extension, Node.js 22.
 
 ```powershell
 dotnet build OB2.sln -c Release

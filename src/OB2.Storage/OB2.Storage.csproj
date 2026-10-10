@@ -2,7 +2,7 @@
 
   <!-- SQLite repositories, settings file, paths, and logging setup. No UI references. -->
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>OB2.Storage</RootNamespace>
   </PropertyGroup>
 

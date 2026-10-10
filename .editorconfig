@@ -15,3 +15,5 @@ indent_size = 2
 dotnet_diagnostic.CA1716.severity = none
 # CA1848: LoggerMessage delegates matter on hot paths only. Kept as a hint so the engine (Phase 2+) can adopt it where it counts.
 dotnet_diagnostic.CA1848.severity = suggestion
+# CA1873 (new in the .NET 10 SDK): same reasoning as CA1848; the flagged calls run once per start or per download.
+dotnet_diagnostic.CA1873.severity = suggestion

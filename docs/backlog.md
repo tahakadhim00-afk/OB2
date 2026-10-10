@@ -4,7 +4,6 @@ Items noticed during a phase but outside its scope (PRD §0). Each one names the
 
 | Item | Raised in | Target |
 |------|-----------|--------|
-| **.NET 8 end of support is 2026-11-10.** Decide whether to move to .NET 10 LTS. Needs the .NET 10 SDK on the dev machine and CI. Owner decision, since §13 names .NET 8. | Phase 1 | Owner decision |
 | Log retention by age (7 days) relies on Serilog's `retainedFileTimeLimit`; only rolling by size is covered by a test. | Phase 1 | Any |
 | "Remember auth": persist cookies encrypted with DPAPI when the user opts in (§11.1). Today cookies are memory-only, so an authenticated download resumed after an app restart may get 403. | Phase 2 | v1.0 |
 | Manual HTTP/SOCKS5 proxy (FR-10, P1). The engine uses the system proxy. No phase lists it in scope. | Phase 2 | v1.0 |
