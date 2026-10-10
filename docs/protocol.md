@@ -57,7 +57,7 @@ Exactly as in PRD §8.3:
 | `mimeType` | string | |
 | `fileSizeHint` | number | Bytes, if known. |
 | `userAgent` | string | Chrome's UA; the download uses it. |
-| `cookies` | string | A `Cookie` header value for `finalUrl` (or `url`). **Travels over stdio and the pipe only. Never written to logs or the database.** |
+| `cookies` | string | A `Cookie` header value for `finalUrl` (or `url`). **Travels over stdio and the pipe only. Never written to logs.** Kept in memory; written to the database only if the user turns on "Remember website sign-ins", and then only DPAPI-encrypted until the download finishes (D-67). |
 | `headers` | object | Extra request headers (the extension sends `Accept-Language`). |
 | `source` | string | `chrome-downloads`, `chrome-context-menu`, or `cli`. |
 | `autoStart` | bool | `true` skips the confirmation dialog for this request. |

@@ -42,7 +42,8 @@ internal static class CompositionRoot
             sp.GetRequiredService<IDownloadRepository>(),
             () => EngineOptions.FromSettings(storage.Settings),
             clock: sp.GetRequiredService<IClock>(),
-            loggerFactory: storage.LoggerFactory));
+            loggerFactory: storage.LoggerFactory,
+            cookieStore: new DpapiCookieStore(storage.ConnectionFactory, sp.GetRequiredService<IClock>())));
         services.AddSingleton<QueueManager>();
         services.AddSingleton(sp => new QueueScheduler(sp.GetRequiredService<QueueManager>(), sp.GetRequiredService<IQueueRepository>(), sp.GetRequiredService<IClock>()));
         services.AddSingleton(sp => new DownloadService(

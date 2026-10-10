@@ -24,8 +24,10 @@ public sealed partial class DownloadEngine : IDisposable
     private readonly ConcurrentDictionary<long, DownloadJob> _jobs = new();
     private readonly HostConnectionLimiter _hostLimiter;
 
-    // Cookies live only in memory for the life of the process (§11.1).
+    // Cookies live in memory for the life of the process (§11.1); with "remember auth" on they
+    // are also kept encrypted in the cookie store until the download finishes (D-67).
     private readonly ConcurrentDictionary<long, string> _cookies = new();
+    private readonly ICookieStore? _cookieStore;
     private readonly object _startLock = new();
 
     public DownloadEngine(
@@ -33,8 +35,10 @@ public sealed partial class DownloadEngine : IDisposable
         Func<EngineOptions> options,
         HttpClient? http = null,
         IClock? clock = null,
-        ILoggerFactory? loggerFactory = null)
+        ILoggerFactory? loggerFactory = null,
+        ICookieStore? cookieStore = null)
     {
+        _cookieStore = cookieStore;
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _ownsHttp = http is null;
@@ -121,6 +125,10 @@ public sealed partial class DownloadEngine : IDisposable
         if (!string.IsNullOrEmpty(request.Cookies))
         {
             _cookies[item.Id] = request.Cookies;
+            if (_options().RememberAuth)
+            {
+                TrySaveCookies(item.Id, request.Cookies);
+            }
         }
 
         _repository.AddHistoryEvent(item.Id, "added", item.Source.ToDbString());
@@ -151,15 +159,25 @@ public sealed partial class DownloadEngine : IDisposable
                 return false;
             }
 
-            _cookies.TryGetValue(id, out var cookies);
+            if (!_cookies.TryGetValue(id, out var cookies) && TryLoadCookies(id) is { } saved)
+            {
+                // After a restart: the cookies the browser gave, kept encrypted (D-67).
+                cookies = _cookies[id] = saved;
+            }
+
             var job = new DownloadJob(id, _repository, _http, _options(), _hostLimiter, GlobalLimiter, _clock, _loggerFactory.CreateLogger<DownloadJob>(), cookies, OnJobStatusChanged);
             _jobs[id] = job;
             job.Start();
             // Remove only this job: a later Start for the same id may already have replaced it.
             _ = job.Completion.ContinueWith(
-                _ =>
+                finished =>
                 {
                     _jobs.TryRemove(new KeyValuePair<long, DownloadJob>(id, job));
+                    if (finished.IsCompletedSuccessfully && finished.Result?.Status == DownloadStatus.Completed)
+                    {
+                        TryDeleteSavedCookies(id); // a finished download never needs them again
+                    }
+
                     JobEnded?.Invoke(this, id);
                 },
                 TaskScheduler.Default);
@@ -269,6 +287,70 @@ public sealed partial class DownloadEngine : IDisposable
         }
     }
 
+    /// <summary>
+    /// The user switched "remember auth": on, the cookies of unfinished downloads in memory are
+    /// saved now; off, every saved cookie is deleted.
+    /// </summary>
+    public void SyncSavedCookies(bool remember)
+    {
+        if (_cookieStore is null)
+        {
+            return;
+        }
+
+        if (!remember)
+        {
+            _cookieStore.DeleteAll();
+            return;
+        }
+
+        foreach (var (id, cookies) in _cookies)
+        {
+            if (_repository.Get(id) is { Status: not DownloadStatus.Completed })
+            {
+                TrySaveCookies(id, cookies);
+            }
+        }
+    }
+
+    private void TrySaveCookies(long id, string cookies)
+    {
+        try
+        {
+            _cookieStore?.Save(id, cookies);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // Remembering is a convenience; the download itself has the cookies in memory.
+            LogCookieStoreFailed(ex, id);
+        }
+    }
+
+    private string? TryLoadCookies(long id)
+    {
+        try
+        {
+            return _cookieStore?.Load(id);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            LogCookieStoreFailed(ex, id);
+            return null;
+        }
+    }
+
+    private void TryDeleteSavedCookies(long id)
+    {
+        try
+        {
+            _cookieStore?.Delete(id);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            LogCookieStoreFailed(ex, id);
+        }
+    }
+
     private void OnJobStatusChanged(DownloadItem item) => StatusChanged?.Invoke(this, item);
 
     private static void TryDeleteFile(string path)
@@ -287,4 +369,8 @@ public sealed partial class DownloadEngine : IDisposable
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Download {Id} added as {FileName}")]
     private partial void LogAdded(long id, string fileName);
+
+    // The exception never carries cookie values: DPAPI and SQLite errors describe the operation only.
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Download {Id}: the remembered sign-in could not be read or written")]
+    private partial void LogCookieStoreFailed(Exception ex, long id);
 }

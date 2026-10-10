@@ -112,5 +112,17 @@ public sealed class EngineFixture : IAsyncDisposable
         _temp.Dispose();
     }
 
-    private DownloadEngine CreateEngine() => new(Repository, () => Options);
+    /// <summary>Optional "remember auth" store; used by engines created after it is set (e.g. by <see cref="Restart"/>).</summary>
+    public ICookieStore? CookieStore { get; set; }
+
+    public SqliteConnectionFactory ConnectionFactory => new(_temp.Combine("ob2.db"));
+
+    /// <summary>Recreates the engine now, picking up <see cref="CookieStore"/> and <see cref="Options"/>.</summary>
+    public void Rebuild()
+    {
+        Engine.Dispose();
+        Engine = CreateEngine();
+    }
+
+    private DownloadEngine CreateEngine() => new(Repository, () => Options, cookieStore: CookieStore);
 }

@@ -34,6 +34,7 @@
                     <CheckBox Content="{StaticResource Settings_Notifications}" IsChecked="{Binding ShowNotifications}" Margin="0,4" />
                     <CheckBox Content="{StaticResource Settings_AutoResume}" IsChecked="{Binding AutoResume}" Margin="0,4" />
                     <CheckBox Content="{StaticResource Settings_StartWithWindows}" IsChecked="{Binding StartWithWindows}" Margin="0,4" />
+                    <CheckBox Content="{StaticResource Settings_RememberAuth}" IsChecked="{Binding RememberAuth}" Margin="0,4" ToolTip="{StaticResource Settings_RememberAuthTip}" />
                 </StackPanel>
             </TabItem>
 

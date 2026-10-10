@@ -81,6 +81,9 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private bool _startWithWindows;
 
+    [ObservableProperty]
+    private bool _rememberAuth;
+
     private readonly NativeHostRegistration? _registration;
     private readonly StartupRegistration? _startup;
 
@@ -93,6 +96,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         _registration = registration;
         _startup = startup;
         _startWithWindows = settings.General.StartWithWindows;
+        _rememberAuth = settings.Downloads.RememberAuth;
         _confirmCapture = settings.Capture.ConfirmBeforeAdding;
         _captureMinSizeMb = Math.Round(settings.Capture.MinSizeBytes / 1048576.0, 2);
         _captureExtensions = string.Join(", ", settings.Capture.Extensions);
@@ -170,6 +174,8 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         _settings.General.StartWithWindows = StartWithWindows;
         var d = _settings.Downloads;
+        var rememberAuthChanged = RememberAuth != d.RememberAuth;
+        d.RememberAuth = RememberAuth;
         _settings.Folders.DefaultSaveFolder = string.IsNullOrWhiteSpace(DefaultFolder) ? null : DefaultFolder.Trim();
         _settings.General.MinimizeToTrayOnClose = MinimizeToTray;
         _settings.General.ShowCompleteDialog = ShowCompleteDialog;
@@ -189,6 +195,11 @@ public sealed partial class SettingsViewModel : ObservableObject
         SettingsValidator.Normalize(_settings);
         await _store.SaveAsync(_settings);
         _engine.GlobalLimiter.BytesPerSecond = _settings.SpeedLimits.GlobalBytesPerSecond;
+        if (rememberAuthChanged)
+        {
+            // §11.1: on saves the cookies of unfinished downloads now; off deletes all saved ones.
+            _engine.SyncSavedCookies(RememberAuth);
+        }
 
         foreach (var removed in _removed)
         {

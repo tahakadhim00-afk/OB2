@@ -29,8 +29,8 @@ public sealed class MigrationRunnerTests : IDisposable
         var result = new MigrationRunner(_factory).Run();
 
         result.StartingVersion.Should().Be(0);
-        result.CurrentVersion.Should().Be(2);
-        result.Applied.Should().Equal(1, 2);
+        result.CurrentVersion.Should().Be(3);
+        result.Applied.Should().Equal(1, 2, 3);
 
         Tables().Should().Contain(SchemaV1Tables);
         Indexes().Should().Contain(["idx_downloads_status", "idx_downloads_created"]);
@@ -54,9 +54,9 @@ public sealed class MigrationRunnerTests : IDisposable
 
         second.Applied.Should().BeEmpty();
         third.Applied.Should().BeEmpty();
-        second.CurrentVersion.Should().Be(2);
+        second.CurrentVersion.Should().Be(3);
         SchemaSql().Should().Be(schemaBefore);
-        Scalar("SELECT COUNT(*) FROM schema_version").Should().Be(2);
+        Scalar("SELECT COUNT(*) FROM schema_version").Should().Be(3);
     }
 
     [Fact]

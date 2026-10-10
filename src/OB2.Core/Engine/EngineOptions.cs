@@ -37,6 +37,9 @@ public sealed record EngineOptions
     /// <summary>Segments are never smaller than this, so small files use fewer connections.</summary>
     public long MinSegmentBytes { get; init; } = 512 * 1024;
 
+    /// <summary>§11.1: keep cookies of unfinished downloads across restarts, encrypted (D-67).</summary>
+    public bool RememberAuth { get; init; }
+
     public static EngineOptions FromSettings(AppSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
@@ -49,6 +52,7 @@ public sealed record EngineOptions
             ReadIdleTimeout = TimeSpan.FromSeconds(d.ReadIdleTimeoutSeconds),
             UserAgent = d.UserAgent,
             MaxConnectionsPerHost = d.MaxConnectionsPerHost,
+            RememberAuth = d.RememberAuth,
         };
     }
 }
