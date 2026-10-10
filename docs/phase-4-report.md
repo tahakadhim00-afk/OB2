@@ -12,15 +12,17 @@
 | AC-10: scheduled queue starts and stops at configured times (clock abstraction) | **Pass** | The Flow B test above, plus `Saturday_is_skipped_by_a_weekday_schedule`, `Opening_the_app_inside_a_window_starts_the_queue`, and `ScheduleEvaluatorTests` (same-day, overnight, weekend, start-only, disabled). |
 | Flow C (network drop and recovery) manually with a network toggle | **Pending manual** | Not toggled on this machine (it would cut the owner's connection). The automated equivalents pass: Phase 3 drop/retry/stall tests, `Exhausted_retries_fail_keep_progress_and_can_be_retried` (Failed + Retry), and the UI shows `retrying` as "Waiting for network" with a Retry button in the details panel. Checklist step below. |
 | UI meets §9 layout and keyboard standards at 100 %, 125 %, 150 % DPI | **Partly verified** | Layout and shortcuts verified at 100 % (screenshots below; UI Automation drove row selection). The app manifest declares PerMonitorV2 and all sizes are in device-independent units; 125 % and 150 % need the owner to switch display scaling (checklist). |
-| AC-12: idle memory under 80 MB with 10 active downloads, over 10 minutes | **MEMORY_RESULT** | MEMORY_DETAIL |
+| AC-12: idle memory under 80 MB with 10 active downloads, over 10 minutes | **Pass** | 10 downloads × 2 connections from the throttled test server (50 KB/s per connection), all 10 active for the whole run (log: `active downloads 10`; ~46 MB fetched per download), app tray-only, sampled every 15 s for 10 minutes by process id. **Single-file uncompressed exe** (the shipped form, decision D-56): private working set (Task Manager "Memory") avg 35.6 MB, max 37.4 MB; private bytes avg 62.2 MB, max 64.3 MB; 19–31 threads, ~710–745 handles, flat. Framework-dependent build in parallel: 34.4 / 38.8 MB working set, 60.1 / 65.3 MB private bytes. The app's own `Memory:` log line agreed (managed heap 7–12 MB, GC committed 17 MB). An earlier build with `EnableCompressionInSingleFile` measured ~98 MB working set, because compressed assemblies are unpacked into private memory, so compression is now off. A one-off 64 → 111 MB native step seen during an earlier diagnostic run did not recur in these two 10-minute runs; the 5-minute `Memory:` log line stays in place to catch it in the field. |
 | Manual checklist from §14.1 (UI row) signed off in this report | **Pending owner sign-off** | Checklist below. Items I could check are ticked with how; the rest need the owner. |
 
 ## Test run
 
-```nPassed!  - Failed: 0, Passed: 135, Skipped: 0, Total: 135 - OB2.Core.Tests.dll
+```
+Passed!  - Failed: 0, Passed: 135, Skipped: 0, Total: 135 - OB2.Core.Tests.dll
 Passed!  - Failed: 0, Passed:  36, Skipped: 0, Total:  36 - OB2.Storage.Tests.dll
 Passed!  - Failed: 0, Passed:  55, Skipped: 2, Total:  57 - OB2.Integration.Tests.dll (33 s)
-```n
+```
+
 New in Phase 4: schedule/category unit tests, organization repository tests, queue and scheduler integration tests (concurrency limit, ordering, completion action, empty-queue safety, Flow B, AC-10, Stop/Resume All), and the instance-lock test.
 
 ## What was checked by running the real app

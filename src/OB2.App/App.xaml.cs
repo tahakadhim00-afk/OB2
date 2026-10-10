@@ -147,12 +147,18 @@ public partial class App : Application
         }, Dispatcher);
 
         // NFR / AC-12: a memory line in the log every 5 minutes makes leaks visible in the field.
-        _memoryTimer = new DispatcherTimer(TimeSpan.FromMinutes(5), DispatcherPriority.Background, (_, _) =>
+        // OB2_MEMORY_LOG_SECONDS shortens the interval for diagnosis.
+        var memoryInterval = int.TryParse(Environment.GetEnvironmentVariable("OB2_MEMORY_LOG_SECONDS"), out var seconds) && seconds > 0
+            ? TimeSpan.FromSeconds(seconds)
+            : TimeSpan.FromMinutes(5);
+        _memoryTimer = new DispatcherTimer(memoryInterval, DispatcherPriority.Background, (_, _) =>
         {
             using var process = System.Diagnostics.Process.GetCurrentProcess();
+            var gc = GC.GetGCMemoryInfo();
             _logger?.LogInformation(
-                "Memory: managed heap {HeapMb:0.0} MB, private {PrivateMb:0.0} MB, working set {WorkingSetMb:0.0} MB, GC gen0/1/2 {G0}/{G1}/{G2}, active downloads {Active}",
+                "Memory: managed heap {HeapMb:0.0} MB, GC committed {CommittedMb:0.0} MB, private {PrivateMb:0.0} MB, working set {WorkingSetMb:0.0} MB, GC gen0/1/2 {G0}/{G1}/{G2}, active downloads {Active}",
                 GC.GetTotalMemory(false) / 1048576.0,
+                gc.TotalCommittedBytes / 1048576.0,
                 process.PrivateMemorySize64 / 1048576.0,
                 process.WorkingSet64 / 1048576.0,
                 GC.CollectionCount(0),
