@@ -59,7 +59,7 @@ Exactly as in PRD §8.3:
 | `userAgent` | string | Chrome's UA; the download uses it. |
 | `cookies` | string | A `Cookie` header value for `finalUrl` (or `url`). **Travels over stdio and the pipe only. Never written to logs.** Kept in memory; written to the database only if the user turns on "Remember website sign-ins", and then only DPAPI-encrypted until the download finishes (D-67). |
 | `headers` | object | Extra request headers (the extension sends `Accept-Language`). |
-| `source` | string | `chrome-downloads`, `chrome-context-menu`, or `cli`. |
+| `source` | string | `chrome-downloads`, `chrome-context-menu`, `chrome-media` (the button over a video or the video/audio context menu, D-69), or `cli`. |
 | `autoStart` | bool | `true` skips the confirmation dialog for this request. |
 
 Validation, done by both the host and the app (`ProtocolValidator`): the URL must be present, at most 2048 characters, absolute, and `http`/`https` (otherwise `INVALID_URL` or `UNSUPPORTED_SCHEME`).

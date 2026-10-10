@@ -2,6 +2,7 @@
 // The browser download is paused, not cancelled, while OB2 is asked to take it. It is cancelled
 // only after OB2 acknowledges; on any failure it is resumed, so Chrome finishes it (fail-open).
 
+import { mediaFileName, type MediaCandidate } from './media';
 import { CAPTURE_TIMEOUT_MS, HostError, STATUS_TIMEOUT_MS, sendToHost } from './native';
 import { createMessage, MessageType, type AckPayload, type AddDownloadPayload, type StatusPayload } from './protocol';
 import { decide, knownSize, loadSettings, RULES_MAX_AGE_MS, saveRules, type SkipReason } from './rules';
@@ -73,10 +74,19 @@ export async function captureDownload(item: chrome.downloads.DownloadItem, bypas
   }
 }
 
+/** What the page knows about a link that Chrome hasn't started downloading. */
+export interface LinkHints {
+  source?: AddDownloadPayload['source'];
+  filename?: string;
+  mime?: string;
+  size?: number;
+}
+
 /** FR-21: "Download with OB2" on a link. If OB2 can't be reached, Chrome downloads it instead. */
-export async function downloadLinkWithOb2(linkUrl: string, pageUrl: string | undefined): Promise<CaptureOutcome> {
+export async function downloadLinkWithOb2(linkUrl: string, pageUrl: string | undefined, hints: LinkHints = {}): Promise<CaptureOutcome> {
   try {
-    const payload = await buildPayload({ url: linkUrl, referrer: pageUrl }, 'chrome-context-menu');
+    const item = { url: linkUrl, referrer: pageUrl, filename: hints.filename, mime: hints.mime, totalBytes: hints.size };
+    const payload = await buildPayload(item, hints.source ?? 'chrome-context-menu');
     const reply = await sendToHost<AckPayload>(createMessage(MessageType.AddDownload, payload), CAPTURE_TIMEOUT_MS);
     return { action: 'captured', downloadId: reply.payload?.downloadId, status: reply.payload?.status ?? 'queued' };
   } catch (error) {
@@ -86,7 +96,16 @@ export async function downloadLinkWithOb2(linkUrl: string, pageUrl: string | und
   }
 }
 
-type PayloadSource = Pick<chrome.downloads.DownloadItem, 'url'> & Partial<Pick<chrome.downloads.DownloadItem, 'finalUrl' | 'referrer' | 'filename' | 'mime' | 'totalBytes' | 'fileSize'>>;
+/**
+ * FR-24: a video or audio file from the button over a video or the media context menu. Named
+ * after the page when its address has no file name. Same fail-open rule as a link.
+ */
+export async function downloadMediaWithOb2(media: MediaCandidate, pageUrl: string | undefined, pageTitle: string | undefined, incognito = false): Promise<CaptureOutcome> {
+  if (incognito) return { action: 'ignored', reason: 'incognito' }; // D-61
+  return downloadLinkWithOb2(media.url, pageUrl, { source: 'chrome-media', filename: mediaFileName(media, pageTitle), mime: media.mime, size: media.size });
+}
+
+type PayloadSource =Pick<chrome.downloads.DownloadItem, 'url'> & Partial<Pick<chrome.downloads.DownloadItem, 'finalUrl' | 'referrer' | 'filename' | 'mime' | 'totalBytes' | 'fileSize'>>;
 
 export async function buildPayload(item: PayloadSource, source: AddDownloadPayload['source']): Promise<AddDownloadPayload> {
   const target = item.finalUrl || item.url;

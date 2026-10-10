@@ -1,5 +1,13 @@
-// §8.4: holding Shift while clicking a link lets Chrome download it instead of OB2.
-// Reports only the clicked link's address, only when Shift is held; reads nothing else.
+// Runs in every frame of http(s) pages.
+// §8.4: holding Shift while clicking a link lets Chrome download it instead of OB2. Reports only
+// the clicked link's address, only when Shift is held; reads nothing else.
+// FR-24: the "Download with OB2" button over videos (overlay.ts). The background tells this frame
+// which media files it loaded; nothing about the page is sent anywhere until the button is clicked.
+
+import type { CaptureOutcome } from './capture';
+import { isMediaCandidate, type MediaCandidate } from './media';
+import { MediaOverlay, type SendResult } from './overlay';
+import { loadMediaButtonEnabled, MEDIA_BUTTON_KEY } from './rules';
 
 export function shiftClickedLink(event: MouseEvent): string | undefined {
   if (!event.shiftKey) return undefined;
@@ -27,3 +35,45 @@ function onClick(event: MouseEvent): void {
 
 document.addEventListener('click', onClick, true);
 document.addEventListener('auxclick', onClick, true);
+
+export function sendResultOf(outcome: CaptureOutcome | undefined): SendResult {
+  if (outcome?.action === 'captured') return 'sent';
+  if (outcome?.action === 'left-to-chrome') return 'browser';
+  if (outcome?.action === 'ignored' && outcome.reason === 'incognito') return 'incognito';
+  return 'failed';
+}
+
+async function sendMedia(media: MediaCandidate): Promise<SendResult> {
+  // Throws when the extension was reloaded since this page loaded; the button then says so.
+  return sendResultOf((await chrome.runtime.sendMessage({ type: 'ob2-download-media', media })) as CaptureOutcome | undefined);
+}
+
+function startMediaButton(): void {
+  // D-61: nothing from an Incognito window goes to OB2 (the background refuses it as well).
+  if ((chrome.extension as { inIncognitoContext?: boolean } | undefined)?.inIncognitoContext) return;
+
+  const overlay = new MediaOverlay(document, sendMedia);
+  chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
+    const m = message as { type?: string; media?: unknown } | undefined;
+    if (sender.id !== chrome.runtime.id) return false;
+    if (m?.type === 'ob2-media' && isMediaCandidate(m.media)) {
+      overlay.addDetected(m.media);
+    } else if (m?.type === 'ob2-context-media') {
+      sendResponse(overlay.mediaForContextMenu() ?? null);
+    }
+    return false;
+  });
+
+  loadMediaButtonEnabled()
+    .then((enabled) => (overlay.enabled = enabled))
+    .catch(() => undefined);
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && MEDIA_BUTTON_KEY in changes) {
+      overlay.enabled = changes[MEDIA_BUTTON_KEY].newValue !== false;
+      if (!overlay.enabled) overlay.hide();
+    }
+  });
+  overlay.attach();
+}
+
+startMediaButton();

@@ -20,3 +20,5 @@ Items noticed during a phase but outside its scope (PRD §0). Each one names the
 | When the user cancels a confirmation dialog for a captured download, the browser download is already gone (D-53). Offer "Let Chrome download it" in the dialog, which would need a reply channel to the extension. | Phase 6 | v1.1 |
 | Start the pipe server before the window is created (with requests waiting for start-up to finish) to shave a few hundred ms off captures that start the app. | Phase 6 | v1.1 |
 | Unit tests for `BrowserBridge` (credentials → confirmation, source mapping) without starting WPF. Today it is covered by the end-to-end test with confirmation off. | Phase 6 | v1.0 |
+| HLS/DASH downloads (FR-24 second half): fetch the playlist, download the segments, join them (and mux separate audio/video, which needs ffmpeg). The button skips these streams today (D-69). | v1.0 | v1.1 |
+| Media button: videos inside closed shadow roots of custom players are not found, and only the frame that loaded a file offers it (a `blob:` player in the top page whose file was fetched by an iframe gets no button). | v1.0 | v1.1 |

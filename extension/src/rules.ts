@@ -44,6 +44,18 @@ export async function setCaptureEnabled(enabled: boolean): Promise<void> {
   await chrome.storage.local.set({ captureEnabled: enabled });
 }
 
+/** The popup's "Show a download button on videos" switch (FR-24). On unless turned off. */
+export const MEDIA_BUTTON_KEY = 'mediaButtonEnabled';
+
+export async function loadMediaButtonEnabled(): Promise<boolean> {
+  const stored = (await chrome.storage.local.get([MEDIA_BUTTON_KEY])) as Record<string, unknown>;
+  return stored[MEDIA_BUTTON_KEY] !== false;
+}
+
+export async function setMediaButtonEnabled(enabled: boolean): Promise<void> {
+  await chrome.storage.local.set({ [MEDIA_BUTTON_KEY]: enabled });
+}
+
 function isRules(value: unknown): value is CaptureRules {
   const r = value as CaptureRules | undefined;
   return !!r && typeof r.enabled === 'boolean' && typeof r.minSizeBytes === 'number' && Array.isArray(r.extensions) && Array.isArray(r.excludedDomains);

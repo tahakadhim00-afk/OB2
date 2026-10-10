@@ -2,9 +2,10 @@
 // Untrusted text (file names) is only ever set through textContent.
 
 import { fetchStatus } from '../capture';
+import { formatBytes } from '../format';
 import { HostError, STATUS_TIMEOUT_MS, sendToHost, type HostFailure } from '../native';
 import { createMessage, MessageType, type DownloadSummary, type StatusPayload } from '../protocol';
-import { loadSettings, setCaptureEnabled } from '../rules';
+import { loadMediaButtonEnabled, loadSettings, setCaptureEnabled, setMediaButtonEnabled } from '../rules';
 
 export type View =
   | { kind: 'connected'; status: StatusPayload }
@@ -92,16 +93,7 @@ function describe(d: DownloadSummary, active: boolean): string {
   return parts.join(' · ');
 }
 
-export function formatBytes(bytes: number): string {
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  let value = bytes;
-  let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit++;
-  }
-  return `${value < 10 && unit > 0 ? value.toFixed(1) : Math.round(value)} ${units[unit]}`;
-}
+export { formatBytes };
 
 export function formatSpeed(bytesPerSecond: number): string {
   return `${formatBytes(bytesPerSecond)}/s`;
@@ -134,6 +126,9 @@ export async function start(doc: Document): Promise<void> {
   const capture = doc.getElementById('capture') as HTMLInputElement;
   capture.checked = (await loadSettings()).captureEnabled;
   capture.addEventListener('change', () => void setCaptureEnabled(capture.checked));
+  const mediaButton = doc.getElementById('media-button') as HTMLInputElement;
+  mediaButton.checked = await loadMediaButtonEnabled();
+  mediaButton.addEventListener('change', () => void setMediaButtonEnabled(mediaButton.checked));
   doc.getElementById('pause-all')!.addEventListener('click', () => void command(doc, MessageType.PauseAll));
   doc.getElementById('resume-all')!.addEventListener('click', () => void command(doc, MessageType.ResumeAll));
 

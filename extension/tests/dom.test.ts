@@ -11,13 +11,23 @@ function loadPopup(): Document {
   return document;
 }
 
-describe('content script: Shift-click bypass (§8.4)', () => {
-  const sendMessage = jest.fn().mockResolvedValue(undefined);
+const EXTENSION_ID = 'mgmmgplfngnhcencbhpfagnjcnenflpm';
+const sendMessage = jest.fn().mockResolvedValue(undefined);
+const onMessage = jest.fn();
+type Listener = (message: unknown, sender: { id?: string }, reply: (r: unknown) => void) => boolean;
+let content: typeof import('../src/content');
+let listener: Listener;
 
-  beforeAll(async () => {
-    (globalThis as unknown as { chrome: unknown }).chrome = { runtime: { sendMessage } };
-    await import('../src/content');
-  });
+beforeAll(async () => {
+  (globalThis as unknown as { chrome: unknown }).chrome = {
+    runtime: { id: EXTENSION_ID, sendMessage, onMessage: { addListener: onMessage } },
+    storage: { local: { get: jest.fn().mockResolvedValue({}) }, onChanged: { addListener: jest.fn() } },
+  };
+  content = await import('../src/content');
+  listener = onMessage.mock.calls[0][0] as Listener;
+});
+
+describe('content script: Shift-click bypass (§8.4)', () => {
 
   beforeEach(() => {
     sendMessage.mockClear();
@@ -38,6 +48,35 @@ describe('content script: Shift-click bypass (§8.4)', () => {
     click('text', { shiftKey: true });
 
     expect(sendMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe('content script: media from the background (FR-24)', () => {
+  it('remembers media the frame loaded and hands it to the context menu', () => {
+    document.body.innerHTML = '';
+    const reply = jest.fn();
+    listener({ type: 'ob2-media', media: { url: 'https://cdn.e.com/a.mp4', size: 9_000_000 } }, { id: EXTENSION_ID }, jest.fn());
+
+    listener({ type: 'ob2-context-media' }, { id: EXTENSION_ID }, reply);
+
+    expect(reply).toHaveBeenCalledWith({ url: 'https://cdn.e.com/a.mp4', size: 9_000_000 });
+  });
+
+  it('ignores other senders and malformed media', () => {
+    const reply = jest.fn();
+    listener({ type: 'ob2-media', media: { url: 'javascript:alert(1)' } }, { id: EXTENSION_ID }, jest.fn());
+    listener({ type: 'ob2-context-media' }, { id: 'someone-else' }, reply);
+
+    expect(reply).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [{ action: 'captured', status: 'queued' }, 'sent'],
+    [{ action: 'left-to-chrome', reason: 'not-registered' }, 'browser'],
+    [{ action: 'ignored', reason: 'incognito' }, 'incognito'],
+    [undefined, 'failed'],
+  ] as const)('turns the outcome %j into "%s" on the button', (outcome, result) => {
+    expect(content.sendResultOf(outcome)).toBe(result);
   });
 });
 

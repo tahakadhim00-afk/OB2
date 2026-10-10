@@ -43,7 +43,8 @@ export interface AddDownloadPayload {
   /** Cookie header value. Sent to the host only; never logged or stored by the extension. */
   cookies?: string;
   headers?: Record<string, string>;
-  source: 'chrome-downloads' | 'chrome-context-menu';
+  /** `chrome-media`: the button over a video or the video/audio context menu (FR-24). */
+  source: 'chrome-downloads' | 'chrome-context-menu' | 'chrome-media';
   autoStart: boolean;
 }
 

@@ -15,8 +15,8 @@ describe('manifest (§8.1, §8.2)', () => {
     expect(extensionIdFromKey(manifest.key)).toBe('mgmmgplfngnhcencbhpfagnjcnenflpm');
   });
 
-  it('asks for exactly the permissions in §8.1', () => {
-    expect([...manifest.permissions].sort()).toEqual(['contextMenus', 'cookies', 'downloads', 'nativeMessaging', 'storage']);
+  it('asks for exactly the permissions in §8.1, plus webRequest for media detection (D-69)', () => {
+    expect([...manifest.permissions].sort()).toEqual(['contextMenus', 'cookies', 'downloads', 'nativeMessaging', 'storage', 'webRequest']);
     expect(manifest.host_permissions).toEqual(['<all_urls>']);
   });
 

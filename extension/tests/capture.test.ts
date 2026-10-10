@@ -1,4 +1,4 @@
-import { BypassList, buildPayload, captureDownload, cookieHeader, downloadLinkWithOb2, fetchStatus } from '../src/capture';
+import { BypassList, buildPayload, captureDownload, cookieHeader, downloadLinkWithOb2, downloadMediaWithOb2, fetchStatus } from '../src/capture';
 import { loadSettings } from '../src/rules';
 import { download, installChrome, replyWith, type ChromeMock } from './chromeMock';
 
@@ -143,6 +143,45 @@ describe('context menu (FR-21)', () => {
 
     expect(outcome).toEqual({ action: 'left-to-chrome', reason: 'not-registered' });
     expect(chromeMock.downloads.download).toHaveBeenCalledWith({ url: 'https://example.com/a.zip' });
+  });
+});
+
+describe('media button and media menu (FR-24)', () => {
+  it('sends the file with the page as referrer and a name taken from the page title', async () => {
+    chromeMock.sendNativeMessage.mockImplementation(replyWith('ack', { downloadId: 5, status: 'confirming' }));
+    chromeMock.cookies.getAll.mockResolvedValue([{ name: 'sid', value: 'abc' }]);
+
+    const media = { url: 'https://cdn.example.com/videoplayback?id=9', mime: 'video/mp4', size: 50_000_000 };
+    const outcome = await downloadMediaWithOb2(media, 'https://example.com/watch/9', 'Launch day / highlights');
+
+    expect(outcome).toEqual({ action: 'captured', downloadId: 5, status: 'confirming' });
+    expect(sentMessages()[0].payload).toMatchObject({
+      url: media.url,
+      referrer: 'https://example.com/watch/9',
+      filenameHint: 'Launch day - highlights.mp4',
+      mimeType: 'video/mp4',
+      fileSizeHint: 50_000_000,
+      cookies: 'sid=abc',
+      source: 'chrome-media',
+      autoStart: false,
+    });
+  });
+
+  it('never sends anything from an Incognito tab', async () => {
+    const outcome = await downloadMediaWithOb2({ url: 'https://e.com/a.mp4' }, 'https://e.com/', 'A', true);
+
+    expect(outcome).toEqual({ action: 'ignored', reason: 'incognito' });
+    expect(chromeMock.sendNativeMessage).not.toHaveBeenCalled();
+    expect(chromeMock.downloads.download).not.toHaveBeenCalled();
+  });
+
+  it('lets Chrome download the file when OB2 cannot be reached', async () => {
+    chromeMock.sendNativeMessage.mockRejectedValue(new Error('Specified native messaging host not found.'));
+
+    const outcome = await downloadMediaWithOb2({ url: 'https://e.com/clip.webm' }, 'https://e.com/', 'Clip');
+
+    expect(outcome).toEqual({ action: 'left-to-chrome', reason: 'not-registered' });
+    expect(chromeMock.downloads.download).toHaveBeenCalledWith({ url: 'https://e.com/clip.webm' });
   });
 });
 
