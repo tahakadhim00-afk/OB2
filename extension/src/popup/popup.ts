@@ -11,8 +11,8 @@ export type View =
   | { kind: 'failed'; failure: HostFailure };
 
 const FAILURE_TEXT: Record<HostFailure, { state: string; message: string }> = {
-  'app-not-running': { state: 'Not running', message: 'OB2 is not running. It starts by itself when Chrome hands it a download.' },
-  'not-registered': { state: 'Not set up', message: 'Chrome cannot find OB2. In OB2, open Options > Browser and click Register.' },
+  'app-not-running': { state: 'Not running', message: 'OB2 is not running. It starts by itself when the browser hands it a download.' },
+  'not-registered': { state: 'Not set up', message: 'The browser cannot find OB2. In OB2, open Options > Browser and click Register.' },
   forbidden: { state: 'Not set up', message: 'OB2 is registered for a different extension. In OB2, open Options > Browser and click Register.' },
   'host-exited': { state: 'Error', message: 'host.exe stopped unexpectedly. If antivirus blocked it, allow host.exe next to OB2.exe.' },
   timeout: { state: 'No answer', message: 'OB2 did not answer in time.' },

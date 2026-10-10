@@ -7,7 +7,8 @@ using OB2.Tests.Common;
 namespace OB2.Integration.Tests.Ipc;
 
 /// <summary>
-/// AC-9 and §12.6, against a scratch HKCU key so Chrome's real registration is never touched.
+/// AC-9 and §12.6, against scratch HKCU keys (one per browser) so the real Chrome and Edge
+/// registrations are never touched.
 /// HKCU writes need no elevation, so passing here means no admin prompt.
 /// </summary>
 [System.Runtime.Versioning.SupportedOSPlatform("windows")]
@@ -15,11 +16,17 @@ public sealed class NativeHostRegistrationTests : IDisposable
 {
     private readonly TempDirectory _temp = new();
     private const string ScratchRoot = @"Software\OB2.Tests";
-    private readonly string _keyPath = ScratchRoot + @"\" + Guid.NewGuid().ToString("N");
+    private readonly string _keyRoot = ScratchRoot + @"\" + Guid.NewGuid().ToString("N");
+
+    private string ChromeKey => _keyRoot + @"\chrome";
+
+    private string EdgeKey => _keyRoot + @"\edge";
+
+    private string[] Keys => [ChromeKey, EdgeKey];
 
     public void Dispose()
     {
-        Registry.CurrentUser.DeleteSubKeyTree(_keyPath, throwOnMissingSubKey: false);
+        Registry.CurrentUser.DeleteSubKeyTree(_keyRoot, throwOnMissingSubKey: false);
         using (var root = Registry.CurrentUser.OpenSubKey(ScratchRoot))
         {
             if (root is { SubKeyCount: 0, ValueCount: 0 })
@@ -45,15 +52,24 @@ public sealed class NativeHostRegistrationTests : IDisposable
     }
 
     [Fact]
-    public void Register_writes_the_HKCU_value_and_a_manifest_for_the_pinned_extension()
+    public void Chrome_and_Edge_are_both_registered_by_default()
+    {
+        NativeHostRegistration.BrowserKeyPaths.Should().Equal(
+            @"Software\Google\Chrome\NativeMessagingHosts\com.ob2.host",
+            @"Software\Microsoft\Edge\NativeMessagingHosts\com.ob2.host");
+    }
+
+    [Fact]
+    public void Register_writes_the_HKCU_values_and_a_manifest_for_the_pinned_extension()
     {
         var registration = Create(_temp.Path);
 
         registration.Register();
 
-        using (var key = Registry.CurrentUser.OpenSubKey(_keyPath))
+        foreach (var keyPath in Keys)
         {
-            key!.GetValue(null).Should().Be(registration.ManifestPath);
+            using var key = Registry.CurrentUser.OpenSubKey(keyPath);
+            key!.GetValue(null).Should().Be(registration.ManifestPath, keyPath);
         }
 
         registration.IsRegistered.Should().BeTrue();
@@ -67,14 +83,15 @@ public sealed class NativeHostRegistrationTests : IDisposable
     }
 
     [Fact]
-    public void Unregister_removes_the_key_and_the_manifest()
+    public void Unregister_removes_both_keys_and_the_manifest()
     {
         var registration = Create(_temp.Path);
         registration.Register();
 
         registration.Unregister();
 
-        Registry.CurrentUser.OpenSubKey(_keyPath).Should().BeNull();
+        Registry.CurrentUser.OpenSubKey(ChromeKey).Should().BeNull();
+        Registry.CurrentUser.OpenSubKey(EdgeKey).Should().BeNull();
         File.Exists(registration.ManifestPath).Should().BeFalse();
         registration.IsRegistered.Should().BeFalse();
     }
@@ -91,7 +108,7 @@ public sealed class NativeHostRegistrationTests : IDisposable
     {
         var hostFolder = _temp.Combine("app");
         var manifestFolder = _temp.Combine("appdata");
-        var registration = new NativeHostRegistration(hostFolder, manifestFolder, _keyPath);
+        var registration = new NativeHostRegistration(hostFolder, manifestFolder, Keys);
 
         registration.Register();
 
@@ -167,7 +184,35 @@ public sealed class NativeHostRegistrationTests : IDisposable
         registration.NeedsRepair().Should().BeTrue();
     }
 
-    private NativeHostRegistration Create(string folder) => new(folder, folder, _keyPath);
+    [Fact]
+    public void A_registration_from_before_Edge_support_is_completed_on_start()
+    {
+        var registration = CreateWithHost(_temp.Path);
+        new NativeHostRegistration(_temp.Path, _temp.Path, [ChromeKey]).Register(); // Chrome only, as in 0.6
+
+        registration.IsRegisteredHere.Should().BeFalse();
+        registration.NeedsRepair().Should().BeTrue();
+
+        registration.Register();
+
+        registration.IsRegisteredHere.Should().BeTrue();
+        registration.NeedsRepair().Should().BeFalse();
+    }
+
+    [Fact]
+    public void A_browser_registered_to_another_working_copy_is_not_taken_on_start()
+    {
+        var usb = _temp.Combine("usb");
+        CreateWithHost(usb);
+        new NativeHostRegistration(usb, usb, [ChromeKey]).Register();
+        var desktop = _temp.Combine("desktop");
+        var here = CreateWithHost(desktop);
+        new NativeHostRegistration(desktop, desktop, [EdgeKey]).Register();
+
+        here.NeedsRepair().Should().BeFalse("Chrome belongs to the other copy (D-55)");
+    }
+
+    private NativeHostRegistration Create(string folder) => new(folder, folder, Keys);
 
     private NativeHostRegistration CreateWithHost(string folder)
     {

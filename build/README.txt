@@ -17,13 +17,13 @@ into a temporary folder once.
 Add downloads by pasting a URL (Ctrl+N), dragging a link onto the window, or from the
 command line:   OB2.exe "https://example.com/file.zip"
 
-Chrome integration (optional)
------------------------------
-1. In OB2: Options > Browser > Register.
-2. In Chrome: open chrome://extensions, turn on Developer mode, click "Load unpacked",
-   and choose the chrome-extension folder next to OB2.exe.
-3. Click a download link in Chrome: OB2 takes it over. Hold Shift while clicking to let
-   Chrome download it instead. If OB2 cannot be reached, Chrome downloads normally.
+Chrome / Edge integration (optional)
+------------------------------------
+1. In OB2: Options > Browser > Register (covers both Chrome and Edge).
+2. In the browser: open chrome://extensions (Edge: edge://extensions), turn on Developer
+   mode, click "Load unpacked", and choose the chrome-extension folder next to OB2.exe.
+3. Click a download link: OB2 takes it over. Hold Shift while clicking to let the
+   browser download it instead. If OB2 cannot be reached, the browser downloads normally.
 Moving this folder later is fine: OB2 re-registers itself on the next launch.
 
 Antivirus / SmartScreen

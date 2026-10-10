@@ -126,9 +126,9 @@ Measured with the published single-file exes (Phase 6 report): **170–250 ms** 
   { "name": "com.ob2.host", "description": "OB2 download manager bridge", "path": "C:\\…\\host.exe",
     "type": "stdio", "allowed_origins": [ "chrome-extension://mgmmgplfngnhcencbhpfagnjcnenflpm/" ] }
   ```
-- `HKCU\Software\Google\Chrome\NativeMessagingHosts\com.ob2.host`, default value = the manifest's full path. Per-user, so no admin prompt.
+- `HKCU\Software\Google\Chrome\NativeMessagingHosts\com.ob2.host` and `HKCU\Software\Microsoft\Edge\NativeMessagingHosts\com.ob2.host` (D-65), each with default value = the manifest's full path. Per-user, so no admin prompt. Edge runs the same extension and uses the same `chrome-extension://` origin, so one manifest serves both.
 
-**Unregister** removes both. On every start the app repairs the registration if the manifest or the `host.exe` it names no longer exists, for example after the folder was moved (§12.6). It leaves alone a registration that points at another copy that still works (D-55).
+**Unregister** removes all of these. On every start the app repairs the registration if a manifest or the `host.exe` it names no longer exists, for example after the folder was moved (§12.6), and completes a registration of this copy that is missing a browser (one made before Edge support). It leaves alone any key that points at another copy that still works (D-55).
 
 The extension ID is fixed by the `key` in `extension/manifest.json` (D-51). A Jest test recomputes the ID from the key.
 

@@ -193,15 +193,15 @@
 
     <!-- Browser integration (§8) -->
     <sys:String x:Key="Browser_Tab">Browser</sys:String>
-    <sys:String x:Key="Browser_Integration">Chrome integration</sys:String>
+    <sys:String x:Key="Browser_Integration">Chrome and Edge integration</sys:String>
     <sys:String x:Key="Browser_Register">Register</sys:String>
     <sys:String x:Key="Browser_Unregister">Unregister</sys:String>
     <sys:String x:Key="Browser_Registered">Registered for this copy of OB2 (extension {0}).</sys:String>
-    <sys:String x:Key="Browser_NotRegistered">Not registered. Click Register, then load the extension in Chrome.</sys:String>
+    <sys:String x:Key="Browser_NotRegistered">Not registered. Click Register, then load the extension in Chrome or Edge.</sys:String>
     <sys:String x:Key="Browser_NeedsRepair">Registered for a folder that no longer exists. OB2 fixes this on start, or click Register now.</sys:String>
     <sys:String x:Key="Browser_OtherCopy">Registered for another copy of OB2 on this PC. Click Register to use this copy instead.</sys:String>
-    <sys:String x:Key="Browser_NoHost">host.exe is missing next to OB2.exe, so Chrome cannot reach OB2.</sys:String>
-    <sys:String x:Key="Browser_Help">Then open chrome://extensions, turn on Developer mode, click "Load unpacked", and pick the chrome-extension folder next to OB2.exe. Registration is per Windows user and needs no administrator rights.</sys:String>
+    <sys:String x:Key="Browser_NoHost">host.exe is missing next to OB2.exe, so the browser cannot reach OB2.</sys:String>
+    <sys:String x:Key="Browser_Help">Then open chrome://extensions (or edge://extensions), turn on Developer mode, click "Load unpacked", and pick the chrome-extension folder next to OB2.exe. Registration is per Windows user and needs no administrator rights.</sys:String>
     <sys:String x:Key="Browser_Rules">What to capture</sys:String>
     <sys:String x:Key="Browser_Confirm">Show the Add Download window before a captured download starts</sys:String>
     <sys:String x:Key="Browser_MinSize">Minimum size (MB)</sys:String>

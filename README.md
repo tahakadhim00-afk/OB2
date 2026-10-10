@@ -1,6 +1,6 @@
 # OB2
 
-A personal, IDM-style download manager for Windows. It does segmented, resumable downloads, has queues and a scheduler, and comes with a Chrome extension that hands browser downloads to the app. It ships as a portable folder that needs no installer and no .NET install.
+A personal, IDM-style download manager for Windows. It does segmented, resumable downloads, has queues and a scheduler, and comes with a Chrome/Edge extension that hands browser downloads to the app. It ships as a portable folder that needs no installer and no .NET install.
 
 ## Features
 
@@ -8,7 +8,7 @@ A personal, IDM-style download manager for Windows. It does segmented, resumable
 - **Integrity**: MD5 / SHA-256 checks, safe file names, Mark-of-the-Web on downloaded files.
 - **Organization**: categories with per-type folders; queues with concurrency limits, weekday schedules, and after-completion actions (sleep, shut down, run a command).
 - **Window and tray**: download list with per-connection progress, tray icon, Windows notifications, global or per-download speed limits.
-- **Chrome integration**: captures downloads with their cookies and referrer. If OB2 can't be reached, Chrome downloads normally. Shift-click to bypass capture; "Download with OB2" is on every link's right-click menu.
+- **Chrome and Edge integration**: captures downloads with their cookies and referrer. If OB2 can't be reached, the browser downloads normally. Shift-click to bypass capture; "Download with OB2" is on every link's right-click menu.
 - **Portable**: settings, history, and logs stay next to `OB2.exe`.
 
 ## Tech stack
@@ -19,8 +19,8 @@ A personal, IDM-style download manager for Windows. It does segmented, resumable
 | Download engine | `HttpClient` / `SocketsHttpHandler`, token-bucket rate limiting, sparse files |
 | Storage | SQLite (Microsoft.Data.Sqlite, WAL) with versioned migrations, JSON settings |
 | Logging | Serilog (rolling files; cookies and URL queries are redacted) |
-| Browser bridge | Chrome Native Messaging host (`host.exe`) ↔ app over a per-user named pipe |
-| Chrome extension | Manifest V3, TypeScript 5, esbuild |
+| Browser bridge | Native Messaging host for Chrome and Edge (`host.exe`) ↔ app over a per-user named pipe |
+| Browser extension | Manifest V3 (one build for Chrome and Edge), TypeScript 5, esbuild |
 | Tests | xUnit, FluentAssertions, Kestrel test server; Jest with jsdom for the extension |
 | Packaging | Single-file self-contained publish, PowerShell |
 
@@ -33,20 +33,20 @@ dotnet build OB2.sln -c Release
 dotnet test  OB2.sln -c Release
 dotnet run --project src/OB2.App -c Release
 
-# Chrome extension
+# Browser extension (Chrome and Edge)
 cd extension; npm ci; npm test; npm run build
 
 # Portable release (OB2.exe, host.exe, chrome-extension/, zip + SHA256SUMS)
 powershell -ExecutionPolicy Bypass -File build/publish.ps1 -IncludeHost
 ```
 
-To set up Chrome: in OB2, open **Options > Browser** and click **Register**. Then go to `chrome://extensions`, turn on Developer mode, click **Load unpacked**, and pick the `chrome-extension` folder.
+To set up Chrome or Edge: in OB2, open **Options > Browser** and click **Register**. Then go to `chrome://extensions` (or `edge://extensions`), turn on Developer mode, click **Load unpacked**, and pick the `chrome-extension` folder.
 
 ## Project layout
 
 ```
 src/        OB2.Core (engine) · OB2.Storage · OB2.App (WPF) · OB2.Host (Native Messaging) · OB2.Shared (protocol, IPC)
-extension/  Chrome MV3 extension
+extension/  MV3 extension for Chrome and Edge
 tests/      unit, storage, and integration tests
 build/      publish script and the release README
 docs/       protocol, decisions, backlog, per-phase reports
