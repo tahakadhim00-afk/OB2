@@ -11,7 +11,6 @@ Items noticed during a phase but outside its scope (PRD §0). Each one names the
 | Set the file timestamp from `Last-Modified` (FR-12, P2). The value is already stored. | Phase 2 | v1.1 |
 | Dynamic segment splitting: when a connection finishes early, split the largest remaining segment (IDM-style). | Phase 3 | v1.1 |
 | Detect HDD vs SSD and limit segments on rotating disks (§16.1). | Phase 3 | v1.1 |
-| Start with Windows (FR-31, P1). The setting exists (`general.startWithWindows`, off) but nothing writes the HKCU Run key. Out of scope for Phase 4. | Phase 4 | v1.0 |
 | Enforce `history.retentionDays` (§10.4). The setting exists; nothing prunes old rows yet. | Phase 4 | v1.0 |
 | List orphaned `.pgpart` files under "Recovered orphan files" (§10.3). They are never deleted, but they are not shown either. | Phase 4 | v1.0 |
 | FlaUI automation for the main flows (§14.1 UI row, P1). Phase 4 UI checks were manual plus UI Automation scripts. | Phase 4 | v1.0 |

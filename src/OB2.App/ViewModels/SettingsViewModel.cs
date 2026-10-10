@@ -6,6 +6,7 @@ using OB2.Core.Engine;
 using OB2.Core.Organization;
 using OB2.Core.Settings;
 using OB2.Shared.Ipc;
+using OB2.Storage.Paths;
 using OB2.Storage.Settings;
 using System.IO;
 
@@ -77,15 +78,21 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private string _browserStatus = string.Empty;
 
-    private readonly NativeHostRegistration? _registration;
+    [ObservableProperty]
+    private bool _startWithWindows;
 
-    public SettingsViewModel(AppSettings settings, JsonSettingsStore store, ICategoryRepository categories, DownloadEngine engine, string effectiveDefaultFolder, NativeHostRegistration? registration = null)
+    private readonly NativeHostRegistration? _registration;
+    private readonly StartupRegistration? _startup;
+
+    public SettingsViewModel(AppSettings settings, JsonSettingsStore store, ICategoryRepository categories, DownloadEngine engine, string effectiveDefaultFolder, NativeHostRegistration? registration = null, StartupRegistration? startup = null)
     {
         _settings = settings;
         _store = store;
         _categories = categories;
         _engine = engine;
         _registration = registration;
+        _startup = startup;
+        _startWithWindows = settings.General.StartWithWindows;
         _confirmCapture = settings.Capture.ConfirmBeforeAdding;
         _captureMinSizeMb = Math.Round(settings.Capture.MinSizeBytes / 1048576.0, 2);
         _captureExtensions = string.Join(", ", settings.Capture.Extensions);
@@ -149,6 +156,19 @@ public sealed partial class SettingsViewModel : ObservableObject
             return;
         }
 
+        // FR-31: only a change made here takes the Run value over from another copy of OB2.
+        var startupChanged = StartWithWindows != _settings.General.StartWithWindows;
+        try
+        {
+            _startup?.Sync(StartWithWindows, takeOver: startupChanged);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            ErrorText = ex.Message;
+            return;
+        }
+
+        _settings.General.StartWithWindows = StartWithWindows;
         var d = _settings.Downloads;
         _settings.Folders.DefaultSaveFolder = string.IsNullOrWhiteSpace(DefaultFolder) ? null : DefaultFolder.Trim();
         _settings.General.MinimizeToTrayOnClose = MinimizeToTray;

@@ -74,11 +74,12 @@ public partial class App : Application
             return;
         }
 
-        _services = CompositionRoot.Build(_storage);
+        _services = CompositionRoot.Build(_storage, Arguments.DataRoot);
         _logger = _services.GetRequiredService<ILogger<App>>();
         RegisterErrorBoundary();
         StartServices();
         StartBrowserBridge(settings.Ipc.PipeName);
+        SyncStartWithWindows(settings);
     }
 
     private async Task<bool> ForwardToRunningInstanceAsync(string pipeName)
@@ -119,6 +120,22 @@ public partial class App : Application
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
         {
             _logger?.LogWarning(ex, "Browser integration could not be re-registered");
+        }
+    }
+
+    /// <summary>FR-31: keep the Run value in step with the setting, e.g. after the folder moved.</summary>
+    private void SyncStartWithWindows(AppSettings settings)
+    {
+        try
+        {
+            if (_services!.GetRequiredService<StartupRegistration>().Sync(settings.General.StartWithWindows, takeOver: false))
+            {
+                _logger?.LogInformation("Start with Windows {State}", settings.General.StartWithWindows ? "registered" : "removed");
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            _logger?.LogWarning(ex, "Start with Windows could not be updated");
         }
     }
 

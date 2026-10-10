@@ -9,14 +9,17 @@ using OB2.Core.Services;
 using OB2.Core.Time;
 using OB2.Shared.Ipc;
 using OB2.Storage;
+using OB2.Storage.Paths;
 using OB2.Storage.Repositories;
+using System.IO;
 
 namespace OB2.App;
 
 /// <summary>The only place where services are wired together.</summary>
 internal static class CompositionRoot
 {
-    public static ServiceProvider Build(StorageContext storage)
+    /// <param name="explicitDataRoot">The <c>--data</c> folder, if given, so "Start with Windows" starts the same data.</param>
+    public static ServiceProvider Build(StorageContext storage, string? explicitDataRoot = null)
     {
         var services = new ServiceCollection();
 
@@ -56,6 +59,9 @@ internal static class CompositionRoot
             AppContext.BaseDirectory,
             // The manifest lives next to host.exe unless that folder is read-only (§8.2, §12.3).
             storage.Paths.FellBackFromReadOnly ? storage.Paths.DataDirectory : AppContext.BaseDirectory));
+        services.AddSingleton(_ => new StartupRegistration(
+            Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "OB2.exe"),
+            explicitDataRoot));
         services.AddSingleton<TrayService>();
         services.AddSingleton<CompletionActionService>();
         services.AddSingleton<MainViewModel>();

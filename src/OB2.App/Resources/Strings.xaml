@@ -157,6 +157,7 @@
     <sys:String x:Key="Settings_ShowComplete">Show the "Download complete" window</sys:String>
     <sys:String x:Key="Settings_Notifications">Show Windows notifications for finished and failed downloads</sys:String>
     <sys:String x:Key="Settings_AutoResume">Resume interrupted downloads when OB2 starts</sys:String>
+    <sys:String x:Key="Settings_StartWithWindows">Start OB2 in the tray when I sign in to Windows</sys:String>
     <sys:String x:Key="Settings_Connections">Connections per download (1–32)</sys:String>
     <sys:String x:Key="Settings_PerHost">Connections per server, all downloads (1–64)</sys:String>
     <sys:String x:Key="Settings_Retries">Retries per connection</sys:String>
