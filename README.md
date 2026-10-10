@@ -57,4 +57,4 @@ docs/       protocol, decisions, backlog, per-phase reports
 - [OB2_PRD.md](OB2_PRD.md): requirements and the six-phase plan
 - [docs/protocol.md](docs/protocol.md): the extension ↔ host ↔ app protocol
 - [docs/decisions.md](docs/decisions.md): design decisions
-- `docs/phase-N-report.md`: what each phase delivered, with test results
+- `docs/phase-N-report.md` and `docs/v1.0-report.md`: what each step delivered, with test results
