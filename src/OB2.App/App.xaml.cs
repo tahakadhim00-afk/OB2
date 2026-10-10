@@ -94,6 +94,7 @@ public partial class App : Application
         var services = _services!;
         var settings = services.GetRequiredService<AppSettings>();
         var downloads = services.GetRequiredService<DownloadService>();
+        RunFirstRunWizard(settings, downloads);
         var engine = services.GetRequiredService<DownloadEngine>();
         engine.GlobalLimiter.BytesPerSecond = settings.SpeedLimits.GlobalBytesPerSecond;
 
@@ -169,7 +170,12 @@ public partial class App : Application
 
         if (!Arguments.Minimized)
         {
+            _window.ContentRendered += (_, _) => LogStartupTime("window shown");
             _window.Show();
+        }
+        else
+        {
+            LogStartupTime("tray ready");
         }
 
         if (Arguments.Url is { } url)
@@ -177,6 +183,34 @@ public partial class App : Application
             _window.ShowAndActivate();
             viewModel.AddFromPrefill(new AddDownloadPrefill { Url = url, Source = DownloadSource.Cli });
         }
+    }
+
+    /// <summary>
+    /// Flow D step 2: on first launch, ask where downloads go. Skipped for tray-only starts
+    /// (browser capture), which use the Downloads folder until the window is opened.
+    /// </summary>
+    private void RunFirstRunWizard(AppSettings settings, DownloadService downloads)
+    {
+        if (settings.Folders.DefaultSaveFolder is not null || Arguments.Minimized)
+        {
+            return;
+        }
+
+        var paths = _storage!.Paths;
+        var wizard = new Views.FirstRunWindow(downloads.DefaultSaveFolder, paths.IsPortable, paths.Root);
+        if (wizard.ShowDialog() == true && wizard.ChosenFolder is { } folder)
+        {
+            settings.Folders.DefaultSaveFolder = folder;
+            _storage.SettingsStore.SaveAsync(settings).GetAwaiter().GetResult();
+            _logger?.LogInformation("First run: save folder set");
+        }
+    }
+
+    /// <summary>§16.1: single-file startup cost is measured on every launch.</summary>
+    private void LogStartupTime(string stage)
+    {
+        using var process = System.Diagnostics.Process.GetCurrentProcess();
+        _logger?.LogInformation("Startup: {Stage} {Ms:0} ms after process start", stage, (DateTime.Now - process.StartTime).TotalMilliseconds);
     }
 
     private async Task TickSchedulerAsync(QueueScheduler scheduler)

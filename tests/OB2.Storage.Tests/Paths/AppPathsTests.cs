@@ -39,6 +39,31 @@ public sealed class AppPathsTests : IDisposable
     }
 
     [Fact]
+    public void Read_only_portable_folder_falls_back_to_appdata()
+    {
+        // §12.3: e.g. the zip extracted to a read-only share or a write-protected USB stick.
+        var exeDir = Directory.CreateDirectory(_temp.Combine("app")).FullName;
+        File.WriteAllText(Path.Combine(exeDir, AppPaths.PortableFlagFileName), "");
+        var roaming = _temp.Combine("roaming");
+
+        var paths = AppPaths.Resolve(new AppPathEnvironment(exeDir, roaming) { IsWritable = _ => false });
+
+        paths.IsPortable.Should().BeFalse();
+        paths.FellBackFromReadOnly.Should().BeTrue();
+        paths.Root.Should().Be(Path.Combine(roaming, "OB2"));
+    }
+
+    [Fact]
+    public void Default_writability_probe_leaves_no_files_behind()
+    {
+        var exeDir = Directory.CreateDirectory(_temp.Combine("app")).FullName;
+        File.WriteAllText(Path.Combine(exeDir, AppPaths.PortableFlagFileName), "");
+
+        AppPaths.Resolve(new AppPathEnvironment(exeDir, _temp.Combine("roaming"))).IsPortable.Should().BeTrue();
+        Directory.GetFiles(exeDir).Should().ContainSingle("only portable.flag remains");
+    }
+
+    [Fact]
     public void A_directory_named_like_the_flag_does_not_count()
     {
         var exeDir = Directory.CreateDirectory(_temp.Combine("app")).FullName;

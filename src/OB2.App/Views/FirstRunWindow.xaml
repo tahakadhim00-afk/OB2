@@ -1,0 +1,25 @@
+<Window x:Class="OB2.App.Views.FirstRunWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="{StaticResource FirstRun_Title}"
+        Icon="/Resources/ob2.ico"
+        Width="520" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterScreen">
+    <!-- Flow D step 2: pick the save folder on first launch. -->
+    <StackPanel Margin="20">
+        <TextBlock Text="{StaticResource FirstRun_Heading}" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,8" />
+        <TextBlock Text="{StaticResource FirstRun_Body}" TextWrapping="Wrap" Margin="0,0,0,14" />
+        <Label Content="{StaticResource Settings_DefaultFolder}" Target="{Binding ElementName=FolderBox}" Padding="0,0,0,4" />
+        <Grid Margin="0,0,0,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBox x:Name="FolderBox" />
+            <Button Grid.Column="1" Content="{StaticResource Common_Browse}" Click="OnBrowse" Margin="6,0,0,0" Padding="10,2" />
+        </Grid>
+        <TextBlock x:Name="ModeText" Style="{StaticResource Hint}" Margin="0,0,0,8" />
+        <TextBlock x:Name="ErrorText" Style="{StaticResource ErrorText}" Margin="0,0,0,8" />
+        <Button Content="{StaticResource FirstRun_Start}" Style="{StaticResource DialogButton}" HorizontalAlignment="Right" IsDefault="True" Click="OnStart" />
+    </StackPanel>
+</Window>

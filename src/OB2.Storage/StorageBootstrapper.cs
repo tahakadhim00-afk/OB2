@@ -86,6 +86,11 @@ public static class StorageBootstrapper
                 "OB2 starting; data root {Root} ({Mode})",
                 paths.Root,
                 paths.IsPortable ? "portable" : "per-user");
+            if (paths.FellBackFromReadOnly)
+            {
+                logger.LogWarning("portable.flag found but the program folder is read-only; using {Root} instead", paths.Root);
+            }
+
             foreach (var issue in load.Issues)
             {
                 logger.LogWarning("Settings: {Issue}", issue);

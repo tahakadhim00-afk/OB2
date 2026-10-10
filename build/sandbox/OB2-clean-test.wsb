@@ -1,0 +1,16 @@
+<!-- AC-8: a clean Windows with no .NET installed. Requires the "Windows Sandbox" optional feature
+     (Settings > System > Optional features, or: Enable-WindowsOptionalFeature -Online -FeatureName Containers-DisposableClientVM).
+     Run build/publish.ps1 first, then double-click this file. The publish folder appears read-only on the
+     sandbox desktop; the logon command copies it to a writable folder and opens it. -->
+<Configuration>
+  <MappedFolders>
+    <MappedFolder>
+      <HostFolder>..\..\publish</HostFolder>
+      <SandboxFolder>C:\Users\WDAGUtilityAccount\Desktop\publish</SandboxFolder>
+      <ReadOnly>true</ReadOnly>
+    </MappedFolder>
+  </MappedFolders>
+  <LogonCommand>
+    <Command>powershell -ExecutionPolicy Bypass -Command "Expand-Archive C:\Users\WDAGUtilityAccount\Desktop\publish\OB2-portable.zip C:\OB2; Get-ChildItem 'C:\Program Files\dotnet' -ErrorAction SilentlyContinue | Out-File C:\OB2\dotnet-check.txt; explorer C:\OB2"</Command>
+  </LogonCommand>
+</Configuration>

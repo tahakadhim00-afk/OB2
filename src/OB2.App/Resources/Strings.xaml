@@ -190,6 +190,15 @@
     <sys:String x:Key="Scheduler_InvalidTime">Use 24-hour time, for example 01:00 or 23:30.</sys:String>
     <sys:String x:Key="Scheduler_CannotDeleteLast">At least one queue must remain.</sys:String>
 
+    <!-- First run (Flow D) -->
+    <sys:String x:Key="FirstRun_Title">Welcome to OB2</sys:String>
+    <sys:String x:Key="FirstRun_Heading">Where should downloads go?</sys:String>
+    <sys:String x:Key="FirstRun_Body">OB2 saves each file type in its own subfolder (Video, Music, Documents…) inside this folder. You can change it later in Options.</sys:String>
+    <sys:String x:Key="FirstRun_Start">Start using OB2</sys:String>
+    <sys:String x:Key="FirstRun_Portable">Portable mode: settings and history stay next to OB2.exe in {0}</sys:String>
+    <sys:String x:Key="FirstRun_PerUser">Settings and history are kept in {0}</sys:String>
+    <sys:String x:Key="FirstRun_FolderError">That folder cannot be used: {0}</sys:String>
+
     <!-- Startup / errors -->
     <sys:String x:Key="Startup_FailedTitle">OB2 could not start</sys:String>
     <sys:String x:Key="Startup_FailedMessage">OB2 could not prepare its data folder or database.&#x0a;&#x0a;{0}</sys:String>
