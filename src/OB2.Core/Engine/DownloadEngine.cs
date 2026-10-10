@@ -45,6 +45,9 @@ public sealed partial class DownloadEngine : IDisposable
         _hostLimiter = new HostConnectionLimiter(options().MaxConnectionsPerHost);
     }
 
+    /// <summary>§16.1 / D-66: an expired download address is refreshed at most this many times per run.</summary>
+    public const int MaxUrlRefreshes = 3;
+
     /// <summary>Global speed limit shared by every download (FR-9). Null rate is unlimited.</summary>
     public TokenBucket GlobalLimiter { get; } = new();
 

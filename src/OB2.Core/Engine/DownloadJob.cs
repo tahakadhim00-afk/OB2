@@ -41,6 +41,13 @@ internal sealed partial class DownloadJob : IDisposable
     private int _connectionLimit = 1;
     private int _throttleErrors;
 
+    /// <summary>The address segments download from; replaced when an expired signed URL is refreshed.</summary>
+    private Uri _url = null!;
+    private readonly SemaphoreSlim _refreshLock = new(1, 1);
+    private int _urlRefreshes;
+
+    private const int MaxUrlRefreshes = DownloadEngine.MaxUrlRefreshes;
+
     public DownloadJob(
         long id,
         IDownloadRepository repository,
@@ -84,7 +91,11 @@ internal sealed partial class DownloadJob : IDisposable
         }
     }
 
-    public void Dispose() => _cancellation.Dispose();
+    public void Dispose()
+    {
+        _cancellation.Dispose();
+        _refreshLock.Dispose();
+    }
 
     public DownloadProgress Snapshot()
     {
@@ -232,7 +243,7 @@ internal sealed partial class DownloadJob : IDisposable
 
     private async Task RunPoolAsync(CancellationToken ct)
     {
-        var url = new Uri(_item.FinalUrl ?? _item.Url);
+        Volatile.Write(ref _url, new Uri(_item.FinalUrl ?? _item.Url));
         var context = RequestContext.For(_item, _options.UserAgent, _cookies);
         var worker = new SegmentWorker(_http, _options, _file!.SafeFileHandle, _limiters, OnBytes);
 
@@ -247,7 +258,7 @@ internal sealed partial class DownloadJob : IDisposable
                 Volatile.Write(ref _connectionLimit, Math.Min(Math.Max(1, _connectionLimit), pending.Count));
                 using var failFast = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 var workers = Enumerable.Range(0, _connectionLimit)
-                    .Select(i => WorkerLoopAsync(i, pending, worker, url, context, failFast))
+                    .Select(i => WorkerLoopAsync(i, pending, worker, context, failFast))
                     .ToArray();
                 await Task.WhenAll(workers).ConfigureAwait(false);
             }
@@ -265,14 +276,14 @@ internal sealed partial class DownloadJob : IDisposable
         }
     }
 
-    private async Task WorkerLoopAsync(int index, ConcurrentQueue<Segment> pending, SegmentWorker worker, Uri url, RequestContext context, CancellationTokenSource failFast)
+    private async Task WorkerLoopAsync(int index, ConcurrentQueue<Segment> pending, SegmentWorker worker, RequestContext context, CancellationTokenSource failFast)
     {
         var ct = failFast.Token;
         try
         {
             while (index < Volatile.Read(ref _connectionLimit) && pending.TryDequeue(out var segment))
             {
-                if (!await RunSegmentWithRetriesAsync(index, segment, worker, url, context, ct).ConfigureAwait(false))
+                if (!await RunSegmentWithRetriesAsync(index, segment, worker, context, ct).ConfigureAwait(false))
                 {
                     pending.Enqueue(segment);
                     return;
@@ -288,11 +299,12 @@ internal sealed partial class DownloadJob : IDisposable
     }
 
     /// <returns>True when the segment finished; false when this worker was shed by the adaptive limit.</returns>
-    private async Task<bool> RunSegmentWithRetriesAsync(int index, Segment segment, SegmentWorker worker, Uri url, RequestContext context, CancellationToken ct)
+    private async Task<bool> RunSegmentWithRetriesAsync(int index, Segment segment, SegmentWorker worker, RequestContext context, CancellationToken ct)
     {
         while (true)
         {
             ct.ThrowIfCancellationRequested();
+            var url = Volatile.Read(ref _url);
             var before = segment.Downloaded;
             segment.Status = SegmentStatus.Active;
             Interlocked.Increment(ref _activeConnections);
@@ -305,6 +317,17 @@ internal sealed partial class DownloadJob : IDisposable
 
                 segment.RetryCount = 0;
                 return true;
+            }
+            catch (HttpStatusException ex) when (!ct.IsCancellationRequested && IsExpiredLinkStatus(ex.StatusCode))
+            {
+                // §16.1: a signed CDN URL can expire mid-download. Ask the original link for a fresh
+                // one; if it gives the same file at a new address, carry on without spending a retry.
+                segment.Status = SegmentStatus.Pending;
+                if (!await TryRefreshUrlAsync(url, context, ct).ConfigureAwait(false))
+                {
+                    segment.Status = SegmentStatus.Failed;
+                    throw;
+                }
             }
             catch (Exception ex) when (!ct.IsCancellationRequested && RetryPolicy.IsTransient(ex))
             {
@@ -370,6 +393,73 @@ internal sealed partial class DownloadJob : IDisposable
         if (current > 1)
         {
             LogConnectionsReduced(_id, current, reduced);
+        }
+    }
+
+    private static bool IsExpiredLinkStatus(System.Net.HttpStatusCode status) => status is
+        System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden or
+        System.Net.HttpStatusCode.NotFound or System.Net.HttpStatusCode.Gone;
+
+    /// <summary>
+    /// Re-probes the original link for a fresh final URL (decision D-66). Segments that fail at
+    /// the same moment share one refresh. Returns false when there is nothing new to try: the
+    /// link gives the same address, now points at a different file, cannot be probed, or has
+    /// been refreshed <see cref="MaxUrlRefreshes"/> times already.
+    /// </summary>
+    private async Task<bool> TryRefreshUrlAsync(Uri failedUrl, RequestContext context, CancellationToken ct)
+    {
+        await _refreshLock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            if (!Volatile.Read(ref _url).Equals(failedUrl))
+            {
+                return true; // another segment already fetched a fresh address
+            }
+
+            if (_urlRefreshes >= MaxUrlRefreshes)
+            {
+                return false;
+            }
+
+            _urlRefreshes++;
+            ProbeResult probe;
+            try
+            {
+                probe = await new UrlProber(_http, _options.ConnectTimeout + _options.ReadIdleTimeout)
+                    .ProbeAsync(new Uri(_item.Url), context, _item.FileName, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is HttpStatusException or HttpRequestException or TimeoutException or IOException)
+            {
+                LogUrlRefreshFailed(_id, ex.Message);
+                return false;
+            }
+
+            if (probe.FinalUrl.Equals(failedUrl))
+            {
+                return false; // same address: the server really refuses
+            }
+
+            if (RemoteChanged(probe))
+            {
+                // A different file now; failing keeps progress, and the next start notices the change.
+                LogRemoteChanged(_id);
+                return false;
+            }
+
+            Volatile.Write(ref _url, probe.FinalUrl);
+            lock (_statusLock)
+            {
+                _item.FinalUrl = probe.FinalUrl.AbsoluteUri;
+                _repository.Update(_item);
+            }
+
+            _repository.AddHistoryEvent(_id, "url-refreshed");
+            LogUrlRefreshed(_id, _urlRefreshes);
+            return true;
+        }
+        finally
+        {
+            _refreshLock.Release();
         }
     }
 
@@ -658,6 +748,12 @@ internal sealed partial class DownloadJob : IDisposable
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Download {Id}: final checkpoint failed")]
     private partial void LogCheckpointFailed(Exception ex, long id);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Download {Id}: the download address expired; continuing with a fresh one (refresh {Count})")]
+    private partial void LogUrlRefreshed(long id, int count);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Download {Id}: could not get a fresh download address: {Error}")]
+    private partial void LogUrlRefreshFailed(long id, string error);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Download {Id}: the remote file changed since the last attempt; starting over")]
     private partial void LogRemoteChanged(long id);

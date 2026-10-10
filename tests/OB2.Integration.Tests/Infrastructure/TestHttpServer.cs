@@ -28,8 +28,12 @@ namespace OB2.Integration.Tests.Infrastructure;
 /// <item><c>cookie=a=b</c> require that cookie, else 403</item>
 /// <item><c>disposition=NAME</c> send Content-Disposition: attachment</item>
 /// <item><c>etag=X</c> override the ETag</item>
+/// <item><c>token=T&amp;uses=K</c> a signed URL: the first K GETs carrying token T succeed, later ones get 403</item>
 /// </list>
 /// <c>/redirect?to=/path</c> answers 302. <c>/status/{code}</c> answers that code.
+/// <c>/sign/{size}/{name}?options</c> answers 302 to <c>/file/{size}/{name}?token=tN&amp;options</c>
+/// with a new token each time, like a CDN handing out signed links; <c>rotateEtag=1</c> also gives
+/// each new link a different ETag (the file behind the link changed).
 /// </summary>
 public sealed class TestHttpServer : IAsyncDisposable
 {
@@ -142,6 +146,17 @@ public sealed class TestHttpServer : IAsyncDisposable
                 context.Response.StatusCode = StatusCodes.Status302Found;
                 context.Response.Headers.Location = request.Query["to"].ToString();
                 break;
+            case "sign" when segments.Length >= 3:
+                var signed = Increment("#sign").ToString(CultureInfo.InvariantCulture);
+                var token = "t" + signed;
+                var options = request.QueryString.HasValue ? "&" + request.QueryString.Value![1..] : string.Empty;
+                if (request.Query.ContainsKey("rotateEtag"))
+                {
+                    options += "&etag=v" + signed; // the file behind the link changes with every new link
+                }
+                context.Response.StatusCode = StatusCodes.Status302Found;
+                context.Response.Headers.Location = $"/file/{segments[1]}/{segments[2]}?token={token}{options}";
+                break;
             case "status" when segments.Length >= 2:
                 context.Response.StatusCode = int.Parse(segments[1], CultureInfo.InvariantCulture);
                 break;
@@ -156,8 +171,16 @@ public sealed class TestHttpServer : IAsyncDisposable
         var request = context.Request;
         var response = context.Response;
         var query = request.Query;
-        var key = request.Path + request.QueryString;
+        // Fault counters ignore the signing token, so a refreshed link does not reset them.
+        var key = request.Path + string.Join('&', query.Where(q => q.Key != "token").Select(q => q.Key + "=" + q.Value));
         var isHead = HttpMethods.IsHead(request.Method);
+
+        if (!isHead && query.TryGetValue("token", out var signedToken) && query.ContainsKey("uses")
+            && Increment("#uses-" + signedToken) > Int(query, "uses", int.MaxValue))
+        {
+            response.StatusCode = StatusCodes.Status403Forbidden; // the signed link has expired
+            return;
+        }
         var rangeLie = query.ContainsKey("rangeLie");
         var noRange = query.ContainsKey("norange") || query.ContainsKey("nolength") || (rangeLie && !isHead);
         var noLength = query.ContainsKey("nolength");
