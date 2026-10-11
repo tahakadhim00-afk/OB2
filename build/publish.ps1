@@ -10,6 +10,9 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $out = Join-Path $root "publish"
 $stage = Join-Path $out "OB2-portable"
+# A copy of OB2 running from publish/ holds files open; deleting around them would leave a half-empty folder.
+$running = @(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith("$out\", [StringComparison]::OrdinalIgnoreCase) })
+if ($running) { throw "Close OB2 first: $(($running | ForEach-Object { $_.Path }) -join ', ') is running from the publish folder." }
 if (Test-Path $out) { Remove-Item -Recurse -Force $out }
 New-Item -ItemType Directory -Force $stage | Out-Null
 
