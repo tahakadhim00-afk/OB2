@@ -2,6 +2,27 @@
 
 **A download manager for Windows, designed and written from scratch.**
 
+<p>
+  <img alt="C# 14" src="https://img.shields.io/badge/C%23-14-239120?style=for-the-badge&logoColor=white" />
+  <img alt=".NET 10" src="https://img.shields.io/badge/.NET-10_LTS-512BD4?style=for-the-badge&logo=dotnet&logoColor=white" />
+  <img alt="WPF" src="https://img.shields.io/badge/WPF-MVVM-0C54C2?style=for-the-badge&logoColor=white" />
+  <img alt="Windows" src="https://img.shields.io/badge/Windows-10_%7C_11-0078D6?style=for-the-badge&logoColor=white" />
+  <img alt="SQLite" src="https://img.shields.io/badge/SQLite-WAL-003B57?style=for-the-badge&logo=sqlite&logoColor=white" />
+  <img alt="Serilog" src="https://img.shields.io/badge/Serilog-logging-1E88E5?style=for-the-badge&logoColor=white" />
+</p>
+<p>
+  <img alt="TypeScript 5" src="https://img.shields.io/badge/TypeScript-5-3178C6?style=for-the-badge&logo=typescript&logoColor=white" />
+  <img alt="Chrome extension MV3" src="https://img.shields.io/badge/Chrome-MV3_extension-4285F4?style=for-the-badge&logo=googlechrome&logoColor=white" />
+  <img alt="Microsoft Edge" src="https://img.shields.io/badge/Edge-supported-0078D7?style=for-the-badge&logoColor=white" />
+  <img alt="esbuild" src="https://img.shields.io/badge/esbuild-bundler-FFCF00?style=for-the-badge&logo=esbuild&logoColor=black" />
+  <img alt="Node.js 22" src="https://img.shields.io/badge/Node.js-22-339933?style=for-the-badge&logo=nodedotjs&logoColor=white" />
+</p>
+<p>
+  <img alt="xUnit" src="https://img.shields.io/badge/xUnit-tests-5E2750?style=for-the-badge&logoColor=white" />
+  <img alt="Jest" src="https://img.shields.io/badge/Jest-tests-C21325?style=for-the-badge&logo=jest&logoColor=white" />
+  <img alt="PowerShell" src="https://img.shields.io/badge/PowerShell-packaging-5391FE?style=for-the-badge&logoColor=white" />
+</p>
+
 OB2 splits each download across many connections, resumes after a crash or a reboot, organizes files by type, and runs queues on a schedule. A companion extension for Chrome and Edge sends browser downloads, page links, and videos straight to the app. It ships as one portable folder: no installer, and no .NET install needed.
 
 ---
