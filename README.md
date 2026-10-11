@@ -1,5 +1,8 @@
 <h1 align="center">
-  <img src="assets/logo/inside_readme_on_github.png" alt="OB2" width="440" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo/inside_readme_on_github.png" />
+    <img src="assets/logo/inside_app_logo.png" alt="OB2" width="440" />
+  </picture>
 </h1>
 
 **A download manager for Windows, designed and written from scratch.**
