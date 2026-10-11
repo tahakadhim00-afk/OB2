@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using OB2.Core.Downloads;
+using OB2.Core.Time;
 
 namespace OB2.Core.Media;
 
@@ -132,14 +133,25 @@ public static class YtDlp
     private static long? Bytes(string text) => Number(text) is { } value ? (long)value : null;
 }
 
-/// <summary>Runs <c>yt-dlp -J</c> to list what a video page offers.</summary>
+/// <summary>
+/// Runs <c>yt-dlp -J</c> to list what a video page offers. Answers are kept for a few minutes
+/// (D-72): the browser's button lists the qualities, then the download or the Download Video
+/// window needs the same list, and yt-dlp takes seconds to produce it.
+/// </summary>
 public sealed class MediaInspector
 {
-    private readonly MediaTools _tools;
+    private static readonly TimeSpan KeepFor = TimeSpan.FromMinutes(10);
+    private const int KeepAtMost = 20;
 
-    public MediaInspector(MediaTools tools)
+    private readonly MediaTools _tools;
+    private readonly IClock _clock;
+    private readonly Dictionary<string, (MediaInfo Info, DateTimeOffset At)> _recent = new(StringComparer.Ordinal);
+    private readonly Lock _lock = new();
+
+    public MediaInspector(MediaTools tools, IClock? clock = null)
     {
         _tools = tools ?? throw new ArgumentNullException(nameof(tools));
+        _clock = clock ?? SystemClock.Instance;
     }
 
     public MediaTools Tools => _tools;
@@ -147,11 +159,35 @@ public sealed class MediaInspector
     /// <exception cref="MediaException">yt-dlp failed (unsupported site, private video, network…).</exception>
     public async Task<MediaInfo> InspectAsync(Uri url, CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(url);
         if (!_tools.IsInstalled)
         {
             throw new MediaException("yt-dlp, ffmpeg and Deno are not installed.");
         }
 
+        lock (_lock)
+        {
+            if (_recent.TryGetValue(url.AbsoluteUri, out var kept) && _clock.UtcNow - kept.At < KeepFor)
+            {
+                return kept.Info;
+            }
+        }
+
+        var info = await RunAsync(url, cancellationToken).ConfigureAwait(false);
+        lock (_lock)
+        {
+            _recent[url.AbsoluteUri] = (info, _clock.UtcNow);
+            if (_recent.Count > KeepAtMost)
+            {
+                _recent.Remove(_recent.MinBy(e => e.Value.At).Key);
+            }
+        }
+
+        return info;
+    }
+
+    private async Task<MediaInfo> RunAsync(Uri url, CancellationToken cancellationToken)
+    {
         var output = new StringBuilder();
         var errors = new List<string>();
         int code;

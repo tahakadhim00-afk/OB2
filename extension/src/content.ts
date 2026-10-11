@@ -3,9 +3,10 @@
 // the clicked link's address, only when Shift is held; reads nothing else.
 // FR-24: the "Download with OB2" button over videos (overlay.ts). The background tells this frame
 // which media files it loaded; nothing about the page is sent anywhere until the button is clicked.
+// D-72: a click on a video page (YouTube) asks OB2 for the page's qualities (listFormats).
 // D-70: the popup's "Find downloads" reads the page's links through scanPage (scan.ts).
 
-import type { CaptureOutcome } from './capture';
+import type { CaptureOutcome, FormatsOutcome } from './capture';
 import { isMediaCandidate, type MediaCandidate } from './media';
 import { MediaOverlay, type SendResult } from './overlay';
 import { loadMediaButtonEnabled, MEDIA_BUTTON_KEY } from './rules';
@@ -51,11 +52,21 @@ async function sendMedia(media: MediaCandidate): Promise<SendResult> {
   return sendResultOf((await chrome.runtime.sendMessage({ type: 'ob2-download-media', media })) as CaptureOutcome | undefined);
 }
 
+/** D-72: asked only when the button is clicked on a video page; OB2 lists its qualities. */
+async function listFormats(pageUrl: string): Promise<FormatsOutcome> {
+  try {
+    const outcome = (await chrome.runtime.sendMessage({ type: 'ob2-media-formats', url: pageUrl })) as FormatsOutcome | undefined;
+    return outcome ?? { action: 'failed', reason: 'failed' };
+  } catch {
+    return { action: 'failed', reason: 'failed' }; // the extension was reloaded since this page loaded
+  }
+}
+
 function startMediaButton(): void {
   // D-61: nothing from an Incognito window goes to OB2 (the background refuses it as well).
   if ((chrome.extension as { inIncognitoContext?: boolean } | undefined)?.inIncognitoContext) return;
 
-  const overlay = new MediaOverlay(document, sendMedia);
+  const overlay = new MediaOverlay(document, sendMedia, 'closed', listFormats);
   // D-70: the popup's "Find downloads". Lives in the extension's isolated world, out of the page's reach.
   (globalThis as Record<string, unknown>)[SCAN_GLOBAL] = (): PageScan => scanPage(document, overlay.detectedMedia());
   chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {

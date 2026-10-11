@@ -51,10 +51,15 @@ internal static class HostBridge
     /// "not running" takes to detect (it is paid before every launch).
     /// </summary>
     private static readonly TimeSpan ConnectTimeout = TimeSpan.FromMilliseconds(300);
-    private static readonly TimeSpan ReplyTimeout = TimeSpan.FromSeconds(10);
 
     /// <summary>§8.3: wait up to 15 seconds for a freshly started app.</summary>
     private static readonly TimeSpan LaunchWait = TimeSpan.FromSeconds(15);
+
+    /// <summary>
+    /// Requests that start OB2 when it isn't running: a capture, and the quality list asked for by
+    /// a click on the video button (D-72). The popup's requests never do.
+    /// </summary>
+    private static bool StartsApp(string type) => type is MessageTypes.AddDownload or MessageTypes.GetMediaFormats;
 
     public static async Task<ProtocolMessage> HandleAsync(ProtocolMessage request, string baseDirectory, string appData)
     {
@@ -71,9 +76,14 @@ internal static class HostBridge
         {
             try
             {
-                return await PipeClient.SendAsync(pipe, request, ConnectTimeout, ReplyTimeout);
+                return await PipeClient.SendAsync(pipe, request, ConnectTimeout, MessageTypes.ReplyTime(request.Type));
             }
-            catch (TimeoutException) when (request.Type == MessageTypes.AddDownload)
+            catch (ReplyTimeoutException)
+            {
+                // Running but slow (yt-dlp on a slow line): starting it again would not help.
+                return ProtocolMessage.ErrorReply(request.Id, ProtocolErrors.PipeTimeout, "OB2 did not answer in time.");
+            }
+            catch (TimeoutException) when (StartsApp(request.Type))
             {
                 // Not running: start it below.
             }
@@ -86,7 +96,7 @@ internal static class HostBridge
                 return ProtocolMessage.ErrorReply(request.Id, ProtocolErrors.InternalError, "The connection to OB2 failed.");
             }
         }
-        else if (request.Type != MessageTypes.AddDownload)
+        else if (!StartsApp(request.Type))
         {
             return ProtocolMessage.ErrorReply(request.Id, ProtocolErrors.AppNotRunning, "OB2 has not been started on this PC yet.");
         }
@@ -126,12 +136,16 @@ internal static class HostBridge
             try
             {
                 // Connecting waits for the pipe to be created, so the message goes the moment the app listens.
-                return await PipeClient.SendAsync(pipe, request, deadline - DateTime.UtcNow, ReplyTimeout);
+                return await PipeClient.SendAsync(pipe, request, deadline - DateTime.UtcNow, MessageTypes.ReplyTime(request.Type));
             }
             catch (Exception ex) when (ex is IOException or ArgumentOutOfRangeException)
             {
                 // The instance closed under us, or the deadline passed between the check and the call.
                 await Task.Delay(50);
+            }
+            catch (ReplyTimeoutException)
+            {
+                return ProtocolMessage.ErrorReply(request.Id, ProtocolErrors.PipeTimeout, "OB2 did not answer in time.");
             }
             catch (TimeoutException)
             {

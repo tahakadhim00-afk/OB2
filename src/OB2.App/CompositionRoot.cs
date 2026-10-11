@@ -41,7 +41,7 @@ internal static class CompositionRoot
 
         // D-71: yt-dlp, Deno and ffmpeg for video pages, downloaded into the data root on first use.
         services.AddSingleton(_ => new MediaTools(storage.Paths.ToolsDirectory));
-        services.AddSingleton(sp => new MediaInspector(sp.GetRequiredService<MediaTools>()));
+        services.AddSingleton(sp => new MediaInspector(sp.GetRequiredService<MediaTools>(), sp.GetRequiredService<IClock>()));
         services.AddSingleton(sp => new MediaToolInstaller(sp.GetRequiredService<MediaTools>(), storage.LoggerFactory));
 
         services.AddSingleton(sp => new DownloadEngine(

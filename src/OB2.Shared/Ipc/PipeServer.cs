@@ -88,7 +88,12 @@ public sealed class PipeServer : IAsyncDisposable
                     return;
                 }
 
-                reply = ProtocolValidator.Validate(request) ?? await _handler.HandleAsync(request, timeout.Token).ConfigureAwait(false);
+                if (request.Type == MessageTypes.GetMediaFormats)
+                {
+                    timeout.CancelAfter(MessageTypes.ReplyTime(request.Type)); // D-72: yt-dlp needs longer
+                }
+
+                reply =ProtocolValidator.Validate(request) ?? await _handler.HandleAsync(request, timeout.Token).ConfigureAwait(false);
             }
             catch (ProtocolException ex)
             {
@@ -120,6 +125,7 @@ public sealed class PipeServer : IAsyncDisposable
 public static class PipeClient
 {
     /// <exception cref="TimeoutException">No server answered within <paramref name="connectTimeout"/> (app not running).</exception>
+    /// <exception cref="ReplyTimeoutException">The app took the request but did not reply within <paramref name="replyTimeout"/>.</exception>
     public static async Task<ProtocolMessage> SendAsync(string pipeName, ProtocolMessage request, TimeSpan connectTimeout, TimeSpan replyTimeout, CancellationToken cancellationToken = default)
     {
         await using var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
@@ -135,7 +141,7 @@ public static class PipeClient
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            throw new TimeoutException($"The app did not reply within {replyTimeout.TotalSeconds:0} seconds.");
+            throw new ReplyTimeoutException($"The app did not reply within {replyTimeout.TotalSeconds:0} seconds.");
         }
     }
 
@@ -152,5 +158,23 @@ public static class PipeClient
         {
             return false;
         }
+    }
+}
+
+/// <summary>The app is running and took the request, but its reply did not come in time.</summary>
+public sealed class ReplyTimeoutException : TimeoutException
+{
+    public ReplyTimeoutException()
+    {
+    }
+
+    public ReplyTimeoutException(string message)
+        : base(message)
+    {
+    }
+
+    public ReplyTimeoutException(string message, Exception innerException)
+        : base(message, innerException)
+    {
     }
 }

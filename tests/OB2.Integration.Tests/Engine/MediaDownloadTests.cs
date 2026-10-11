@@ -50,6 +50,19 @@ public sealed class MediaDownloadTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_garbled_printed_path_falls_back_to_the_name_OB2_asked_for()
+    {
+        // D-73: yt-dlp once dropped every Arabic letter from the path it printed.
+        _ytDlp.GarblePrintedPath = true;
+        var item = await AddAsync();
+
+        var done = await _fx.RunAsync(item.Id);
+
+        done.Status.Should().Be(DownloadStatus.Completed, done.ErrorMessage);
+        done.DestPath.Should().Be(Path.Combine(_fx.SaveFolder, "Clip.mp4"));
+    }
+
+    [Fact]
     public async Task Pausing_stops_yt_dlp_with_progress_saved_and_resuming_continues()
     {
         _ytDlp.HangAfterProgress = true;
@@ -130,6 +143,8 @@ public sealed class MediaDownloadTests : IAsyncLifetime
 
         public string? Error { get; set; }
 
+        public bool GarblePrintedPath { get; set; }
+
         public async Task<int> RunAsync(string fileName, IReadOnlyList<string> arguments, Action<string> onOutput, Action<string> onError, CancellationToken cancellationToken)
         {
             Calls.Add(arguments);
@@ -155,7 +170,7 @@ public sealed class MediaDownloadTests : IAsyncLifetime
             onOutput("[ob2] 140|finished|1000|1000|NA|NA");
             var file = Path.Combine(home, stem + ".mp4");
             File.WriteAllBytes(file, new byte[FileSize]);
-            onOutput("[ob2-file] " + file);
+            onOutput("[ob2-file] " + (GarblePrintedPath ? Path.Combine(home, new string(' ', stem.Length) + ".mp4") : file));
             return 0;
         }
 

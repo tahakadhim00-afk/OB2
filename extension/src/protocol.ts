@@ -13,6 +13,9 @@ export const MessageType = {
   PauseAll: 'pause_all',
   ResumeAll: 'resume_all',
   Error: 'error',
+  /** D-72: the qualities a video page offers, for the button's menu. */
+  GetMediaFormats: 'get_media_formats',
+  MediaFormats: 'media_formats',
 } as const;
 
 export const ErrorCode = {
@@ -23,6 +26,8 @@ export const ErrorCode = {
   ProtocolVersionMismatch: 'PROTOCOL_VERSION_MISMATCH',
   InternalError: 'INTERNAL_ERROR',
   InvalidMessage: 'INVALID_MESSAGE',
+  MediaToolsMissing: 'MEDIA_TOOLS_MISSING',
+  MediaFailed: 'MEDIA_FAILED',
 } as const;
 
 export interface ProtocolMessage<T = unknown> {
@@ -51,6 +56,32 @@ export interface AddDownloadPayload {
   autoStart: boolean;
   /** A video page (YouTube and others) for OB2's quality chooser, not a file (D-71). */
   mediaPage?: boolean;
+  /** D-72: with `mediaPage`, the quality picked on the button: a `format` and `container` from `media_formats`. */
+  mediaFormat?: string;
+  mediaContainer?: string;
+}
+
+export interface MediaFormatsRequest {
+  url: string;
+}
+
+/** One quality on the button's menu (D-72). `format` and `container` go back in `add_download`. */
+export interface MediaOption {
+  format: string;
+  container: string;
+  audioOnly: boolean;
+  /** "1080p60" for a picture, "129 kbit/s" for sound alone. */
+  quality?: string;
+  codec?: string;
+  /** The sound track's language, when the video has several. */
+  track?: string;
+  size?: number;
+}
+
+export interface MediaFormatsPayload {
+  title: string;
+  durationSeconds?: number;
+  options: MediaOption[];
 }
 
 export interface AckPayload {

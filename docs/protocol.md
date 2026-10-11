@@ -37,6 +37,7 @@ Both links use Chrome's Native Messaging framing: a 32-bit **little-endian** len
 | Request | Sent by | Reply | Notes |
 |---------|---------|-------|-------|
 | `add_download` | extension, second `OB2.exe` | `ack` or `error` | Payload below. The **host** starts OB2 if it isn't running. |
+| `get_media_formats` | extension (a click on the video button, D-72) | `media_formats` or `error` | `{ url }` of a video page. The app asks yt-dlp; up to 90 s. The host starts OB2 if it isn't running. |
 | `ping` | extension | `pong` `{ appRunning, hostVersion }` | Answered by the host itself; never starts OB2. |
 | `get_status` | extension (popup, rule refresh) | `status` or `error` | Never starts OB2: `APP_NOT_RUNNING` instead. |
 | `pause_all` | extension popup | `ack` `{ status: "paused" }` | Same as Stop All in the window. |
@@ -61,7 +62,9 @@ Exactly as in PRD §8.3:
 | `headers` | object | Extra request headers (the extension sends `Accept-Language`). |
 | `source` | string | `chrome-downloads`, `chrome-context-menu`, `chrome-media` (the button over a video or the video/audio context menu, D-69), `chrome-page` (a link picked from the popup's "Find downloads" list, D-70), or `cli`. |
 | `autoStart` | bool | `true` skips the confirmation dialog for this request. |
-| `mediaPage` | bool | `true`: `url` is a video page (YouTube or another site yt-dlp supports), not a file. The app opens the Download Video window to choose quality and audio, and always replies `"confirming"`. YouTube watch/Shorts/embed addresses are treated this way even without the flag (D-71). |
+| `mediaPage` | bool | `true`: `url` is a video page (YouTube or another site yt-dlp supports), not a file. The app opens the Download Video window to choose quality and audio, and replies `"confirming"`. YouTube watch/Shorts/embed addresses are treated this way even without the flag (D-71). |
+| `mediaFormat` | string | Only with `mediaPage`: the quality picked on the video button, a `format` from `media_formats` (`137+140`). With confirmation off the app adds the download at once and replies with its id; with confirmation on, the Download Video window opens with this quality selected (D-72). One or two plain format ids, else `INVALID_MESSAGE`. |
+| `mediaContainer` | string | Required with `mediaFormat`: the finished file's extension (`mp4`), from the same option. `filenameHint` then carries the video's title with that extension. |
 
 Validation, done by both the host and the app (`ProtocolValidator`): the URL must be present, at most 2048 characters, absolute, and `http`/`https` (otherwise `INVALID_URL` or `UNSUPPORTED_SCHEME`).
 
@@ -86,6 +89,21 @@ Validation, done by both the host and the app (`ProtocolValidator`): the URL mus
 
 `recent` holds up to 8 downloads that are not running, newest first. `progress` is a percentage, or absent when the size is unknown.
 
+### `media_formats` payload (D-72)
+
+```json
+{
+  "title": "Launch day / highlights",
+  "durationSeconds": 212,
+  "options": [
+    { "format": "137+140", "container": "mp4", "audioOnly": false, "quality": "1080p", "codec": "H.264", "size": 108400000 },
+    { "format": "140", "container": "m4a", "audioOnly": true, "quality": "130 kbit/s", "codec": "AAC", "track": "English original (default)", "size": 3400000 }
+  ]
+}
+```
+
+Every picture quality, best first, each with the site's default sound track, then sound alone, one per language. `track` is present only when the video has sound in several languages; `size` is yt-dlp's estimate. The app keeps the answer for 10 minutes, so the `add_download` that follows does not run yt-dlp again.
+
 ### Errors
 
 ```json
@@ -95,7 +113,9 @@ Validation, done by both the host and the app (`ProtocolValidator`): the URL mus
 | Code | When |
 |------|------|
 | `APP_NOT_RUNNING` | `get_status` / `pause_all` / `resume_all` while OB2 is closed; `OB2.exe` not found next to `host.exe`, or it would not start. |
-| `PIPE_TIMEOUT` | The host started OB2, but it did not answer within 15 seconds. |
+| `PIPE_TIMEOUT` | The host started OB2, but it did not answer within 15 seconds; or OB2 is running but did not reply in time (10 s, or 90 s for `get_media_formats`). |
+| `MEDIA_TOOLS_MISSING` | `get_media_formats` before yt-dlp, ffmpeg and Deno are installed. The Download Video window installs them (D-72). |
+| `MEDIA_FAILED` | yt-dlp could not list the page; `message` is its reason ("Video unavailable"), meant for the user. |
 | `INVALID_URL` | Missing, over 2048 characters, or not an absolute URL. |
 | `UNSUPPORTED_SCHEME` | Not `http`/`https` (for example `ftp:`, `file:`, `javascript:`). |
 | `PROTOCOL_VERSION_MISMATCH` | `v` is not 1. |
@@ -106,8 +126,8 @@ Validation, done by both the host and the app (`ProtocolValidator`): the URL mus
 
 - Chrome starts it with the caller's origin as an argument. Anything other than `chrome-extension://mgmmgplfngnhcencbhpfagnjcnenflpm/` exits with code 2. Chrome already enforces `allowed_origins`; this is a second check.
 - Finds the pipe name through `HostLocator` (D-52): `settings.json` beside `host.exe` when `portable.flag` is there, then `%APPDATA%\OB2\settings.json`.
-- Timeouts (D-60): **300 ms** to connect to a running app (a running app always has a pipe instance waiting, so this only sets how quickly "not running" is detected); **10 s** for the app's reply; **15 s** to wait for an app it started (§8.3).
-- If OB2 is not running and the request is `add_download`, it starts `OB2.exe --from-host` from its own folder. Then it connects as soon as the app creates its pipe; the connect call waits for the pipe instead of polling.
+- Timeouts (D-60): **300 ms** to connect to a running app (a running app always has a pipe instance waiting, so this only sets how quickly "not running" is detected); **10 s** for the app's reply (**90 s** for `get_media_formats`, D-72); **15 s** to wait for an app it started (§8.3). A running app that replies late gets `PIPE_TIMEOUT`; it is not started again.
+- If OB2 is not running and the request is `add_download` or `get_media_formats`, it starts `OB2.exe --from-host` from its own folder. Then it connects as soon as the app creates its pipe; the connect call waits for the pipe instead of polling.
 - Logs nothing, so no cookie or URL can leak from it.
 
 Measured with the published exes in v1.0 (trimmed, ReadyToRun 16.8 MB `host.exe`, D-68): **66–83 ms** per round trip with OB2 running, including starting `host.exe`; **1.2–1.4 s** for a capture that has to start OB2. (Phase 6, with a 64.5 MB untrimmed host on .NET 8: 170–250 ms and 1.8–2.0 s.)
@@ -116,7 +136,7 @@ Measured with the published exes in v1.0 (trimmed, ReadyToRun 16.8 MB `host.exe`
 
 - Name `OB2-<16 hex digits>`, generated on the app's first start and saved as `ipc.pipeName` in `settings.json` (§11.1 per-install random suffix).
 - Created with `PipeOptions.CurrentUserOnly`, so other Windows users cannot connect.
-- The server accepts connections in a loop and serves each on its own task, with a 30-second limit per connection.
+- The server accepts connections in a loop and serves each on its own task, with a 30-second limit per connection (90 s once the request is known to be `get_media_formats`).
 
 ## Registration (§8.2, AC-9)
 

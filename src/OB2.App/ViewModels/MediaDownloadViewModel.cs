@@ -8,7 +8,6 @@ using OB2.App.Infrastructure;
 using OB2.App.Services;
 using OB2.Core.Downloads;
 using OB2.Core.Files;
-using OB2.Core.Http;
 using OB2.Core.Media;
 using OB2.Core.Services;
 
@@ -298,8 +297,31 @@ public sealed partial class MediaDownloadViewModel : ObservableObject, IDisposab
             SelectedVideo = Videos.FirstOrDefault();
             SelectedAudio = Audios.FirstOrDefault(a => a.Value == MediaChoices.AudioFor(SelectedVideo?.Value, Audios.Select(c => c.Value).ToList())) ?? Audios.FirstOrDefault();
             AudioOnly = Videos.Count == 0;
+            Preselect(_prefill.MediaFormat);
         });
         UpdateSelection();
+    }
+
+    /// <summary>D-72: the quality picked on the browser's button (<c>137+140</c>, or <c>140</c> for sound alone).</summary>
+    private void Preselect(string? formatSpec)
+    {
+        var ids = formatSpec?.Split('+') ?? [];
+        var video = ids.Length > 0 ? Videos.FirstOrDefault(v => v.Value.Id == ids[0]) : null;
+        var audio = ids.Length > 0 ? Audios.FirstOrDefault(a => a.Value.Id == ids[^1]) : null;
+        if (video is not null)
+        {
+            SelectedVideo = video;
+            AudioOnly = false;
+        }
+        else if (audio is not null && ids.Length == 1)
+        {
+            AudioOnly = true;
+        }
+
+        if (audio is not null)
+        {
+            SelectedAudio = audio;
+        }
     }
 
     /// <summary>Keeps the file name's extension, the size and the folder in step with the choice.</summary>
@@ -349,16 +371,13 @@ public sealed partial class MediaDownloadViewModel : ObservableObject, IDisposab
                 Url = _pageUrl,
                 FileName = name,
                 SaveFolder = string.IsNullOrWhiteSpace(SaveFolder) ? null : SaveFolder.Trim(),
-                Connections = 1,
                 StartNow = startNow,
                 Referrer = _prefill.Referrer,
                 Source = _prefill.Source,
                 MediaFormat = selection.FormatSpec,
                 MediaContainer = selection.Container,
             };
-            // Nothing to probe: the page is not the file. The size is yt-dlp's estimate.
-            var probe = new ProbeResult(_pageUrl, selection.EstimatedSize, false, name, null, null, null);
-            var item = await _service.AddAsync(options, probe);
+            var item = await _service.AddMediaAsync(options, selection.EstimatedSize);
             CloseRequested?.Invoke(this, item);
         }
         catch (Exception ex) when (ex is IOException or ArgumentException or UnauthorizedAccessException or UnsafePathException)

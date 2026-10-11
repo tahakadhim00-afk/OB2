@@ -166,6 +166,49 @@ public sealed class MessageFramingTests
         ProtocolValidator.Validate(ProtocolMessage.Simple(MessageTypes.AddDownload))!.PayloadAs<ErrorPayload>()!.Code.Should().Be(ProtocolErrors.InvalidUrl);
     }
 
+    [Fact]
+    public void Asking_for_a_videos_qualities_needs_a_web_address()
+    {
+        static ProtocolMessage Ask(string? url) => ProtocolMessage.Create(MessageTypes.GetMediaFormats, new MediaFormatsRequest { Url = url });
+
+        ProtocolValidator.Validate(Ask("https://www.youtube.com/watch?v=dQw4w9WgXcQ")).Should().BeNull();
+        ProtocolValidator.Validate(Ask("file:///C:/Windows/win.ini"))!.PayloadAs<ErrorPayload>()!.Code.Should().Be(ProtocolErrors.UnsupportedScheme);
+        ProtocolValidator.Validate(Ask(null))!.PayloadAs<ErrorPayload>()!.Code.Should().Be(ProtocolErrors.InvalidUrl);
+    }
+
+    [Theory]
+    [InlineData("137+140", "mp4", true, true)]
+    [InlineData("hls-720", "mp4", true, true)]
+    [InlineData("140", "m4a", true, true)]
+    [InlineData("137+140", "mp4", false, false)] // a format only goes with a video page
+    [InlineData("bestvideo[height<=720]+bestaudio", "mp4", true, false)] // an expression, not ids
+    [InlineData("137/18", "mp4", true, false)]
+    [InlineData("-137", "mp4", true, false)]
+    [InlineData("137\n", "mp4", true, false)]
+    [InlineData("137+140", "../x", true, false)]
+    [InlineData("137+140", null, true, false)]
+    public void A_quality_from_the_button_is_plain_format_ids(string format, string? container, bool mediaPage, bool accepted)
+    {
+        var message = ProtocolMessage.Create(MessageTypes.AddDownload, new AddDownloadPayload
+        {
+            Url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            MediaPage = mediaPage ? true : null,
+            MediaFormat = format,
+            MediaContainer = container,
+        });
+
+        var reply = ProtocolValidator.Validate(message);
+
+        if (accepted)
+        {
+            reply.Should().BeNull();
+        }
+        else
+        {
+            reply!.PayloadAs<ErrorPayload>()!.Code.Should().Be(ProtocolErrors.InvalidMessage);
+        }
+    }
+
     private static byte[] Frame(byte[] body)
     {
         var frame = new byte[4 + body.Length];

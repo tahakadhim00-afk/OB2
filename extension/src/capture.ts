@@ -2,9 +2,11 @@
 // The browser download is paused, not cancelled, while OB2 is asked to take it. It is cancelled
 // only after OB2 acknowledges; on any failure it is resumed, so Chrome finishes it (fail-open).
 
-import { mediaFileName, type MediaCandidate } from './media';
-import { CAPTURE_TIMEOUT_MS, HostError, STATUS_TIMEOUT_MS, sendToHost } from './native';
-import { createMessage, MessageType, type AckPayload, type AddDownloadPayload, type StatusPayload } from './protocol';
+import { isMediaOption, mediaFileName, type MediaCandidate } from './media';
+import { CAPTURE_TIMEOUT_MS, HostError, MEDIA_FORMATS_TIMEOUT_MS, STATUS_TIMEOUT_MS, sendToHost } from './native';
+import {
+  createMessage, ErrorCode, MessageType, type AckPayload, type AddDownloadPayload, type MediaFormatsPayload, type MediaFormatsRequest, type MediaOption, type StatusPayload,
+} from './protocol';
 import { decide, knownSize, loadSettings, parseHttpUrl, RULES_MAX_AGE_MS, saveRules, type SkipReason } from './rules';
 import type { FoundLink } from './scan';
 
@@ -105,24 +107,67 @@ export async function downloadLinkWithOb2(linkUrl: string, pageUrl: string | und
  */
 export async function downloadMediaWithOb2(media: MediaCandidate, pageUrl: string | undefined, pageTitle: string | undefined, incognito = false): Promise<CaptureOutcome> {
   if (incognito) return { action: 'ignored', reason: 'incognito' }; // D-61
-  if (media.page) return downloadVideoPageWithOb2(media.url, pageUrl);
+  if (media.page) return downloadVideoPageWithOb2(media.url, pageUrl, media);
   return downloadLinkWithOb2(media.url, pageUrl, { source: 'chrome-media', filename: mediaFileName(media, pageTitle), mime: media.mime, size: media.size });
 }
 
 /**
  * D-71: a video page (YouTube, or a player that streams in pieces) for OB2's Download Video
- * window, where the user picks quality and audio. No cookies: yt-dlp fetches the page itself.
- * There is no browser fallback, because Chrome would save the web page, not the video.
+ * window, where the user picks quality and audio. D-72: with a quality already picked on the
+ * button, OB2 downloads that one (the window opens only when confirmation is on). No cookies:
+ * yt-dlp fetches the page itself. There is no browser fallback, because Chrome would save the
+ * web page, not the video.
  */
-export async function downloadVideoPageWithOb2(videoPage: string, referrer: string | undefined): Promise<CaptureOutcome> {
+export async function downloadVideoPageWithOb2(
+  videoPage: string,
+  referrer: string | undefined,
+  choice: Pick<MediaCandidate, 'format' | 'container' | 'name' | 'size'> = {},
+): Promise<CaptureOutcome> {
   const payload: AddDownloadPayload = { url: videoPage, source: 'chrome-media', autoStart: false, mediaPage: true, userAgent: navigator.userAgent };
   if (referrer && referrer !== videoPage) payload.referrer = referrer;
+  if (choice.format && choice.container) {
+    payload.mediaFormat = choice.format;
+    payload.mediaContainer = choice.container;
+    if (choice.name) payload.filenameHint = `${choice.name}.${choice.container}`;
+    if (choice.size) payload.fileSizeHint = choice.size;
+  }
   try {
     const reply = await sendToHost<AckPayload>(createMessage(MessageType.AddDownload, payload), CAPTURE_TIMEOUT_MS);
     return { action: 'captured', downloadId: reply.payload?.downloadId, status: reply.payload?.status ?? 'confirming' };
   } catch (error) {
     return { action: 'failed', reason: error instanceof HostError ? error.failure : 'unknown' };
   }
+}
+
+/** Why the button's quality menu has no qualities to show (D-72). */
+export type FormatsFailure = 'unreachable' | 'tools-missing' | 'media-failed' | 'timeout' | 'incognito' | 'failed';
+
+export type FormatsOutcome = { action: 'listed'; title: string; options: MediaOption[] } | { action: 'failed'; reason: FormatsFailure; message?: string };
+
+/**
+ * D-72: the qualities a video page offers, for the button's menu. OB2 asks yt-dlp, which takes a
+ * few seconds; the host starts OB2 if needed, as for a capture. The reply is checked before use.
+ */
+export async function fetchMediaFormats(videoPage: string, incognito = false): Promise<FormatsOutcome> {
+  if (incognito) return { action: 'failed', reason: 'incognito' }; // D-61
+  try {
+    const request = createMessage<MediaFormatsRequest>(MessageType.GetMediaFormats, { url: videoPage });
+    const reply = await sendToHost<MediaFormatsPayload>(request, MEDIA_FORMATS_TIMEOUT_MS);
+    const options = reply.type === MessageType.MediaFormats && Array.isArray(reply.payload?.options) ? reply.payload.options.filter(isMediaOption) : [];
+    if (options.length === 0) return { action: 'failed', reason: 'failed' };
+    return { action: 'listed', title: typeof reply.payload?.title === 'string' ? reply.payload.title : '', options };
+  } catch (error) {
+    return { action: 'failed', ...formatsFailure(error) };
+  }
+}
+
+function formatsFailure(error: unknown): { reason: FormatsFailure; message?: string } {
+  if (!(error instanceof HostError)) return { reason: 'failed' };
+  if (error.code === ErrorCode.MediaToolsMissing) return { reason: 'tools-missing' };
+  if (error.code === ErrorCode.MediaFailed) return { reason: 'media-failed', message: error.message };
+  if (error.failure === 'timeout' || error.code === ErrorCode.PipeTimeout) return { reason: 'timeout' };
+  if (error.failure === 'error-reply' || error.failure === 'unknown') return { reason: 'failed' };
+  return { reason: 'unreachable' }; // not registered, refused, host crashed, or OB2 would not start
 }
 
 /**

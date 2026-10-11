@@ -23,6 +23,9 @@ public sealed record AddDownloadPrefill
 
     /// <summary>The address is a video page for yt-dlp (D-71): opens the Download Video window.</summary>
     public bool MediaPage { get; init; }
+
+    /// <summary>D-72: the quality picked on the browser's button, selected when the window opens.</summary>
+    public string? MediaFormat { get; init; }
 }
 
 /// <summary>Opens windows and shell actions so view models stay free of WPF window code.</summary>

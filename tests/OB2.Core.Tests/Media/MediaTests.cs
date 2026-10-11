@@ -1,5 +1,6 @@
 using OB2.Core.Downloads;
 using OB2.Core.Media;
+using OB2.Tests.Common;
 
 namespace OB2.Core.Tests.Media;
 
@@ -105,12 +106,59 @@ public sealed class MediaChoicesTests
     }
 
     [Fact]
+    public void YouTubes_hls_picture_and_sound_merge_into_mp4()
+    {
+        // D-73: HLS sound is "mp4" (raw AAC), HLS picture an MPEG-TS stream; ffmpeg can't put those in MKV.
+        var info = MediaInfo.Parse("""
+            { "title": "Clip", "formats": [
+              { "format_id": "233", "ext": "mp4", "vcodec": "none", "acodec": "mp4a.40.5", "format_note": "Default, low", "language": "ar" },
+              { "format_id": "251", "ext": "webm", "vcodec": "none", "acodec": "opus", "abr": 130, "format_note": "Default, medium", "language": "ar" },
+              { "format_id": "269", "ext": "mp4", "vcodec": "avc1.4D400C", "acodec": "none", "height": 144, "protocol": "m3u8_native" } ] }
+            """);
+        var f = info.Formats.ToDictionary(x => x.Id);
+
+        MediaChoices.Select(f["269"], f["233"]).Container.Should().Be("mp4");
+        MediaChoices.AudioFor(f["269"], MediaChoices.Audios(info))!.Id.Should().Be("233");
+        MediaChoices.Options(info)[0].Selection.Should().Be(new MediaSelection("269+233", "mp4", null));
+    }
+
+    [Fact]
     public void A_site_with_a_single_file_reports_it_on_the_root()
     {
         var info = MediaInfo.Parse("""{ "title": "Clip", "format_id": "hls-720", "ext": "mp4", "height": 720 }""");
 
         info.Formats.Should().ContainSingle().Which.Quality.Should().Be("720p");
         MediaChoices.Select(MediaChoices.Videos(info)[0], null).FormatSpec.Should().Be("hls-720");
+        MediaChoices.Options(info).Should().ContainSingle().Which.Should().Be(new MediaOption(new MediaSelection("hls-720", "mp4", null), false, "720p", null, null));
+    }
+
+    [Fact]
+    public void The_button_offers_every_quality_with_the_default_sound_then_sound_alone_per_language()
+    {
+        var options = MediaChoices.Options(Info);
+
+        options.Should().Equal(
+            new MediaOption(new MediaSelection("313+251", "webm", 483_500_000), false, "2160p", "VP9", null),
+            new MediaOption(new MediaSelection("299+140", "mp4", 163_400_000), false, "1080p50", "H.264", null),
+            new MediaOption(new MediaSelection("137+140", "mp4", 108_400_000), false, "1080p", "H.264", null),
+            new MediaOption(new MediaSelection("136+140", "mp4", 43_400_000), false, "720p", "H.264", null),
+            new MediaOption(new MediaSelection("18", "mp4", 13_000_000), false, "360p", "H.264", null),
+            new MediaOption(new MediaSelection("140", "m4a", 3_400_000), true, "130 kbit/s", "AAC", "English original (default)"),
+            new MediaOption(new MediaSelection("140-1", "m4a", 3_400_000), true, "129 kbit/s", "AAC", "Spanish"));
+    }
+
+    [Fact]
+    public void With_one_language_the_sound_alone_entry_has_no_track_name()
+    {
+        var info = MediaInfo.Parse("""
+            { "title": "Song", "formats": [
+              { "format_id": "251", "ext": "webm", "vcodec": "none", "acodec": "opus", "abr": 130, "format_note": "medium", "language": "en" },
+              { "format_id": "18", "ext": "mp4", "vcodec": "avc1.42001E", "acodec": "mp4a.40.2", "height": 360 } ] }
+            """);
+
+        MediaChoices.Options(info).Should().Equal(
+            new MediaOption(new MediaSelection("18", "mp4", null), false, "360p", "H.264", null),
+            new MediaOption(new MediaSelection("251", "webm", null), true, "130 kbit/s", "Opus", null));
     }
 
     [Fact]
@@ -119,6 +167,73 @@ public sealed class MediaChoicesTests
         FluentActions.Invoking(() => MediaInfo.Parse("""{ "_type": "playlist", "entries": [] }"""))
             .Should().Throw<MediaException>().WithMessage("*playlist*");
         FluentActions.Invoking(() => MediaInfo.Parse("<html>")).Should().Throw<MediaException>();
+    }
+}
+
+public sealed class MediaInspectorTests : IDisposable
+{
+    private static readonly Uri Page = new("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+    private readonly TempDirectory _temp = new();
+    private readonly FakeClock _clock = new(new DateTimeOffset(2026, 10, 12, 9, 0, 0, TimeSpan.Zero));
+    private readonly CountingYtDlp _ytDlp = new();
+    private readonly MediaInspector _inspector;
+
+    public MediaInspectorTests()
+    {
+        var tools = new MediaTools(_temp.Combine("tools"), _ytDlp);
+        Directory.CreateDirectory(tools.FfmpegFolder);
+        foreach (var file in new[] { tools.YtDlpPath, tools.DenoPath, tools.FfmpegPath })
+        {
+            File.WriteAllText(file, string.Empty);
+        }
+
+        _inspector = new MediaInspector(tools, _clock);
+    }
+
+    public void Dispose() => _temp.Dispose();
+
+    [Fact]
+    public async Task The_list_the_button_showed_is_reused_by_the_download_for_ten_minutes()
+    {
+        (await _inspector.InspectAsync(Page)).Title.Should().Be("Clip");
+        _clock.Advance(TimeSpan.FromMinutes(9));
+        await _inspector.InspectAsync(Page);
+        _ytDlp.Calls.Should().Be(1);
+
+        _clock.Advance(TimeSpan.FromMinutes(2));
+        await _inspector.InspectAsync(Page);
+        _ytDlp.Calls.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task A_failure_is_not_kept()
+    {
+        _ytDlp.Fail = true;
+        await FluentActions.Awaiting(() => _inspector.InspectAsync(Page)).Should().ThrowAsync<MediaException>().WithMessage("Video unavailable");
+
+        _ytDlp.Fail = false;
+        (await _inspector.InspectAsync(Page)).Formats.Should().ContainSingle();
+        _ytDlp.Calls.Should().Be(2);
+    }
+
+    private sealed class CountingYtDlp : IProcessRunner
+    {
+        public int Calls { get; private set; }
+
+        public bool Fail { get; set; }
+
+        public Task<int> RunAsync(string fileName, IReadOnlyList<string> arguments, Action<string> onOutput, Action<string> onError, CancellationToken cancellationToken)
+        {
+            Calls++;
+            if (Fail)
+            {
+                onError("ERROR: [youtube] dQw4w9WgXcQ: Video unavailable");
+                return Task.FromResult(1);
+            }
+
+            onOutput("""{ "title": "Clip", "format_id": "18", "ext": "mp4", "height": 360 }""");
+            return Task.FromResult(0);
+        }
     }
 }
 
@@ -170,6 +285,8 @@ public sealed class YtDlpTests
         args.Should().ContainInOrder("--limit-rate", "500000");
         args.Should().ContainInOrder("--js-runtimes", @"deno:C:\OB2\tools\deno.exe");
         args.Should().Contain("--ignore-config");
+        args.Should().ContainInOrder("--encoding", "utf-8"); // D-73: file names in any script come back whole
+        YtDlp.InfoArguments(Tools, new Uri(item.Url)).Should().ContainInOrder("--encoding", "utf-8");
         args.TakeLast(2).Should().Equal("--", item.Url);
 
         item.MediaFormat = "140";

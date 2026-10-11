@@ -155,6 +155,11 @@ internal sealed partial class MediaJob : IDownloadJob, IDisposable
     private void Complete()
     {
         var file = _finalFile is { Length: > 0 } printed ? Path.GetFullPath(printed) : _item.DestPath;
+        if (!File.Exists(file) && File.Exists(_item.DestPath))
+        {
+            file = _item.DestPath; // the name OB2 asked for, if the printed one came back garbled (D-73)
+        }
+
         if (!File.Exists(file))
         {
             throw new DownloadFailedException(ErrorCodes.FileError, "yt-dlp finished, but the file it reported is not there.");

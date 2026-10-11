@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace OB2.Core.Media;
 
 /// <summary>What the user picked, as yt-dlp needs it.</summary>
@@ -5,6 +7,15 @@ namespace OB2.Core.Media;
 /// <param name="Container">The finished file's extension.</param>
 /// <param name="EstimatedSize">Sum of the known part sizes; null when none is known.</param>
 public sealed record MediaSelection(string FormatSpec, string Container, long? EstimatedSize);
+
+/// <summary>
+/// One entry of the quality menu on the browser's video button (D-72): a picture quality with the
+/// sound that suits it, or a sound track alone.
+/// </summary>
+/// <param name="Quality">"1080p60" for a picture, "129 kbit/s" for sound alone; null when unknown.</param>
+/// <param name="Codec">The picture's codec ("H.264"), or the sound's when there is no picture.</param>
+/// <param name="Track">The sound track's name, only when the video has tracks in several languages.</param>
+public sealed record MediaOption(MediaSelection Selection, bool AudioOnly, string? Quality, string? Codec, string? Track);
 
 /// <summary>
 /// Turns yt-dlp's format list into the choices of the Download Video window (D-71): one entry
@@ -55,15 +66,9 @@ public static class MediaChoices
             return null;
         }
 
-        var wanted = video?.Ext switch
-        {
-            "mp4" => "m4a",
-            "webm" => "webm",
-            _ => null,
-        };
         var defaults = audios.Where(IsDefaultTrack).ToList();
         var pool = defaults.Count > 0 ? defaults : [.. audios];
-        return pool.FirstOrDefault(a => a.Ext == wanted) ?? pool[0];
+        return pool.FirstOrDefault(a => MergesInto(video, a) is "mp4" or "webm") ?? pool[0];
     }
 
     /// <summary>
@@ -83,17 +88,60 @@ public static class MediaChoices
             return new MediaSelection(video.Id, video.Ext, video.Size);
         }
 
-        var container = (video.Ext, audio.Ext) switch
-        {
-            ("mp4", "m4a") => "mp4",
-            ("webm", "webm") => "webm",
-            _ => "mkv", // holds any pair of codecs
-        };
         long? size = video.Size is null && audio.Size is null ? null : (video.Size ?? 0) + (audio.Size ?? 0);
-        return new MediaSelection($"{video.Id}+{audio.Id}", container, size);
+        return new MediaSelection($"{video.Id}+{audio.Id}", MergesInto(video, audio), size);
+    }
+
+    /// <summary>
+    /// The file a picture and a sound track merge into. YouTube's HLS sound is "mp4" (raw AAC)
+    /// and its HLS picture an MPEG-TS stream named "mp4": ffmpeg merges those into MP4 but fails
+    /// on MKV ("Can't write packet with unknown timestamp"), so MP4 wins whenever both fit (D-73).
+    /// </summary>
+    private static string MergesInto(MediaFormat? video, MediaFormat audio) => (video?.Ext, audio.Ext) switch
+    {
+        ("mp4", "m4a" or "mp4") => "mp4",
+        ("webm", "webm") => "webm",
+        _ => "mkv", // holds any pair of codecs
+    };
+
+    /// <summary>
+    /// The button's menu (D-72): every picture quality with the site's default sound, best first,
+    /// then sound alone, one entry per language, as M4A when there is one (it plays everywhere).
+    /// Other pairs stay in the Download Video window.
+    /// </summary>
+    public static IReadOnlyList<MediaOption> Options(MediaInfo info)
+    {
+        var audios = Audios(info);
+        var options = Videos(info)
+            .Select(video => new MediaOption(Select(video, AudioFor(video, audios)), false, video.Quality, video.VideoCodecName, null))
+            .ToList();
+
+        // Audios lists the default track first, and grouping keeps that order.
+        var languages = audios.GroupBy(a => a.Language ?? string.Empty).ToList();
+        foreach (var language in languages)
+        {
+            var audio = language.FirstOrDefault(a => a.Ext == "m4a") ?? language.First();
+            var kbps = Bitrate(audio) is > 0 and var rate ? string.Create(CultureInfo.InvariantCulture, $"{Math.Round(rate)} kbit/s") : null;
+            options.Add(new MediaOption(Select(null, audio), true, kbps, audio.AudioCodecName, languages.Count > 1 ? TrackName(audio) : null));
+        }
+
+        return options;
     }
 
     private static int FpsClass(MediaFormat f) => f.Fps is >= 48 ? (int)Math.Round(f.Fps.Value) : 0;
+
+    /// <summary>"English original (default), medium" without the ", medium" quality word.</summary>
+    private static string? TrackName(MediaFormat f)
+    {
+        var note = f.Note;
+        var comma = note?.LastIndexOf(", ", StringComparison.Ordinal) ?? -1;
+        if (note is not null && comma > 0 && note[(comma + 2)..] is "ultralow" or "low" or "medium" or "high")
+        {
+            note = note[..comma];
+        }
+
+        return note is { Length: > 0 } and not ("ultralow" or "low" or "medium" or "high") ? note : f.Language;
+    }
 
     private static double Bitrate(MediaFormat f) => f.AudioBitrate ?? f.Bitrate ?? 0;
 

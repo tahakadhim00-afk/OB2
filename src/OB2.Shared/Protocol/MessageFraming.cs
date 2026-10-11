@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace OB2.Shared.Protocol;
 
@@ -106,7 +107,7 @@ public sealed class ProtocolException : Exception
 }
 
 /// <summary>Checks done by both the host and the app before acting on a message (§8.3 protocol rules).</summary>
-public static class ProtocolValidator
+public static partial class ProtocolValidator
 {
     public const int MaxUrlLength = 2048;
 
@@ -119,13 +120,27 @@ public static class ProtocolValidator
             return ProtocolMessage.ErrorReply(message.Id, ProtocolErrors.ProtocolVersionMismatch, $"Protocol version {message.V} is not supported; expected {ProtocolInfo.Version}.");
         }
 
+        if (message.Type == MessageTypes.GetMediaFormats)
+        {
+            return ValidateUrl(message, message.PayloadAs<MediaFormatsRequest>()?.Url);
+        }
+
         if (message.Type != MessageTypes.AddDownload)
         {
             return null;
         }
 
         var payload = message.PayloadAs<AddDownloadPayload>();
-        var url = payload?.FinalUrl is { Length: > 0 } ? payload.FinalUrl : payload?.Url;
+        if (payload?.MediaFormat is { } format && (payload.MediaPage != true || !IsMediaChoice(format, payload.MediaContainer)))
+        {
+            return ProtocolMessage.ErrorReply(message.Id, ProtocolErrors.InvalidMessage, "The video format is not one OB2 offers.");
+        }
+
+        return ValidateUrl(message, payload?.FinalUrl is { Length: > 0 } ? payload.FinalUrl : payload?.Url);
+    }
+
+    private static ProtocolMessage? ValidateUrl(ProtocolMessage message, string? url)
+    {
         if (string.IsNullOrWhiteSpace(url) || url.Length > MaxUrlLength || !Uri.TryCreate(url, UriKind.Absolute, out var parsed))
         {
             return ProtocolMessage.ErrorReply(message.Id, ProtocolErrors.InvalidUrl, "The download address is missing, too long, or not a valid URL.");
@@ -138,4 +153,18 @@ public static class ProtocolValidator
 
         return null;
     }
+
+    /// <summary>
+    /// D-72: a format selector and container a <c>media_formats</c> reply may offer. The selector
+    /// becomes yt-dlp's <c>-f</c> value, so it is one or two plain format ids, never an expression.
+    /// </summary>
+    public static bool IsMediaChoice(string? format, string? container) =>
+        format is not null && container is not null && FormatSpec().IsMatch(format) && Container().IsMatch(container);
+
+    /// <summary>One or two yt-dlp format ids (<c>137</c>, <c>137+140</c>, <c>hls-720</c>).</summary>
+    [GeneratedRegex(@"^[A-Za-z0-9_][A-Za-z0-9_.=@-]{0,79}(?:\+[A-Za-z0-9_][A-Za-z0-9_.=@-]{0,79})?\z")]
+    private static partial Regex FormatSpec();
+
+    [GeneratedRegex(@"^[a-z0-9]{1,5}\z")]
+    private static partial Regex Container();
 }

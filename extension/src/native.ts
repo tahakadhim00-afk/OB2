@@ -26,6 +26,8 @@ export class HostError extends Error {
 /** §8.3: the host waits up to 15 s for a freshly started app, so captures allow a little more. */
 export const CAPTURE_TIMEOUT_MS = 20_000;
 export const STATUS_TIMEOUT_MS = 5_000;
+/** D-72: the host may start OB2 (15 s), then gives yt-dlp up to 90 s to list a video's qualities. */
+export const MEDIA_FORMATS_TIMEOUT_MS = 110_000;
 
 export async function sendToHost<TReply = unknown>(message: ProtocolMessage, timeoutMs: number): Promise<ProtocolMessage<TReply>> {
   let timer: ReturnType<typeof setTimeout> | undefined;

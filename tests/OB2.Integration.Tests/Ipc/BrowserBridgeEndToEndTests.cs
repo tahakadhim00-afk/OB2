@@ -114,7 +114,35 @@ public sealed class BrowserBridgeEndToEndTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Without_the_app_only_add_download_starts_it()
+    public async Task The_video_buttons_quality_menu_starts_the_app_and_a_picked_quality_is_added_directly()
+    {
+        await using var host = HostProcess.Start(Path.Combine(AppFolder, "host.exe"), Origin);
+
+        // D-72: a click on the button starts OB2 like a capture. This copy has no yt-dlp yet.
+        var formats = await host.SendAsync(ProtocolMessage.Create(MessageTypes.GetMediaFormats, new MediaFormatsRequest { Url = "https://youtu.be/dQw4w9WgXcQ" }));
+        formats.PayloadAs<ErrorPayload>()!.Code.Should().Be(ProtocolErrors.MediaToolsMissing);
+        AppProcesses().Should().ContainSingle();
+
+        // With confirmation off, a quality picked on the button needs no window.
+        var ack = await host.SendAsync(ProtocolMessage.Create(MessageTypes.AddDownload, new AddDownloadPayload
+        {
+            Url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=42",
+            MediaPage = true,
+            MediaFormat = "137+140",
+            MediaContainer = "mp4",
+            FilenameHint = "Launch day.mp4",
+            FileSizeHint = 108_400_000,
+            Source = "chrome-media",
+        }));
+        ack.Type.Should().Be(MessageTypes.Ack, ack.Payload?.ToString());
+        ack.PayloadAs<AckPayload>()!.DownloadId.Should().NotBeNull();
+
+        var status = (await host.SendAsync(ProtocolMessage.Simple(MessageTypes.GetStatus))).PayloadAs<StatusPayload>()!;
+        status.Active.Concat(status.Recent).Select(d => d.FileName).Should().Contain("Launch day.mp4");
+    }
+
+    [Fact]
+    public async Task Without_the_app_the_popups_requests_do_not_start_it()
     {
         await using var host = HostProcess.Start(Path.Combine(AppFolder, "host.exe"), Origin);
 

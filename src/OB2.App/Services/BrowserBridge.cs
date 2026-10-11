@@ -1,3 +1,4 @@
+using System.IO;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
 using OB2.Core.Downloads;
@@ -23,14 +24,16 @@ public sealed partial class BrowserBridge : IIpcHandler
     private readonly DownloadService _service;
     private readonly AppSettings _settings;
     private readonly IDialogService _dialogs;
+    private readonly MediaInspector _inspector;
     private readonly Dispatcher _dispatcher;
     private readonly ILogger<BrowserBridge> _logger;
 
-    public BrowserBridge(DownloadService service, AppSettings settings, IDialogService dialogs, ILogger<BrowserBridge> logger)
+    public BrowserBridge(DownloadService service, AppSettings settings, IDialogService dialogs, MediaInspector inspector, ILogger<BrowserBridge> logger)
     {
         _service = service;
         _settings = settings;
         _dialogs = dialogs;
+        _inspector = inspector;
         _logger = logger;
         _dispatcher = Dispatcher.CurrentDispatcher;
     }
@@ -45,6 +48,8 @@ public sealed partial class BrowserBridge : IIpcHandler
         {
             case MessageTypes.AddDownload:
                 return await AddAsync(request, cancellationToken);
+            case MessageTypes.GetMediaFormats:
+                return await MediaFormatsAsync(request, cancellationToken);
             case MessageTypes.GetStatus:
                 return ProtocolMessage.Create(MessageTypes.Status, BuildStatus(), request.Id);
             case MessageTypes.PauseAll:
@@ -86,13 +91,16 @@ public sealed partial class BrowserBridge : IIpcHandler
             FileSizeHint = payload.FileSizeHint,
             Source = source,
             MediaPage = payload.MediaPage == true,
+            MediaFormat = payload.MediaFormat,
         };
 
         // §11.1: a URL with embedded credentials (user:pass@host) is only accepted after the user confirms it.
         var hasCredentials = new Uri(url).UserInfo.Length > 0;
-        // D-71: a video page always needs the user's choice of quality and audio.
+        // D-71: a video page needs the user's choice of quality and audio. D-72: a quality picked
+        // on the browser's button is that choice (the validator accepts one only with MediaPage).
         var mediaPage = prefill.MediaPage || VideoSites.YouTubeVideo(new Uri(url)) is not null;
-        var confirm = mediaPage || source == DownloadSource.Cli || hasCredentials || (_settings.Capture.ConfirmBeforeAdding && !payload.AutoStart);
+        var chosen = payload.MediaFormat is not null;
+        var confirm = (mediaPage && !chosen) || source == DownloadSource.Cli || hasCredentials || (_settings.Capture.ConfirmBeforeAdding && !payload.AutoStart);
         if (confirm)
         {
             // FR-22: show the Add dialog; reply now so the browser can cancel its own download.
@@ -104,7 +112,12 @@ public sealed partial class BrowserBridge : IIpcHandler
             return ProtocolMessage.Create(MessageTypes.Ack, new AckPayload(null, "confirming"), request.Id);
         }
 
-        var name = FileNameSanitizer.Sanitize(payload.FilenameHint ?? FileNameResolver.FromUrl(new Uri(url)));
+        if (chosen)
+        {
+            return await AddMediaAsync(request.Id, payload, new Uri(url), source, cancellationToken);
+        }
+
+        var name =FileNameSanitizer.Sanitize(payload.FilenameHint ?? FileNameResolver.FromUrl(new Uri(url)));
         var probe = new ProbeResult(new Uri(url), payload.FileSizeHint is > 0 ? payload.FileSizeHint : null, false, name, null, null, payload.MimeType);
         var item = await _service.AddAsync(
             new AddDownloadOptions
@@ -121,6 +134,60 @@ public sealed partial class BrowserBridge : IIpcHandler
             probe,
             cancellationToken);
         return ProtocolMessage.Create(MessageTypes.Ack, new AckPayload(item.Id, item.Status.ToDbString()), request.Id);
+    }
+
+    /// <summary>D-72: a quality picked on the button, added as the Download Video window would add it.</summary>
+    private async Task<ProtocolMessage> AddMediaAsync(string id, AddDownloadPayload payload, Uri url, DownloadSource source, CancellationToken cancellationToken)
+    {
+        var container = payload.MediaContainer!;
+        // The extension names it after the title that came with the formats; the container wins.
+        var name = FileNameSanitizer.Sanitize(Path.ChangeExtension(payload.FilenameHint is { Length: > 0 } hint ? hint : "video", container));
+        var item = await _service.AddMediaAsync(
+            new AddDownloadOptions
+            {
+                Url = VideoSites.YouTubeVideo(url) ?? url,
+                FileName = name,
+                StartNow = true,
+                Referrer = payload.Referrer,
+                Source = source,
+                MediaFormat = payload.MediaFormat,
+                MediaContainer = container,
+            },
+            payload.FileSizeHint is > 0 ? payload.FileSizeHint : null,
+            cancellationToken);
+        return ProtocolMessage.Create(MessageTypes.Ack, new AckPayload(item.Id, item.Status.ToDbString()), id);
+    }
+
+    /// <summary>D-72: what a video page offers, for the quality menu on the browser's video button.</summary>
+    private async Task<ProtocolMessage> MediaFormatsAsync(ProtocolMessage request, CancellationToken cancellationToken)
+    {
+        var url = new Uri(request.PayloadAs<MediaFormatsRequest>()!.Url!);
+        var page = VideoSites.YouTubeVideo(url) ?? url;
+        LogFormatsRequested(request.Id, Core.Logging.LogRedactor.Url(page.AbsoluteUri));
+        if (!_inspector.Tools.IsInstalled)
+        {
+            return ProtocolMessage.ErrorReply(request.Id, ProtocolErrors.MediaToolsMissing, "yt-dlp, ffmpeg and Deno are not installed yet.");
+        }
+
+        MediaInfo info;
+        try
+        {
+            info = await _inspector.InspectAsync(page, cancellationToken);
+        }
+        catch (MediaException ex)
+        {
+            LogFormatsFailed(request.Id); // yt-dlp's reason may quote an address; the browser shows it
+            return ProtocolMessage.ErrorReply(request.Id, ProtocolErrors.MediaFailed, ex.Message);
+        }
+
+        // Only what add_download will take back.
+        var options = MediaChoices.Options(info)
+            .Where(o => ProtocolValidator.IsMediaChoice(o.Selection.FormatSpec, o.Selection.Container))
+            .Select(o => new MediaOptionPayload(o.Selection.FormatSpec, o.Selection.Container, o.AudioOnly, o.Quality, o.Codec, o.Track, o.Selection.EstimatedSize))
+            .ToList();
+        return options.Count == 0
+            ? ProtocolMessage.ErrorReply(request.Id, ProtocolErrors.MediaFailed, "The page has no video or audio that OB2 can download.")
+            : ProtocolMessage.Create(MessageTypes.MediaFormats, new MediaFormatsPayload(info.Title, info.Duration?.TotalSeconds, options), request.Id);
     }
 
     private StatusPayload BuildStatus()
@@ -144,4 +211,10 @@ public sealed partial class BrowserBridge : IIpcHandler
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Request {Id}: {Source} capture of {Url} (cookies: {HasCookies})")]
     private partial void LogCaptured(string id, DownloadSource source, string url, bool hasCookies);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Request {Id}: video qualities for {Url}")]
+    private partial void LogFormatsRequested(string id, string url);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Request {Id}: yt-dlp could not list the page")]
+    private partial void LogFormatsFailed(string id);
 }

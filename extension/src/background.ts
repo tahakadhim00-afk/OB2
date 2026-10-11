@@ -2,9 +2,10 @@
 // top level so Chrome can wake the worker for them.
 
 import {
-  BypassList, captureDownload, downloadFoundWithOb2, downloadLinkWithOb2, downloadMediaWithOb2, downloadVideoPageWithOb2, refreshRules, type CaptureOutcome,
+  BypassList, captureDownload, downloadFoundWithOb2, downloadLinkWithOb2, downloadMediaWithOb2, downloadVideoPageWithOb2, fetchMediaFormats, refreshRules, type CaptureOutcome,
 } from './capture';
 import { isDownloadableMediaUrl, isMediaCandidate, mediaFromResponse, youTubeVideoPage, type MediaCandidate } from './media';
+import { parseHttpUrl } from './rules';
 import { isFoundLink, type FoundLink } from './scan';
 
 const LINK_MENU_ID = 'ob2-download-link';
@@ -61,6 +62,10 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
   } else if (m?.type === 'ob2-download-media' && sender.tab && isMediaCandidate(m.media)) {
     void downloadMediaWithOb2(m.media, sender.url ?? sender.tab.url, sender.tab.title, sender.tab.incognito).then(sendResponse);
     return true; // the reply comes after OB2 answers
+  } else if (m?.type === 'ob2-media-formats' && sender.tab && typeof m.url === 'string' && parseHttpUrl(m.url)) {
+    // D-72: the button's quality menu, after a click on it.
+    void fetchMediaFormats(m.url, sender.tab.incognito).then(sendResponse);
+    return true;
   } else if (m?.type === 'ob2-download-found' && !sender.tab && isFoundLink(m.link) && typeof m.tabId === 'number') {
     // From the popup's list (D-70). Handled here because the popup closes when OB2's window opens.
     void downloadFound(m.tabId, m.link, typeof m.pageUrl === 'string' ? m.pageUrl : undefined).then(sendResponse);

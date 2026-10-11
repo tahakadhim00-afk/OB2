@@ -1,4 +1,6 @@
-import { BypassList, buildPayload, captureDownload, cookieHeader, downloadFoundWithOb2, downloadLinkWithOb2, downloadMediaWithOb2, downloadVideoPageWithOb2, fetchStatus } from '../src/capture';
+import {
+  BypassList, buildPayload, captureDownload, cookieHeader, downloadFoundWithOb2, downloadLinkWithOb2, downloadMediaWithOb2, downloadVideoPageWithOb2, fetchMediaFormats, fetchStatus,
+} from '../src/capture';
 import { loadSettings } from '../src/rules';
 import { download, installChrome, replyWith, type ChromeMock } from './chromeMock';
 
@@ -206,6 +208,73 @@ describe('video pages for the quality chooser (D-71)', () => {
 
     expect(outcome).toEqual({ action: 'failed', reason: 'not-registered' });
     expect(chromeMock.downloads.download).not.toHaveBeenCalled();
+  });
+
+  it('sends a quality picked on the button with its format, file type, name and size (D-72)', async () => {
+    chromeMock.sendNativeMessage.mockImplementation(replyWith('ack', { downloadId: 12, status: 'downloading' }));
+
+    const media = { url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', page: true, format: '137+140', container: 'mp4', name: 'Launch day', size: 108_400_000 };
+    const outcome = await downloadMediaWithOb2(media, 'https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=1', 'Launch day - YouTube');
+
+    expect(outcome).toEqual({ action: 'captured', downloadId: 12, status: 'downloading' });
+    expect(sentMessages()[0].payload).toMatchObject({
+      url: media.url,
+      mediaPage: true,
+      mediaFormat: '137+140',
+      mediaContainer: 'mp4',
+      filenameHint: 'Launch day.mp4',
+      fileSizeHint: 108_400_000,
+      source: 'chrome-media',
+    });
+  });
+});
+
+describe("a video page's qualities for the button (D-72)", () => {
+  const page = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+
+  it('asks OB2 and keeps only entries it can send back', async () => {
+    const good = { format: '137+140', container: 'mp4', audioOnly: false, quality: '1080p', codec: 'H.264', size: 108_400_000 };
+    chromeMock.sendNativeMessage.mockImplementation(replyWith('media_formats', { title: 'Launch day', options: [good, { format: 'best/worst', container: 'mp4', audioOnly: false }] }));
+
+    const outcome = await fetchMediaFormats(page);
+
+    expect(outcome).toEqual({ action: 'listed', title: 'Launch day', options: [good] });
+    expect(sentMessages()[0]).toMatchObject({ type: 'get_media_formats', payload: { url: page } });
+  });
+
+  it.each([
+    ['the tools are missing', replyWith('error', { code: 'MEDIA_TOOLS_MISSING', message: 'x' }), { reason: 'tools-missing' }],
+    ['yt-dlp fails', replyWith('error', { code: 'MEDIA_FAILED', message: 'Video unavailable' }), { reason: 'media-failed', message: 'Video unavailable' }],
+    ['OB2 is slow', replyWith('error', { code: 'PIPE_TIMEOUT', message: 'x' }), { reason: 'timeout' }],
+    ['the host is not registered', () => Promise.reject(new Error('Specified native messaging host not found.')), { reason: 'unreachable' }],
+    ['the list is empty', replyWith('media_formats', { title: 'x', options: [] }), { reason: 'failed' }],
+  ])('says why when %s', async (_name, behaviour, failure) => {
+    chromeMock.sendNativeMessage.mockImplementation(behaviour);
+
+    expect(await fetchMediaFormats(page)).toEqual({ action: 'failed', ...failure });
+  });
+
+  it('waits long enough for yt-dlp, but not forever', async () => {
+    jest.useFakeTimers();
+    try {
+      chromeMock.sendNativeMessage.mockReturnValue(new Promise(() => undefined));
+      const pending = fetchMediaFormats(page);
+      await jest.advanceTimersByTimeAsync(100_000);
+      let settled = false;
+      void pending.then(() => (settled = true));
+      await jest.advanceTimersByTimeAsync(0);
+      expect(settled).toBe(false);
+
+      await jest.advanceTimersByTimeAsync(10_001);
+      expect(await pending).toEqual({ action: 'failed', reason: 'timeout' });
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('never asks from an Incognito tab', async () => {
+    expect(await fetchMediaFormats(page, true)).toEqual({ action: 'failed', reason: 'incognito' });
+    expect(chromeMock.sendNativeMessage).not.toHaveBeenCalled();
   });
 });
 

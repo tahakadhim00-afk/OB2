@@ -3,6 +3,7 @@
 // so streaming manifests and their segments (HLS, DASH) are left out, as are URLs that return
 // only one byte range of a file.
 
+import type { MediaOption } from './protocol';
 import { parseHttpUrl } from './rules';
 
 export interface MediaCandidate {
@@ -15,6 +16,44 @@ export interface MediaCandidate {
    * pick quality and audio (YouTube, and players that stream in pieces).
    */
   page?: boolean;
+  /**
+   * D-72: with `page`, one quality picked on the button's menu: yt-dlp's format selector, the
+   * finished file's extension, and its name (the video's title).
+   */
+  format?: string;
+  container?: string;
+  name?: string;
+}
+
+const FORMAT_SPEC = /^[A-Za-z0-9_][A-Za-z0-9_.=@-]{0,79}(?:\+[A-Za-z0-9_][A-Za-z0-9_.=@-]{0,79})?$/;
+const CONTAINER = /^[a-z0-9]{1,5}$/;
+
+/** D-72: a format and container OB2 may have offered; mirrors ProtocolValidator.IsMediaChoice in the app. */
+export function isMediaChoice(format: unknown, container: unknown): boolean {
+  return typeof format === 'string' && typeof container === 'string' && FORMAT_SPEC.test(format) && CONTAINER.test(container);
+}
+
+/** One entry of a `media_formats` reply, checked before the menu shows it. */
+export function isMediaOption(value: unknown): value is MediaOption {
+  const o = value as MediaOption | undefined;
+  const optional = (v: unknown, type: 'string' | 'number') => v === undefined || v === null || typeof v === type;
+  return (
+    !!o &&
+    isMediaChoice(o.format, o.container) &&
+    typeof o.audioOnly === 'boolean' &&
+    optional(o.quality, 'string') &&
+    optional(o.codec, 'string') &&
+    optional(o.track, 'string') &&
+    optional(o.size, 'number')
+  );
+}
+
+/** "1080p60 · MP4 (H.264) · 163 MB", or "Audio only · M4A (AAC) · 129 kbit/s · 3.4 MB" (D-72). */
+export function optionLabel(option: MediaOption, formatBytes: (bytes: number) => string): string {
+  const type = option.codec ? `${option.container.toUpperCase()} (${option.codec})` : option.container.toUpperCase();
+  const parts = option.audioOnly ? [option.track ? `Audio only (${option.track})` : 'Audio only', type, option.quality] : [option.quality || 'Video', type];
+  if (option.size && option.size > 0) parts.push(formatBytes(option.size));
+  return parts.filter(Boolean).join(' · ');
 }
 
 const YOUTUBE_HOSTS = new Set(['youtube.com', 'www.youtube.com', 'm.youtube.com', 'music.youtube.com', 'youtube-nocookie.com', 'www.youtube-nocookie.com']);
@@ -126,7 +165,9 @@ export function isMediaCandidate(value: unknown): value is MediaCandidate {
     isDownloadableMediaUrl(m.url) &&
     (m.mime === undefined || typeof m.mime === 'string') &&
     (m.size === undefined || (typeof m.size === 'number' && m.size > 0)) &&
-    (m.page === undefined || typeof m.page === 'boolean')
+    (m.page === undefined || typeof m.page === 'boolean') &&
+    (m.format === undefined ? m.container === undefined : m.page === true && isMediaChoice(m.format, m.container)) &&
+    (m.name === undefined || (typeof m.name === 'string' && m.name.length <= 300))
   );
 }
 

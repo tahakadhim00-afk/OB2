@@ -3,9 +3,12 @@
 // the element plays an http(s) address, else the media files the background saw this frame load
 // (players that feed the element a blob: URL). The button lives in a closed shadow root so page
 // CSS and scripts can't restyle or read it, and it is built without innerHTML (Trusted Types).
+// D-72: on a video page (YouTube) a click lists the qualities OB2 reads with yt-dlp, and each
+// entry downloads that quality.
 
+import type { FormatsFailure, FormatsOutcome } from './capture';
 import { formatBytes } from './format';
-import { isDownloadableMediaUrl, isYouTubeHost, mediaLabel, youTubeVideoPage, type MediaCandidate } from './media';
+import { isDownloadableMediaUrl, isYouTubeHost, mediaLabel, optionLabel, youTubeVideoPage, type MediaCandidate } from './media';
 import { scanPage } from './scan';
 
 export type SendResult = 'sent' | 'browser' | 'unreachable' | 'incognito' | 'failed';
@@ -19,6 +22,8 @@ const RESULT_SHOW_MS = 2500;
 const MAX_DETECTED = 30;
 /** The page-code fallback rescans at most this often while the pointer moves over videos. */
 const SCAN_REUSE_MS = 5000;
+/** A video page's qualities are asked for again after this long (D-72). */
+const FORMATS_REUSE_MS = 5 * 60_000;
 
 const RESULT_TEXT: Record<SendResult, string> = {
   sent: 'Sent to OB2',
@@ -26,6 +31,15 @@ const RESULT_TEXT: Record<SendResult, string> = {
   unreachable: 'OB2 not reachable. Is it set up? (OB2 popup)',
   incognito: 'Not available in Incognito',
   failed: 'Could not send to OB2',
+};
+
+const FORMATS_TEXT: Record<FormatsFailure, string> = {
+  unreachable: RESULT_TEXT.unreachable,
+  'tools-missing': 'OB2 needs its video tools (yt-dlp, ffmpeg, Deno) first.',
+  'media-failed': 'OB2 could not read this video.',
+  timeout: 'OB2 took too long to answer. Try again in a moment.',
+  incognito: RESULT_TEXT.incognito,
+  failed: 'Could not get the qualities from OB2.',
 };
 
 const CSS = `
@@ -37,12 +51,14 @@ const CSS = `
 .main:focus-visible { outline: 2px solid #fff; outline-offset: -4px; }
 .main:disabled { cursor: default; background: #3c4043; }
 .main svg { width: 16px; height: 16px; flex: none; }
-.menu { list-style: none; margin: 4px 0 0; padding: 4px 0; min-width: 220px; max-width: 360px; max-height: 240px; overflow: auto;
+.menu { list-style: none; margin: 4px 0 0; padding: 4px 0; min-width: 220px; max-width: 360px; max-height: 320px; overflow: auto;
   background: #fff; color: #202124; border-radius: 4px; box-shadow: 0 2px 8px rgba(0, 0, 0, .35); }
 .menu[hidden] { display: none; }
 .item { display: block; width: 100%; box-sizing: border-box; padding: 6px 10px; border: 0; background: none; color: inherit;
   font: inherit; text-align: left; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .item:hover, .item:focus-visible { background: #e8f0fe; outline: none; }
+.item.more { border-top: 1px solid #dadce0; color: #1a73e8; }
+.note { padding: 6px 10px; color: #5f6368; white-space: normal; overflow-wrap: anywhere; }
 `;
 
 /** The element's own http(s) source: what it plays now, else its src or <source> children. */
@@ -81,12 +97,19 @@ export class MediaOverlay {
   private busy = false;
   private contextMedia?: HTMLMediaElement;
   private pageScan?: { at: number; media: MediaCandidate[] };
+  private readonly formats = new Map<string, { at: number; outcome: Promise<FormatsOutcome> }>();
+  /** The video page whose qualities the open menu shows (or is waiting for). */
+  private menuPage?: string;
 
-  /** `shadowMode` is open only in tests, which need to reach the button. */
+  /**
+   * `shadowMode` is open only in tests, which need to reach the button. Without `listFormats`
+   * a video page goes to OB2's Download Video window as it is.
+   */
   constructor(
     private readonly doc: Document,
     private readonly send: (media: MediaCandidate) => Promise<SendResult>,
     private readonly shadowMode: ShadowRootMode = 'closed',
+    private readonly listFormats?: (pageUrl: string) => Promise<FormatsOutcome>,
   ) {}
 
   attach(): void {
@@ -153,7 +176,7 @@ export class MediaOverlay {
     this.cancelHide();
     this.placeHost();
     if (!this.busy) this.setLabel(candidates.length > 1 ? `Download with OB2 (${candidates.length})` : 'Download with OB2');
-    ui.main.setAttribute('aria-haspopup', candidates.length > 1 ? 'menu' : 'false');
+    ui.main.setAttribute('aria-haspopup', candidates.length > 1 || this.choosesQuality(candidates[0]) ? 'menu' : 'false');
     setDisplay(ui.host, true);
     this.reposition();
     return true;
@@ -162,6 +185,7 @@ export class MediaOverlay {
   hide(): void {
     this.cancelHide();
     this.target = undefined;
+    this.menuPage = undefined;
     if (this.ui) {
       setDisplay(this.ui.host, false);
       this.ui.menu.hidden = true;
@@ -263,39 +287,118 @@ export class MediaOverlay {
 
   private onMainClick(): void {
     if (this.busy) return;
-    if (this.candidates.length === 1) {
+    if (this.candidates.length === 1 && !this.choosesQuality(this.candidates[0])) {
       void this.sendMedia(this.candidates[0]);
     } else if (this.ui?.menu.hidden) {
-      this.openMenu();
+      if (this.candidates.length === 1) void this.openQualityMenu(this.candidates[0]);
+      else this.openMenu();
     } else if (this.ui) {
       this.ui.menu.hidden = true;
+      this.menuPage = undefined;
     }
   }
 
+  /** D-72: a video page whose qualities OB2 can list right here. */
+  private choosesQuality(media: MediaCandidate | undefined): boolean {
+    return !!media?.page && !media.format && !!this.listFormats;
+  }
+
   private openMenu(): void {
-    const ui = this.ui!;
-    ui.menu.replaceChildren(
-      ...this.candidates.map((media) => {
-        const li = this.doc.createElement('li');
-        li.setAttribute('role', 'none');
-        const item = this.doc.createElement('button');
-        item.type = 'button';
-        item.className = 'item';
-        item.setAttribute('role', 'menuitem');
-        item.textContent = mediaLabel(media, formatBytes);
-        item.title = media.url;
-        item.addEventListener('click', () => void this.sendMedia(media));
-        li.append(item);
-        return li;
-      }),
+    this.menuPage = undefined;
+    this.fillMenu(
+      this.candidates.map((media) =>
+        this.menuItem(mediaLabel(media, formatBytes), media.url, () => void (this.choosesQuality(media) ? this.openQualityMenu(media) : this.sendMedia(media))),
+      ),
     );
+  }
+
+  /**
+   * D-72: OB2 lists what the page offers (yt-dlp, a few seconds); each entry downloads that
+   * quality, and the last one opens OB2's Download Video window for other audio tracks.
+   */
+  private async openQualityMenu(page: MediaCandidate): Promise<void> {
+    const ui = this.ui!;
+    this.menuPage = page.url;
+    this.fillMenu([this.menuNote('Getting the qualities from OB2…')]);
+    ui.menu.setAttribute('aria-busy', 'true');
+    const outcome = await this.formatsOf(page.url);
+    if (ui.menu.hidden || this.menuPage !== page.url) return; // closed, or another video, meanwhile
+
+    const whole = { url: page.url, page: true } satisfies MediaCandidate;
+    if (outcome.action === 'listed') {
+      const name = outcome.title.trim().slice(0, 200) || undefined;
+      const items = outcome.options.map((option) => {
+        const label = optionLabel(option, formatBytes);
+        const choice: MediaCandidate = { ...whole, format: option.format, container: option.container, name };
+        if (option.size && option.size > 0) choice.size = option.size;
+        return this.menuItem(label, label, () => void this.sendMedia(choice));
+      });
+      const more = this.menuItem('More choices in OB2… (audio track, folder)', page.url, () => void this.sendMedia(whole));
+      more.querySelector('button')!.classList.add('more');
+      this.fillMenu([...items, more]);
+      return;
+    }
+
+    const items = [this.menuNote(outcome.message || FORMATS_TEXT[outcome.reason])];
+    if (outcome.reason === 'tools-missing') {
+      items.push(this.menuItem('Set up video downloads in OB2…', page.url, () => void this.sendMedia(whole)));
+    } else if (outcome.reason !== 'unreachable' && outcome.reason !== 'incognito') {
+      items.push(this.menuItem('Open in OB2…', page.url, () => void this.sendMedia(whole)));
+    }
+    this.fillMenu(items);
+  }
+
+  /** The page's qualities, asked once and kept for a while; a failure is asked again next time. */
+  private formatsOf(pageUrl: string): Promise<FormatsOutcome> {
+    const now = Date.now();
+    for (const [url, kept] of this.formats) {
+      if (now - kept.at >= FORMATS_REUSE_MS) this.formats.delete(url);
+    }
+    const kept = this.formats.get(pageUrl);
+    if (kept) return kept.outcome;
+
+    const outcome = this.listFormats!(pageUrl).catch((): FormatsOutcome => ({ action: 'failed', reason: 'failed' }));
+    this.formats.set(pageUrl, { at: now, outcome });
+    void outcome.then((o) => {
+      if (o.action !== 'listed' && this.formats.get(pageUrl)?.outcome === outcome) this.formats.delete(pageUrl);
+    });
+    return outcome;
+  }
+
+  private fillMenu(items: HTMLLIElement[]): void {
+    const ui = this.ui!;
+    ui.menu.replaceChildren(...items);
+    ui.menu.removeAttribute('aria-busy');
     ui.menu.hidden = false;
     (ui.menu.querySelector('button') as HTMLButtonElement | null)?.focus();
+  }
+
+  private menuItem(text: string, title: string, onClick: () => void): HTMLLIElement {
+    const li = this.doc.createElement('li');
+    li.setAttribute('role', 'none');
+    const item = this.doc.createElement('button');
+    item.type = 'button';
+    item.className = 'item';
+    item.setAttribute('role', 'menuitem');
+    item.textContent = text;
+    item.title = title;
+    item.addEventListener('click', onClick);
+    li.append(item);
+    return li;
+  }
+
+  private menuNote(text: string): HTMLLIElement {
+    const li = this.doc.createElement('li');
+    li.setAttribute('role', 'none');
+    li.className = 'note';
+    li.textContent = text;
+    return li;
   }
 
   private async sendMedia(media: MediaCandidate): Promise<void> {
     const ui = this.ui!;
     this.busy = true;
+    this.menuPage = undefined;
     ui.menu.hidden = true;
     ui.main.disabled = true;
     this.setLabel('Sending to OB2…');

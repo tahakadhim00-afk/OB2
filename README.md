@@ -67,7 +67,7 @@ OB2 uses well-known open-source libraries for plumbing; see [Tech stack](#tech-s
 - **"Download with OB2"** appears on every link's right-click menu.
 - **Video button.** A button appears over playing videos that have a direct file.
 - **Page link finder.** The popup lists every downloadable file on the current page, including addresses hidden in scripts.
-- **Video sites** such as YouTube open a quality and audio-track chooser, and the download then behaves like any other row (pause, resume, progress).
+- **Video sites** such as YouTube: the video button lists every quality (1080p, 720p, … and audio only) with its file type and size, and the one you pick downloads like any other row (pause, resume, progress). "More choices" opens a chooser for other audio tracks.
 
 ### Safe by default
 - File names are cleaned up: no path traversal, reserved names, or right-to-left tricks that disguise an extension.

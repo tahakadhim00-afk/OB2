@@ -149,6 +149,22 @@ public sealed class DownloadService
         return item;
     }
 
+    /// <summary>
+    /// D-71: a video page that yt-dlp downloads in <see cref="AddDownloadOptions.MediaFormat"/>.
+    /// Nothing is probed, because the page is not the file; the size is yt-dlp's estimate.
+    /// </summary>
+    public Task<DownloadItem> AddMediaAsync(AddDownloadOptions options, long? estimatedSize, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        if (options.MediaFormat is null || options.FileName is null)
+        {
+            throw new ArgumentException("A media download needs its formats and file name.", nameof(options));
+        }
+
+        var probe = new ProbeResult(options.Url, estimatedSize, false, options.FileName, null, null, null);
+        return AddAsync(options with { Connections = 1 }, probe, cancellationToken);
+    }
+
     /// <summary>Resume / Retry (FR-14): starts paused, failed, or queued downloads now.</summary>
     public void Start(IEnumerable<long> ids)
     {

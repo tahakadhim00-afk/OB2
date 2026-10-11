@@ -37,7 +37,8 @@ public sealed class ProcessRunner : IProcessRunner
             info.ArgumentList.Add(argument);
         }
 
-        // yt-dlp is Python: without these it writes titles in the console code page, not UTF-8.
+        // For a yt-dlp run by Python. The standalone yt-dlp.exe ignores these, so yt-dlp is also
+        // given --encoding utf-8 (MediaTools.CommonArguments).
         info.Environment["PYTHONUTF8"] = "1";
         info.Environment["PYTHONIOENCODING"] = "utf-8";
 

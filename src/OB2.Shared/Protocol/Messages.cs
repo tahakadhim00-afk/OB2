@@ -17,8 +17,18 @@ public static class MessageTypes
     public const string ResumeAll = "resume_all";
     public const string Error = "error";
 
+    /// <summary>D-72: what a video page offers, for the quality menu on the browser's video button.</summary>
+    public const string GetMediaFormats = "get_media_formats";
+    public const string MediaFormats = "media_formats";
+
     /// <summary>App-internal: a second <c>ob2.exe</c> asks the running one to show its window.</summary>
     public const string Activate = "activate";
+
+    /// <summary>
+    /// How long the app may take to answer. Listing a video's formats runs yt-dlp, which takes
+    /// seconds, and longer on a slow line (D-72); everything else is answered at once.
+    /// </summary>
+    public static TimeSpan ReplyTime(string? type) => type == GetMediaFormats ? TimeSpan.FromSeconds(90) : TimeSpan.FromSeconds(10);
 }
 
 /// <summary>Error codes (PRD §8.3) plus <see cref="InvalidMessage"/> (decision D-50).</summary>
@@ -33,6 +43,12 @@ public static class ProtocolErrors
 
     /// <summary>Malformed JSON, missing fields, or a frame above 1 MB.</summary>
     public const string InvalidMessage = "INVALID_MESSAGE";
+
+    /// <summary>D-72: yt-dlp, ffmpeg and Deno are not installed yet; the Download Video window installs them.</summary>
+    public const string MediaToolsMissing = "MEDIA_TOOLS_MISSING";
+
+    /// <summary>D-72: yt-dlp could not list the page; the message is its reason, meant for the user.</summary>
+    public const string MediaFailed = "MEDIA_FAILED";
 }
 
 /// <summary>The envelope every message uses: <c>{ v, id, type, payload }</c>.</summary>
@@ -86,6 +102,8 @@ public static class ProtocolJson
 [JsonSerializable(typeof(ErrorPayload))]
 [JsonSerializable(typeof(PongPayload))]
 [JsonSerializable(typeof(StatusPayload))]
+[JsonSerializable(typeof(MediaFormatsRequest))]
+[JsonSerializable(typeof(MediaFormatsPayload))]
 public sealed partial class ProtocolJsonContext : JsonSerializerContext;
 
 /// <summary><c>add_download</c> payload, exactly as in §8.3.</summary>
@@ -119,7 +137,29 @@ public sealed record AddDownloadPayload
     /// window to choose quality and audio. Optional; v stays 1 (an added field, like D-50).
     /// </summary>
     public bool? MediaPage { get; init; }
+
+    /// <summary>
+    /// D-72: with <see cref="MediaPage"/>, the yt-dlp format selector picked on the browser's
+    /// button (<c>137+140</c>), from a <c>media_formats</c> reply. The app downloads it without
+    /// asking again, unless confirmation is on.
+    /// </summary>
+    public string? MediaFormat { get; init; }
+
+    /// <summary>D-72: the finished file's extension that goes with <see cref="MediaFormat"/>.</summary>
+    public string? MediaContainer { get; init; }
 }
+
+/// <summary><c>get_media_formats</c> payload (D-72): the video page whose qualities the button lists.</summary>
+public sealed record MediaFormatsRequest
+{
+    public string? Url { get; init; }
+}
+
+/// <summary><c>media_formats</c> reply (D-72): the page's title and the button's menu entries, best first.</summary>
+public sealed record MediaFormatsPayload(string Title, double? DurationSeconds, IReadOnlyList<MediaOptionPayload> Options);
+
+/// <summary>One quality: <paramref name="Format"/> and <paramref name="Container"/> go back in <c>add_download</c>.</summary>
+public sealed record MediaOptionPayload(string Format, string Container, bool AudioOnly, string? Quality, string? Codec, string? Track, long? Size);
 
 public sealed record AckPayload(long? DownloadId, string Status);
 

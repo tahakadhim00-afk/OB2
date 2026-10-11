@@ -31,12 +31,15 @@ public sealed class MediaTools
 
     /// <summary>
     /// Arguments for every yt-dlp run: OB2's own tools and cache, and no user config file, which
-    /// could otherwise change where files go.
+    /// could otherwise change where files go. Output in UTF-8: otherwise the standalone yt-dlp.exe
+    /// writes to a pipe in the ANSI code page and drops letters it can't encode, so an Arabic
+    /// file name came back as spaces and OB2 could not find the finished file (D-73).
     /// </summary>
     public IReadOnlyList<string> CommonArguments =>
     [
         "--ignore-config",
         "--no-colors",
+        "--encoding", "utf-8",
         "--ffmpeg-location", FfmpegFolder,
         "--js-runtimes", "deno:" + DenoPath,
         "--cache-dir", CacheFolder,
