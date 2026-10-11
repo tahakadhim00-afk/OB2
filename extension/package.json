@@ -1,6 +1,6 @@
 {
   "name": "ob2-chrome-extension",
-  "version": "0.6.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Chrome MV3 extension that hands browser downloads to the OB2 desktop app (PRD §8).",
   "license": "UNLICENSED",

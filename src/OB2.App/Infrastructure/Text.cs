@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Reflection;
 using System.Windows;
 using OB2.Core.Downloads;
 
@@ -14,6 +15,16 @@ internal static class Loc
         string.Format(CultureInfo.CurrentCulture, Get(key), args);
 
     public static string Status(DownloadStatus status) => Get("Status_" + status);
+}
+
+/// <summary>The release version from Directory.Build.props, without the commit hash the SDK appends.</summary>
+internal static class AppInfo
+{
+    public static string Version { get; } =
+        typeof(AppInfo).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "?";
+
+    /// <summary>"Version 1.0.0", for <c>{x:Static}</c> bindings.</summary>
+    public static string VersionText => Loc.Format("App_Version", Version);
 }
 
 /// <summary>Human-readable sizes, speeds, and durations.</summary>

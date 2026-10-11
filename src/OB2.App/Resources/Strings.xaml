@@ -3,6 +3,7 @@
                     xmlns:sys="clr-namespace:System;assembly=System.Runtime">
     <!-- All user-visible text lives here so it can be translated later (NFR Localization). -->
     <sys:String x:Key="App_Title">OB2</sys:String>
+    <sys:String x:Key="App_Version">Version {0}</sys:String>
     <sys:String x:Key="Common_Ok">OK</sys:String>
     <sys:String x:Key="Common_Cancel">Cancel</sys:String>
     <sys:String x:Key="Common_Save">Save</sys:String>

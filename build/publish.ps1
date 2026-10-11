@@ -3,8 +3,9 @@
 #                           and with -IncludeHost: host.exe and chrome-extension/ (needs Node.js/npm)
 #   publish/OB2-portable.zip
 #   publish/SHA256SUMS.txt
-# Usage (repo root):  powershell -ExecutionPolicy Bypass -File build/publish.ps1 [-Version 1.0.0] [-IncludeHost]
-param([string]$Version = "0.5.0", [switch]$IncludeHost)
+# Usage (repo root):  powershell -ExecutionPolicy Bypass -File build/publish.ps1 [-Version 1.0.1] [-IncludeHost]
+# The version comes from Directory.Build.props unless -Version overrides it.
+param([string]$Version, [switch]$IncludeHost)
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $out = Join-Path $root "publish"
@@ -16,7 +17,8 @@ function Publish([string]$project, [string]$target, [bool]$compress) {
     $publishArgs = @("publish", (Join-Path $root $project), "-c", "Release", "-r", "win-x64", "--self-contained", "true",
         "-p:PublishSingleFile=true", "-p:IncludeNativeLibrariesForSelfExtract=true",
         "-p:EnableCompressionInSingleFile=$($compress.ToString().ToLower())", "-p:DebugType=none",
-        "-p:Version=$Version", "-o", $target, "-nologo", "-v", "q")
+        "-o", $target, "-nologo", "-v", "q")
+    if ($Version) { $publishArgs += "-p:Version=$Version" }
     & dotnet @publishArgs
     if ($LASTEXITCODE -ne 0) { throw "dotnet publish $project failed" }
 }

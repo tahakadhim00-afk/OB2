@@ -6,7 +6,8 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AnalysisLevel>latest-recommended</AnalysisLevel>
     <Deterministic>true</Deterministic>
-    <Version>0.1.0</Version>
+    <!-- The release version, shown in the app (main window) and stamped on OB2.exe and host.exe. -->
+    <Version>1.0.0</Version>
     <Company>Taha</Company>
     <Product>OB2</Product>
   </PropertyGroup>

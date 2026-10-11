@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "OB2 Download Capture",
   "short_name": "OB2",
-  "version": "0.6.0",
+  "version": "1.0.0",
   "description": "Sends browser downloads (Chrome or Edge) to the OB2 download manager on this PC.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAw0HlMUCkCu8asUIzRKCzC8MfHmIbcFOqm/+vAUB6xOmZ7YGkoTkwqG4x1ij6+1JltBxPNUf5xeo7AesqRfWPw+H6I/L0JZQZ4x0Ce5bTIZfU7BX9NiqVqdq02jgupg/HjPNl+mfLb5MQs+AyzEYY6XRX/kZjMfDDT4+YWaDw5oV6iB+MViJYKJpKgkyYRKR0Aq1+xonl96mcfDNY8NnBZHW2ECPZqvpgZQtLbfz6jdZqQsD/AS951iyHXrBuTwQTSNvnHnwY2NirgOc1uiwxcQR4Qic0WCDi1O4AW/J8h+hJlCLnJjnqEBbSlU40HwHvpMlGkLaG46sJ+uN7G58KuQIDAQAB",
   "minimum_chrome_version": "116",
