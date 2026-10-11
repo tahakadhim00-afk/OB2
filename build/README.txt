@@ -1,5 +1,5 @@
-OB2 - personal download manager (portable)
-==========================================
+OB2 - download manager for Windows (portable)
+=============================================
 
 Requirements: Windows 10 1809 or later, or Windows 11, 64-bit. No .NET install needed.
 

@@ -75,7 +75,7 @@ public sealed class ChecksumTests : IDisposable
 
         Checksum.TryCreate(algorithm, hex, out var checksum).Should().BeTrue();
 
-        (await checksum!.MatchesAsync(path)).Should().BeTrue();
+        (await Checksum.ComputeAsync(path, checksum!.Algorithm)).Should().Be(checksum.HexValue);
     }
 
     [Theory]

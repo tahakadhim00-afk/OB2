@@ -132,7 +132,7 @@ export function isMediaCandidate(value: unknown): value is MediaCandidate {
 
 /**
  * A file name from the page title when the URL has none worth keeping (`videoplayback?id=…`),
- * like IDM. Undefined when the URL already names a media file or the type is unknown.
+ * so the saved file is recognizable. Undefined when the URL already names a media file or the type is unknown.
  */
 export function mediaFileName(media: MediaCandidate, pageTitle: string | undefined): string | undefined {
   const url = parseHttpUrl(media.url);

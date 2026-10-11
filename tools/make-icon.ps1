@@ -1,6 +1,6 @@
 # Generates src/OB2.App/Resources/ob2.ico and the Chrome extension icons (extension/icons/icon-N.png):
 # a blue rounded square with a white download arrow.
-# Original artwork (PRD: no IDM assets). Run from the repo root: powershell -File tools/make-icon.ps1
+# Original artwork drawn in code; no third-party icons or assets. Run from the repo root: powershell -File tools/make-icon.ps1
 Add-Type -AssemblyName System.Drawing
 
 $sizes = 16, 20, 24, 32, 40, 48, 64, 256

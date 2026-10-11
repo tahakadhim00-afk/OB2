@@ -7,7 +7,7 @@ Items noticed during a phase but outside its scope (PRD §0). Each one names the
 | Log retention by age (7 days) relies on Serilog's `retainedFileTimeLimit`; only rolling by size is covered by a test. | Phase 1 | Any |
 | Manual HTTP/SOCKS5 proxy (FR-10, P1). The engine uses the system proxy. No phase lists it in scope. | Phase 2 | v1.0 |
 | Set the file timestamp from `Last-Modified` (FR-12, P2). The value is already stored. | Phase 2 | v1.1 |
-| Dynamic segment splitting: when a connection finishes early, split the largest remaining segment (IDM-style). | Phase 3 | v1.1 |
+| Dynamic segment splitting: when a connection finishes early, split the largest remaining segment so no connection sits idle. | Phase 3 | v1.1 |
 | Detect HDD vs SSD and limit segments on rotating disks (§16.1). | Phase 3 | v1.1 |
 | Enforce `history.retentionDays` (§10.4). The setting exists; nothing prunes old rows yet. | Phase 4 | v1.0 |
 | List orphaned `.pgpart` files under "Recovered orphan files" (§10.3). They are never deleted, but they are not shown either. | Phase 4 | v1.0 |
@@ -23,5 +23,5 @@ Items noticed during a phase but outside its scope (PRD §0). Each one names the
 | Video pages that need a sign-in (age-restricted or members-only YouTube videos, private posts): pass the browser's cookies to yt-dlp without writing them to disk in the clear. Today such pages fail with yt-dlp's "sign in" message (D-71). | v1.0 | v1.1 |
 | Playlists and channels: the Download Video window refuses them; offer "download all" with one quality choice for the whole list (D-71). | v1.0 | v1.1 |
 | Options > Video sites: show the yt-dlp/Deno/ffmpeg versions, update yt-dlp, and remove the tools. Today "Update yt-dlp" lives in the Download Video window (D-71). | v1.0 | v1.1 |
-| Download YouTube streams with OB2's own segmented engine (yt-dlp only for the addresses, ffmpeg for the merge), as IDM does, for more speed on lines that limit each connection (D-71). | v1.0 | v1.1 |
+| Download YouTube streams with OB2's own segmented engine (yt-dlp only for the addresses, ffmpeg for the merge), for more speed on lines that limit each connection (D-71). | v1.0 | v1.1 |
 | Media button: videos inside closed shadow roots of custom players are not found, and only the frame that loaded a file offers it (a `blob:` player in the top page whose file was fetched by an iframe gets no button). | v1.0 | v1.1 |

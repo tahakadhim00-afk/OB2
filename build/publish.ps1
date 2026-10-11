@@ -26,8 +26,7 @@ function Publish([string]$project, [string]$target, [bool]$compress) {
 Publish "src/OB2.App/OB2.App.csproj" (Join-Path $out "app") $false
 Copy-Item (Join-Path $out "app/OB2.exe") $stage
 
-$hostProject = Join-Path $root "src/OB2.Host/OB2.Host.csproj"
-if ($IncludeHost -and (Test-Path $hostProject)) {
+if ($IncludeHost) {
     # The host starts on every captured link, so it is not compressed (no decompression at launch).
     Publish "src/OB2.Host/OB2.Host.csproj" (Join-Path $out "host") $false
     Copy-Item (Join-Path $out "host/host.exe") $stage

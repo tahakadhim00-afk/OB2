@@ -15,7 +15,6 @@ public static class MessageTypes
     public const string Status = "status";
     public const string PauseAll = "pause_all";
     public const string ResumeAll = "resume_all";
-    public const string CaptureRulesUpdated = "capture_rules_updated";
     public const string Error = "error";
 
     /// <summary>App-internal: a second <c>ob2.exe</c> asks the running one to show its window.</summary>

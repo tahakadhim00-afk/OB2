@@ -71,7 +71,6 @@
     <!-- Details panel -->
     <sys:String x:Key="Detail_Url">Address</sys:String>
     <sys:String x:Key="Detail_Destination">Saved to</sys:String>
-    <sys:String x:Key="Detail_Error">Error</sys:String>
     <sys:String x:Key="Detail_Connections">Connections</sys:String>
     <sys:String x:Key="Detail_Retry">Retry</sys:String>
     <sys:String x:Key="Detail_None">Select a download to see its connections.</sys:String>
@@ -212,7 +211,6 @@
 
     <!-- Download Video window: video pages through yt-dlp (D-71) -->
     <sys:String x:Key="Media_Title">Download Video</sys:String>
-    <sys:String x:Key="Media_Page">Page</sys:String>
     <sys:String x:Key="Media_Loading">Getting the available qualities…</sys:String>
     <sys:String x:Key="Media_Video">Video quality</sys:String>
     <sys:String x:Key="Media_Audio">Audio</sys:String>

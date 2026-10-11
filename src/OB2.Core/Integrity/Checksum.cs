@@ -60,7 +60,4 @@ public sealed record Checksum(ChecksumAlgorithm Algorithm, string HexValue)
 
         return Convert.ToHexString(hash.GetHashAndReset());
     }
-
-    public async Task<bool> MatchesAsync(string path, CancellationToken cancellationToken = default) =>
-        string.Equals(await ComputeAsync(path, Algorithm, cancellationToken).ConfigureAwait(false), HexValue, StringComparison.OrdinalIgnoreCase);
 }

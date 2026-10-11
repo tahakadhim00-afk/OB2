@@ -11,7 +11,7 @@ import { MediaOverlay, type SendResult } from './overlay';
 import { loadMediaButtonEnabled, MEDIA_BUTTON_KEY } from './rules';
 import { SCAN_GLOBAL, scanPage, type PageScan } from './scan';
 
-export function shiftClickedLink(event: MouseEvent): string | undefined {
+function shiftClickedLink(event: MouseEvent): string | undefined {
   if (!event.shiftKey) return undefined;
   // composedPath reaches links inside shadow roots; <a> covers both HTML and SVG links.
   for (const node of event.composedPath()) {

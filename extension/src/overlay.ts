@@ -1,5 +1,5 @@
 // FR-24: the "Download with OB2" button that floats over a video while the pointer is on it, and
-// for a few seconds after a video starts playing, as in IDM. It offers the video's own file when
+// for a few seconds after a video starts playing. It offers the video's own file when
 // the element plays an http(s) address, else the media files the background saw this frame load
 // (players that feed the element a blob: URL). The button lives in a closed shadow root so page
 // CSS and scripts can't restyle or read it, and it is built without innerHTML (Trusted Types).
@@ -46,7 +46,7 @@ const CSS = `
 `;
 
 /** The element's own http(s) source: what it plays now, else its src or <source> children. */
-export function ownSources(media: HTMLMediaElement): string[] {
+function ownSources(media: HTMLMediaElement): string[] {
   if (media.currentSrc) {
     // A blob: or a streaming manifest: only what the network showed can be downloaded.
     return isDownloadableMediaUrl(media.currentSrc) ? [media.currentSrc] : [];
@@ -56,7 +56,7 @@ export function ownSources(media: HTMLMediaElement): string[] {
 }
 
 /** What the button offers for this element, best first. */
-export function candidatesFor(media: HTMLMediaElement, detected: readonly MediaCandidate[]): MediaCandidate[] {
+function candidatesFor(media: HTMLMediaElement, detected: readonly MediaCandidate[]): MediaCandidate[] {
   const own = ownSources(media);
   if (own.length > 0) return own.map((url) => detected.find((d) => d.url === url) ?? { url });
   return [...detected].reverse(); // newest first: most likely the video now on screen

@@ -37,9 +37,6 @@ public static class DownloadStatusExtensions
     public static bool IsRunning(this DownloadStatus status) =>
         status is DownloadStatus.Probing or DownloadStatus.Downloading or DownloadStatus.Retrying;
 
-    public static bool IsFinished(this DownloadStatus status) =>
-        status is DownloadStatus.Completed or DownloadStatus.Cancelled;
-
     /// <summary>The lower-case name used in the database and the IPC protocol.</summary>
     public static string ToDbString<T>(this T value)
         where T : struct, Enum => value.ToString().ToLowerInvariant();

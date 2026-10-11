@@ -96,7 +96,7 @@ function describe(d: DownloadSummary, active: boolean): string {
 
 export { formatBytes };
 
-export function formatSpeed(bytesPerSecond: number): string {
+function formatSpeed(bytesPerSecond: number): string {
   return `${formatBytes(bytesPerSecond)}/s`;
 }
 
@@ -114,7 +114,7 @@ const KIND_TEXT: Record<FoundKind, string> = { video: 'Video', audio: 'Audio', f
 const KIND_ORDER: FoundKind[] = ['video', 'audio', 'file', 'stream'];
 
 /** One row per address across all frames, videos first, streams last. */
-export function mergeScans(scans: readonly PageScan[]): Array<{ link: FoundLink; pageUrl: string }> {
+function mergeScans(scans: readonly PageScan[]): Array<{ link: FoundLink; pageUrl: string }> {
   const rows = new Map<string, { link: FoundLink; pageUrl: string }>();
   for (const scan of scans) {
     for (const link of scan.links) {
