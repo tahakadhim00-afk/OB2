@@ -35,3 +35,7 @@ unsigned single-file programs; compare the files with SHA256SUMS.txt from the re
 Uninstall
 ---------
 Options > Browser > Unregister (if you registered it), then delete this folder.
+
+License
+-------
+OB2 is developed by Taha Kadhim and released under the MIT License (see LICENSE.txt).

@@ -1,5 +1,5 @@
 # Builds the portable release (PRD §12.2, §12.4):
-#   publish/OB2-portable/   OB2.exe (single-file, self-contained), portable.flag, README.txt,
+#   publish/OB2-portable/   OB2.exe (single-file, self-contained), portable.flag, README.txt, LICENSE.txt,
 #                           and with -IncludeHost: host.exe and chrome-extension/ (needs Node.js/npm)
 #   publish/OB2-portable.zip
 #   publish/SHA256SUMS.txt
@@ -55,6 +55,7 @@ if ($IncludeHost -and (Test-Path (Join-Path $extension "dist"))) {
 
 Set-Content -Path (Join-Path $stage "portable.flag") -Value "Settings, history, and logs are stored next to OB2.exe while this file exists." -Encoding ascii
 Copy-Item (Join-Path $root "build/README.txt") (Join-Path $stage "README.txt")
+Copy-Item (Join-Path $root "LICENSE") (Join-Path $stage "LICENSE.txt")
 
 $zip = Join-Path $out "OB2-portable.zip"
 Compress-Archive -Path (Join-Path $stage "*") -DestinationPath $zip

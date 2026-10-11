@@ -218,3 +218,11 @@ docs/             Protocol, design decisions, backlog, and release reports
 | [docs/backlog.md](docs/backlog.md) | Known gaps and planned work |
 | [OB2_PRD.md](OB2_PRD.md) | The original requirements and the phased build plan |
 | `docs/phase-*-report.md`, [docs/v1.0-report.md](docs/v1.0-report.md) | What each milestone delivered, with test and performance results |
+
+---
+
+## Developer and license
+
+OB2 is designed and developed by **Taha Kadhim**.
+
+Released under the [MIT License](LICENSE). Copyright (c) 2026 Taha Kadhim.

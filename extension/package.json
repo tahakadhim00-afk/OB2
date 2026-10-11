@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "description": "Chrome MV3 extension that hands browser downloads to the OB2 desktop app (PRD §8).",
-  "license": "UNLICENSED",
+  "author": "Taha Kadhim",
+  "license": "MIT",
   "scripts": {
     "build": "node build.mjs",
     "typecheck": "tsc -p tsconfig.json && tsc -p tests/tsconfig.json",
