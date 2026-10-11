@@ -21,6 +21,8 @@
 
   <ItemGroup>
     <Resource Include="Resources\ob2.ico" />
+    <!-- The OB2 wordmark, used straight from the logo artwork so there is one copy. -->
+    <Resource Include="..\..\assets\logo\inside_app_logo.png" Link="Resources\logo.png" />
   </ItemGroup>
 
   <ItemGroup>

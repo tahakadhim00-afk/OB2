@@ -1,4 +1,6 @@
-# OB2
+<h1 align="center">
+  <img src="assets/logo/inside_readme_on_github.png" alt="OB2" width="440" />
+</h1>
 
 **A download manager for Windows, designed and written from scratch.**
 
@@ -33,7 +35,7 @@ OB2 is its own product with its own design. It is not a clone, port, or reskin o
 
 - **All code is written for this project.** OB2 has its own segmented download engine, database schema, browser protocol, user interface, and file handling. It contains no code from other download managers.
 - **Native Windows software.** The desktop app is C# on .NET 10 with WPF, compiled to a self-contained `OB2.exe`. It is not a web page in a wrapper. It calls Windows features directly: NTFS sparse files, Mark-of-the-Web, DPAPI encryption, named pipes, and browser Native Messaging.
-- **Original artwork.** The icon is drawn in code by [tools/make-icon.ps1](tools/make-icon.ps1). No third-party icons, sounds, or images are used.
+- **Original artwork.** The OB2 logo was designed for this project ([assets/logo](assets/logo)). [tools/make-icon.ps1](tools/make-icon.ps1) builds the app and extension icons from it. No third-party icons, sounds, or images are used.
 - **Its own protocol.** The extension, the native host, and the app talk through a small versioned JSON protocol, specified in [docs/protocol.md](docs/protocol.md).
 - **Decisions on record.** More than 70 design decisions, each with its reason, are kept in [docs/decisions.md](docs/decisions.md).
 
@@ -188,13 +190,14 @@ src/
   OB2.Shared/     Wire protocol, message framing, named pipes, host registration
   OB2.Host/       Native Messaging host (host.exe)
 extension/        Chrome/Edge MV3 extension (src/, tests/, build.mjs)
+assets/logo/      OB2 logo artwork: app icon, in-app wordmark, README header
 tests/
   OB2.Core.Tests/         Unit tests for the engine and core logic
   OB2.Storage.Tests/      Database, settings, and path tests
   OB2.Integration.Tests/  End-to-end downloads, IPC, CLI, and registry tests
 tools/
   OB2.TestServer/  Local HTTP server for manual testing (ranges, throttling, faults)
-  make-icon.ps1    Generates the app and extension icons
+  make-icon.ps1    Builds the app and extension icons from assets/logo
 build/            publish.ps1, the release README, and clean-machine test files
 docs/             Protocol, design decisions, backlog, and release reports
 ```

@@ -94,21 +94,25 @@
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
-            <TreeView x:Name="NavTree" ItemsSource="{Binding Nav}" BorderThickness="0" Padding="2,4"
-                      SelectedItemChanged="OnNavSelected" AutomationProperties.Name="{StaticResource Nav_All}">
-                <TreeView.ItemContainerStyle>
-                    <Style TargetType="TreeViewItem">
-                        <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
-                        <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
-                        <Setter Property="Padding" Value="2,3" />
-                    </Style>
-                </TreeView.ItemContainerStyle>
-                <TreeView.ItemTemplate>
-                    <HierarchicalDataTemplate ItemsSource="{Binding Children}">
-                        <TextBlock Text="{Binding Display}" />
-                    </HierarchicalDataTemplate>
-                </TreeView.ItemTemplate>
-            </TreeView>
+            <DockPanel>
+                <Image DockPanel.Dock="Top" Source="/Resources/logo.png" Height="34" Margin="12,10,12,6" HorizontalAlignment="Left"
+                       RenderOptions.BitmapScalingMode="HighQuality" AutomationProperties.Name="{StaticResource App_Title}" />
+                <TreeView x:Name="NavTree" ItemsSource="{Binding Nav}" BorderThickness="0" Padding="2,4"
+                          SelectedItemChanged="OnNavSelected" AutomationProperties.Name="{StaticResource Nav_All}">
+                    <TreeView.ItemContainerStyle>
+                        <Style TargetType="TreeViewItem">
+                            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+                            <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
+                            <Setter Property="Padding" Value="2,3" />
+                        </Style>
+                    </TreeView.ItemContainerStyle>
+                    <TreeView.ItemTemplate>
+                        <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                            <TextBlock Text="{Binding Display}" />
+                        </HierarchicalDataTemplate>
+                    </TreeView.ItemTemplate>
+                </TreeView>
+            </DockPanel>
 
             <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Center" VerticalAlignment="Stretch" ResizeBehavior="PreviousAndNext" />
 
