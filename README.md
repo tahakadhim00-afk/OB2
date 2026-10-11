@@ -38,7 +38,7 @@ OB2 is its own product with its own design. It is not a clone, port, or reskin o
 
 - **All code is written for this project.** OB2 has its own segmented download engine, database schema, browser protocol, user interface, and file handling. It contains no code from other download managers.
 - **Native Windows software.** The desktop app is C# on .NET 10 with WPF, compiled to a self-contained `OB2.exe`. It is not a web page in a wrapper. It calls Windows features directly: NTFS sparse files, Mark-of-the-Web, DPAPI encryption, named pipes, and browser Native Messaging.
-- **Original artwork.** The OB2 logo was designed for this project ([assets/logo](assets/logo)). [tools/make-icon.ps1](tools/make-icon.ps1) builds the app and extension icons from it. No third-party icons, sounds, or images are used.
+- **Original artwork.** The OB2 logo was designed for this project ([assets/logo](assets/logo)), and the app and extension icons are made from it. No third-party icons, sounds, or images are used.
 - **Its own protocol.** The extension, the native host, and the app talk through a small versioned JSON protocol, specified in [docs/protocol.md](docs/protocol.md).
 - **Decisions on record.** More than 70 design decisions, each with its reason, are kept in [docs/decisions.md](docs/decisions.md).
 
@@ -198,9 +198,6 @@ tests/
   OB2.Core.Tests/         Unit tests for the engine and core logic
   OB2.Storage.Tests/      Database, settings, and path tests
   OB2.Integration.Tests/  End-to-end downloads, IPC, CLI, and registry tests
-tools/
-  OB2.TestServer/  Local HTTP server for manual testing (ranges, throttling, faults)
-  make-icon.ps1    Builds the app and extension icons from assets/logo
 build/            publish.ps1, the release README, and clean-machine test files
 docs/             Protocol, design decisions, backlog, and release reports
 ```
@@ -209,7 +206,6 @@ docs/             Protocol, design decisions, backlog, and release reports
 - Integration tests download from a local Kestrel server that can simulate missing range support, throttling, stalls, dropped connections, failures, and connection limits. Video-site tests use a fake yt-dlp. No test needs the internet.
 - Registry tests write only under `HKCU\Software\OB2.Tests\<guid>` and remove it afterwards.
 - Large benchmark tests are opt-in: set `OB2_RUN_LARGE=1`.
-- To try OB2 by hand against controllable downloads, run `dotnet run --project tools/OB2.TestServer` and add one of its URLs.
 
 ---
 
