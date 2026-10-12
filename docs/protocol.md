@@ -63,8 +63,8 @@ Exactly as in PRD §8.3:
 | `source` | string | `chrome-downloads`, `chrome-context-menu`, `chrome-media` (the button over a video or the video/audio context menu, D-69), `chrome-page` (a link picked from the popup's "Find downloads" list, D-70), or `cli`. |
 | `autoStart` | bool | `true` skips the confirmation dialog for this request. |
 | `mediaPage` | bool | `true`: `url` is a video page (YouTube or another site yt-dlp supports), not a file. The app opens the Download Video window to choose quality and audio, and replies `"confirming"`. YouTube watch/Shorts/embed addresses are treated this way even without the flag (D-71). |
-| `mediaFormat` | string | Only with `mediaPage`: the quality picked on the video button, a `format` from `media_formats` (`137+140`). With confirmation off the app adds the download at once and replies with its id; with confirmation on, the Download Video window opens with this quality selected (D-72). One or two plain format ids, else `INVALID_MESSAGE`. |
-| `mediaContainer` | string | Required with `mediaFormat`: the finished file's extension (`mp4`), from the same option. `filenameHint` then carries the video's title with that extension. |
+| `mediaFormat` | string | Only with `mediaPage`: the quality picked on the video button, a `format` from `media_formats` (`137+140`). With confirmation off the app adds the download at once and replies with its id; with confirmation on, the Download Video window opens with this quality selected (D-72). One or two plain format ids, else `INVALID_MESSAGE`. Or a subtitle track's `format` (`subs:en`, `auto-subs:en-orig`, D-74): `subs:` or `auto-subs:` and a language key of letters, digits, `_` and `-`. |
+| `mediaContainer` | string | Required with `mediaFormat`: the finished file's extension (`mp4`), from the same option; `srt`, `ass` or `vtt` for subtitles. `filenameHint` then carries the video's title with that extension; the app adds the language to a subtitle's name (`Title.en.srt`). |
 
 Validation, done by both the host and the app (`ProtocolValidator`): the URL must be present, at most 2048 characters, absolute, and `http`/`https` (otherwise `INVALID_URL` or `UNSUPPORTED_SCHEME`).
 
@@ -98,11 +98,17 @@ Validation, done by both the host and the app (`ProtocolValidator`): the URL mus
   "options": [
     { "format": "137+140", "container": "mp4", "audioOnly": false, "quality": "1080p", "codec": "H.264", "size": 108400000 },
     { "format": "140", "container": "m4a", "audioOnly": true, "quality": "130 kbit/s", "codec": "AAC", "track": "English original (default)", "size": 3400000 }
+  ],
+  "subtitles": [
+    { "format": "subs:en", "language": "en", "name": "English", "automatic": false, "containers": ["srt", "ass", "vtt"] },
+    { "format": "auto-subs:en-orig", "language": "en-orig", "name": "English (Original)", "automatic": true, "containers": ["srt", "ass", "vtt"] }
   ]
 }
 ```
 
 Every picture quality, best first, each with the site's default sound track, then sound alone, one per language. `track` is present only when the video has sound in several languages; `size` is yt-dlp's estimate. The app keeps the answer for 10 minutes, so the `add_download` that follows does not run yt-dlp again.
+
+`subtitles` (D-74) lists the tracks OB2 can save: the site's own, then the auto-generated ones (`automatic: true`) in languages the site has none in. YouTube's machine translations are left out. It is an empty list when the video has none, and absent from an app older than D-74. Each track goes back in `add_download` as `mediaFormat` = `format` and `mediaContainer` = one of `containers`.
 
 ### Errors
 

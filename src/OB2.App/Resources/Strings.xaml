@@ -217,6 +217,13 @@
     <sys:String x:Key="Media_Audio">Audio</sys:String>
     <sys:String x:Key="Media_AudioOnly">Audio only (no picture)</sys:String>
     <sys:String x:Key="Media_WithSound">with sound</sys:String>
+    <sys:String x:Key="Media_Subtitles">Subtitles</sys:String>
+    <sys:String x:Key="Media_SubtitleFormat">Subtitle format</sys:String>
+    <sys:String x:Key="Media_SubtitlesNone">None</sys:String>
+    <sys:String x:Key="Media_SubtitlesNoneFound">None on this video</sys:String>
+    <sys:String x:Key="Media_SubtitleAuto">{0} · auto-generated</sys:String>
+    <sys:String x:Key="Media_SubtitlesOnly">Subtitles only (no video or audio)</sys:String>
+    <sys:String x:Key="Media_SubtitlesBeside">Added as a download of its own: {0}</sys:String>
     <sys:String x:Key="Media_Size">Size: about {0}</sys:String>
     <sys:String x:Key="Media_SizeUnknown">Size: shown once the download starts</sys:String>
     <sys:String x:Key="Media_Duration">Length: {0}</sys:String>

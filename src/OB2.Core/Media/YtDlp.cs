@@ -37,6 +37,10 @@ public static class YtDlp
         ArgumentNullException.ThrowIfNull(tools);
         ArgumentNullException.ThrowIfNull(item);
         var format = item.MediaFormat ?? throw new ArgumentException("Not a media download.", nameof(item));
+        if (SubtitleTrack.TryParseSpec(format, out var language, out var automatic))
+        {
+            return SubtitleArguments(tools, item, language, automatic);
+        }
 
         var args = new List<string>(tools.CommonArguments)
         {
@@ -74,6 +78,57 @@ public static class YtDlp
         args.Add("--");
         args.Add(item.Url);
         return args;
+    }
+
+    /// <summary>
+    /// D-74: one subtitle track, saved as <see cref="DownloadItem.MediaContainer"/>. With
+    /// <c>--skip-download</c> yt-dlp prints no final path, so it writes into the parts folder under
+    /// its own name and <c>MediaJob</c> moves the result to <see cref="DownloadItem.DestPath"/>.
+    /// </summary>
+    private static List<string> SubtitleArguments(MediaTools tools, DownloadItem item, string language, bool automatic)
+    {
+        var format = item.MediaContainer is { } c && SubtitleTrack.Formats.Contains(c)
+            ? c
+            : throw new ArgumentException("Subtitles need srt, ass or vtt as their container.", nameof(item));
+
+        // The site's own SRT or ASS is taken as it is; otherwise SRT is converted before VTT.
+        // YouTube's auto-generated VTT repeats every line as it scrolls and carries karaoke tags
+        // into the converted file; its SRT has each line once.
+        string[] preference = format == "vtt" ? ["srt", "vtt", "ass", "ssa"] : [format, "srt", "vtt", "ass", "ssa"];
+        var args = new List<string>(tools.CommonArguments)
+        {
+            "--no-playlist",
+            "--newline",
+            "--progress",
+            "--progress-template", "download:" + ProgressTemplate,
+            "--skip-download",
+            automatic ? "--write-auto-subs" : "--write-subs",
+            "--sub-langs", language,
+            "--sub-format", string.Join('/', preference.Distinct()),
+            "--convert-subs", format,
+            "-P", "home:" + item.MediaPartsFolder,
+            "-P", "temp:" + item.MediaPartsFolder,
+            "-o", "subtitle:subtitles.%(ext)s",
+        };
+
+        if (item.SpeedLimitBps is { } rate && rate > 0)
+        {
+            args.Add("--limit-rate");
+            args.Add(rate.ToString(CultureInfo.InvariantCulture));
+        }
+
+        args.Add("--");
+        args.Add(item.Url);
+        return args;
+    }
+
+    /// <summary>D-74: the subtitle file yt-dlp left in the parts folder, or null when it saved none.</summary>
+    public static string? SubtitleFile(DownloadItem item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        return Directory.Exists(item.MediaPartsFolder)
+            ? Directory.EnumerateFiles(item.MediaPartsFolder).FirstOrDefault(f => string.Equals(Path.GetExtension(f), "." + item.MediaContainer, StringComparison.OrdinalIgnoreCase))
+            : null;
     }
 
     public static YtDlpProgress? ParseProgress(string line)

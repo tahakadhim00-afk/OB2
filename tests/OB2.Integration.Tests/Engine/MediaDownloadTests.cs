@@ -125,15 +125,66 @@ public sealed class MediaDownloadTests : IAsyncLifetime
         _fx.Repository.Get(item.Id).Should().BeNull();
     }
 
+    [Fact]
+    public async Task Subtitles_are_saved_under_the_name_OB2_chose()
+    {
+        // D-74: yt-dlp writes them into the parts folder under its own name.
+        var item = await AddSubtitlesAsync();
+
+        var done = await _fx.RunAsync(item.Id);
+
+        done.Status.Should().Be(DownloadStatus.Completed, done.ErrorMessage);
+        done.DestPath.Should().Be(Path.Combine(_fx.SaveFolder, "Clip.en.srt"));
+        File.ReadAllText(done.DestPath).Should().Be(FakeYtDlp.SubtitleText);
+        done.TotalBytes.Should().Be(FakeYtDlp.SubtitleText.Length);
+        Directory.Exists(done.MediaPartsFolder).Should().BeFalse();
+        _ytDlp.Calls[0].Should().Contain(["--skip-download", "--write-subs"]).And.ContainInOrder("--convert-subs", "srt");
+    }
+
+    [Fact]
+    public async Task Subtitles_take_a_free_name_if_a_file_took_theirs_meanwhile()
+    {
+        var item = await AddSubtitlesAsync();
+        File.WriteAllText(item.DestPath, "the user's own");
+
+        var done = await _fx.RunAsync(item.Id);
+
+        done.Status.Should().Be(DownloadStatus.Completed, done.ErrorMessage);
+        done.FileName.Should().Be("Clip.en (1).srt");
+        File.ReadAllText(item.DestPath).Should().Be("the user's own");
+    }
+
+    [Fact]
+    public async Task A_track_yt_dlp_did_not_save_fails_with_a_reason()
+    {
+        _ytDlp.SaveNoSubtitles = true; // "There are no subtitles for the requested languages", exit 0
+        var item = await AddSubtitlesAsync();
+
+        var done = await _fx.RunAsync(item.Id);
+
+        done.Status.Should().Be(DownloadStatus.Failed);
+        done.ErrorCode.Should().Be(ErrorCodes.SiteError);
+        done.ErrorMessage.Should().Contain("no subtitles");
+    }
+
     private Task<DownloadItem> AddAsync() =>
         _fx.Engine.AddAsync(
             new DownloadRequest { Url = Page, SaveFolder = _fx.SaveFolder, FileName = "Clip.mp4", MediaFormat = "137+140", MediaContainer = "mp4" },
             new ProbeResult(Page, 5000, false, "Clip.mp4", null, null, null));
 
-    /// <summary>Prints yt-dlp's progress and file lines; writes a part, then the merged file.</summary>
+    private Task<DownloadItem> AddSubtitlesAsync() =>
+        _fx.Engine.AddAsync(
+            new DownloadRequest { Url = Page, SaveFolder = _fx.SaveFolder, FileName = "Clip.en.srt", MediaFormat = "subs:en", MediaContainer = "srt" },
+            new ProbeResult(Page, null, false, "Clip.en.srt", null, null, null));
+
+    /// <summary>
+    /// Prints yt-dlp's progress and file lines; writes a part, then the merged file. With
+    /// <c>--skip-download</c>, writes the converted subtitles to its home folder and prints no path.
+    /// </summary>
     private sealed class FakeYtDlp : IProcessRunner
     {
         public const int FileSize = 4321;
+        public const string SubtitleText = "1\r\n00:00:01,000 --> 00:00:02,000\r\nHello\r\n";
 
         public List<IReadOnlyList<string>> Calls { get; } = [];
 
@@ -144,6 +195,8 @@ public sealed class MediaDownloadTests : IAsyncLifetime
         public string? Error { get; set; }
 
         public bool GarblePrintedPath { get; set; }
+
+        public bool SaveNoSubtitles { get; set; }
 
         public async Task<int> RunAsync(string fileName, IReadOnlyList<string> arguments, Action<string> onOutput, Action<string> onError, CancellationToken cancellationToken)
         {
@@ -156,6 +209,17 @@ public sealed class MediaDownloadTests : IAsyncLifetime
             {
                 onError(Error);
                 return 1;
+            }
+
+            if (arguments.Contains("--skip-download"))
+            {
+                if (!SaveNoSubtitles)
+                {
+                    var name = $"{stem["subtitle:".Length..]}.{arguments[IndexAfter(arguments, "--sub-langs")]}.{arguments[IndexAfter(arguments, "--convert-subs")]}";
+                    File.WriteAllText(Path.Combine(home, name), SubtitleText);
+                }
+
+                return 0;
             }
 
             File.WriteAllBytes(Path.Combine(temp, stem + ".f137.mp4.part"), new byte[1000]);

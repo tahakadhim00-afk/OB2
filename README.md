@@ -68,6 +68,7 @@ OB2 uses well-known open-source libraries for plumbing; see [Tech stack](#tech-s
 - **Video button.** A button appears over playing videos that have a direct file.
 - **Page link finder.** The popup lists every downloadable file on the current page, including addresses hidden in scripts.
 - **Video sites** such as YouTube: the video button lists every quality (1080p, 720p, … and audio only) with its file type and size, and the one you pick downloads like any other row (pause, resume, progress). "More choices" opens a chooser for other audio tracks.
+- **Subtitles**: the same menu and the chooser list the video's subtitle tracks (the site's own, and its auto-generated captions). Each one downloads as its own row in SRT, ASS, or VTT, named after the video (`Title.en.srt`) so players load it automatically.
 
 ### Safe by default
 - File names are cleaned up: no path traversal, reserved names, or right-to-left tricks that disguise an extension.

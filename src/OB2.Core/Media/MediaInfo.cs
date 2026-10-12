@@ -6,6 +6,9 @@ namespace OB2.Core.Media;
 /// <summary>What yt-dlp reports about a video page (<c>yt-dlp -J</c>), reduced to what OB2 uses.</summary>
 public sealed record MediaInfo(string Title, string? Site, TimeSpan? Duration, IReadOnlyList<MediaFormat> Formats)
 {
+    /// <summary>D-74: the subtitle tracks OB2 can save, the site's own first; empty when there are none.</summary>
+    public IReadOnlyList<SubtitleTrack> Subtitles { get; init; } = [];
+
     /// <exception cref="MediaException">Not a single video, or not yt-dlp's JSON.</exception>
     public static MediaInfo Parse(string json)
     {
@@ -44,7 +47,7 @@ public sealed record MediaInfo(string Title, string? Site, TimeSpan? Duration, I
 
             var title = Str(root, "title") is { Length: > 0 } t ? t : "video";
             var duration = Num(root, "duration") is { } seconds ? TimeSpan.FromSeconds(seconds) : (TimeSpan?)null;
-            return new MediaInfo(title, Str(root, "extractor_key"), duration, formats);
+            return new MediaInfo(title, Str(root, "extractor_key"), duration, formats) { Subtitles = SubtitleTrack.Read(root) };
         }
     }
 

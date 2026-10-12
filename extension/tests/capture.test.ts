@@ -242,6 +242,25 @@ describe("a video page's qualities for the button (D-72)", () => {
     expect(sentMessages()[0]).toMatchObject({ type: 'get_media_formats', payload: { url: page } });
   });
 
+  it('passes on the subtitle tracks it can send back (D-74)', async () => {
+    const good = { format: '18', container: 'mp4', audioOnly: false };
+    const english = { format: 'subs:en', language: 'en', name: 'English', automatic: false, containers: ['srt', 'ass', 'vtt'] };
+    chromeMock.sendNativeMessage.mockImplementation(
+      replyWith('media_formats', { title: 'Launch day', options: [good], subtitles: [english, { format: 'subs:en.*', language: 'x', name: 'x', automatic: false, containers: ['srt'] }] }),
+    );
+
+    expect(await fetchMediaFormats(page)).toEqual({ action: 'listed', title: 'Launch day', options: [good], subtitles: [english] });
+  });
+
+  it('sends picked subtitles with the video title; OB2 adds the language to the name (D-74)', async () => {
+    chromeMock.sendNativeMessage.mockImplementation(replyWith('ack', { downloadId: 13, status: 'downloading' }));
+
+    await downloadMediaWithOb2({ url: page, page: true, format: 'auto-subs:en-orig', container: 'srt', name: 'Launch day' }, page, 'Launch day - YouTube');
+
+    expect(sentMessages()[0].payload).toMatchObject({ mediaPage: true, mediaFormat: 'auto-subs:en-orig', mediaContainer: 'srt', filenameHint: 'Launch day.srt' });
+    expect(sentMessages()[0].payload).not.toHaveProperty('fileSizeHint');
+  });
+
   it.each([
     ['the tools are missing', replyWith('error', { code: 'MEDIA_TOOLS_MISSING', message: 'x' }), { reason: 'tools-missing' }],
     ['yt-dlp fails', replyWith('error', { code: 'MEDIA_FAILED', message: 'Video unavailable' }), { reason: 'media-failed', message: 'Video unavailable' }],

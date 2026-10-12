@@ -26,6 +26,9 @@ public sealed record AddDownloadPrefill
 
     /// <summary>D-72: the quality picked on the browser's button, selected when the window opens.</summary>
     public string? MediaFormat { get; init; }
+
+    /// <summary>D-74: with subtitles in <see cref="MediaFormat"/>, the format picked for them (srt, ass, vtt).</summary>
+    public string? MediaContainer { get; init; }
 }
 
 /// <summary>Opens windows and shell actions so view models stay free of WPF window code.</summary>
