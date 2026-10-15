@@ -38,6 +38,16 @@ public sealed class DownloadItem
 
     public string? LastModified { get; set; }
 
+    /// <summary>
+    /// Hex SHA-256 of the first <see cref="HeadBytes"/> bytes of the entity, taken on the first
+    /// transfer. Used only to decide whether a resume is safe when the server offers neither an
+    /// ETag nor a Last-Modified (§10.3); null until known.
+    /// </summary>
+    public string? HeadSha256 { get; set; }
+
+    /// <summary>How many leading bytes <see cref="HeadSha256"/> covers.</summary>
+    public long? HeadBytes { get; set; }
+
     public string? ChecksumAlgo { get; set; }
 
     public string? ChecksumValue { get; set; }

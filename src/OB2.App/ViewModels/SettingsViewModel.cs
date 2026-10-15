@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -19,6 +20,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly JsonSettingsStore _store;
     private readonly ICategoryRepository _categories;
     private readonly DownloadEngine _engine;
+    private readonly BandwidthSchedule? _bandwidth;
     private readonly List<CategoryEditViewModel> _removed = [];
 
     [ObservableProperty]
@@ -57,6 +59,26 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private int _globalLimitKBps;
 
+    /// <summary>0 disables retrying after a download has already failed.</summary>
+    [ObservableProperty]
+    private int _autoRetryAttempts;
+
+    [ObservableProperty]
+    private int _autoRetryDelaySeconds;
+
+    [ObservableProperty]
+    private bool _windowEnabled;
+
+    [ObservableProperty]
+    private string _windowStart = "01:00";
+
+    [ObservableProperty]
+    private string _windowStop = "08:00";
+
+    /// <summary>0 means unlimited while the window is open.</summary>
+    [ObservableProperty]
+    private int _windowLimitKBps;
+
     [ObservableProperty]
     private CategoryEditViewModel? _selectedCategory;
 
@@ -87,12 +109,13 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly NativeHostRegistration? _registration;
     private readonly StartupRegistration? _startup;
 
-    public SettingsViewModel(AppSettings settings, JsonSettingsStore store, ICategoryRepository categories, DownloadEngine engine, string effectiveDefaultFolder, NativeHostRegistration? registration = null, StartupRegistration? startup = null)
+    public SettingsViewModel(AppSettings settings, JsonSettingsStore store, ICategoryRepository categories, DownloadEngine engine, string effectiveDefaultFolder, NativeHostRegistration? registration = null, StartupRegistration? startup = null, BandwidthSchedule? bandwidth = null)
     {
         _settings = settings;
         _store = store;
         _categories = categories;
         _engine = engine;
+        _bandwidth = bandwidth;
         _registration = registration;
         _startup = startup;
         _startWithWindows = settings.General.StartWithWindows;
@@ -116,6 +139,19 @@ public sealed partial class SettingsViewModel : ObservableObject
         _userAgent = settings.Downloads.UserAgent;
         _globalLimitKBps = (int)((settings.SpeedLimits.GlobalBytesPerSecond ?? 0) / 1024);
 
+        _autoRetryAttempts = settings.Downloads.AutoRetryAttempts;
+        _autoRetryDelaySeconds = settings.Downloads.AutoRetryDelaySeconds;
+
+        var window = settings.SpeedLimits.Window;
+        _windowEnabled = window.Enabled;
+        _windowStart = window.Start;
+        _windowStop = window.Stop;
+        _windowLimitKBps = (int)((window.BytesPerSecond ?? 0) / 1024);
+        WindowDays = [.. Enum.GetValues<DayOfWeek>()
+            .OrderBy(d => ((int)d + 6) % 7) // Monday first, as in the Scheduler
+            .Select(d => new DayChoice(d, CultureInfo.CurrentCulture.DateTimeFormat.GetAbbreviatedDayName(d),
+                window.Days.Count == 0 || window.Days.Contains(d)))];
+
         foreach (var category in categories.List())
         {
             Categories.Add(new CategoryEditViewModel(category));
@@ -125,6 +161,9 @@ public sealed partial class SettingsViewModel : ObservableObject
     public event EventHandler<bool>? CloseRequested;
 
     public ObservableCollection<CategoryEditViewModel> Categories { get; } = [];
+
+    /// <summary>Weekdays the bandwidth window applies on (FR-9).</summary>
+    public IReadOnlyList<DayChoice> WindowDays { get; } = [];
 
     [RelayCommand]
     private void ResetUserAgent() => UserAgent = DownloadSettings.DefaultUserAgent;
@@ -160,6 +199,16 @@ public sealed partial class SettingsViewModel : ObservableObject
             return;
         }
 
+        // Rejected here rather than silently ignored later: a window whose times do not parse
+        // would never open, and the user would be left wondering why the limit never changes.
+        if (WindowEnabled
+            && (!TimeOnly.TryParse(WindowStart, CultureInfo.InvariantCulture, out _)
+                || (!string.IsNullOrWhiteSpace(WindowStop) && !TimeOnly.TryParse(WindowStop, CultureInfo.InvariantCulture, out _))))
+        {
+            ErrorText = Loc.Get("Settings_WindowTimeInvalid");
+            return;
+        }
+
         // FR-31: only a change made here takes the Run value over from another copy of OB2.
         var startupChanged = StartWithWindows != _settings.General.StartWithWindows;
         try
@@ -187,14 +236,33 @@ public sealed partial class SettingsViewModel : ObservableObject
         d.ConnectTimeoutSeconds = ConnectTimeout;
         d.ReadIdleTimeoutSeconds = ReadTimeout;
         d.UserAgent = UserAgent;
+        d.AutoRetryAttempts = Math.Max(0, AutoRetryAttempts);
+        d.AutoRetryDelaySeconds = Math.Max(1, AutoRetryDelaySeconds);
         _settings.SpeedLimits.GlobalBytesPerSecond = GlobalLimitKBps > 0 ? GlobalLimitKBps * 1024L : null;
+        var window = _settings.SpeedLimits.Window;
+        window.Enabled = WindowEnabled;
+        window.Start = WindowStart;
+        window.Stop = WindowStop;
+        window.BytesPerSecond = WindowLimitKBps > 0 ? WindowLimitKBps * 1024L : null;
+        // Every day selected is stored as an empty list, which the evaluator reads as "any day".
+        var days = WindowDays.Where(d => d.IsChecked).Select(d => d.Day).ToList();
+        window.Days = days.Count == WindowDays.Count ? [] : days;
         _settings.Capture.ConfirmBeforeAdding = ConfirmCapture;
         _settings.Capture.MinSizeBytes = (long)(Math.Max(0, CaptureMinSizeMb) * 1048576);
         _settings.Capture.Extensions = Category.ParseExtensions(CaptureExtensions);
         _settings.Capture.ExcludedDomains = [.. ExcludedDomains.Split([',', ';', ' '], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(d => d.ToLowerInvariant())];
         SettingsValidator.Normalize(_settings);
         await _store.SaveAsync(_settings);
-        _engine.GlobalLimiter.BytesPerSecond = _settings.SpeedLimits.GlobalBytesPerSecond;
+        // Through the schedule, so saving while the bandwidth window is open does not replace
+        // the window's limit with the plain one until the next tick.
+        if (_bandwidth is not null)
+        {
+            _bandwidth.Apply();
+        }
+        else
+        {
+            _engine.GlobalLimiter.BytesPerSecond = _settings.SpeedLimits.GlobalBytesPerSecond;
+        }
         if (rememberAuthChanged)
         {
             // §11.1: on saves the cookies of unfinished downloads now; off deletes all saved ones.

@@ -145,4 +145,75 @@ public sealed class SqliteDownloadRepositoryTests : IDisposable
         _repository.Delete(item.Id);
         _repository.GetHistory(item.Id).Should().BeEmpty("the event now has download_id NULL");
     }
+
+    [Fact]
+    public void Prune_history_drops_old_events_of_finished_downloads()
+    {
+        var (clock, repository) = NewDatedRepository();
+        var done = NewItem("old.zip");
+        done.Status = DownloadStatus.Completed;
+        done.Id = repository.Insert(done);
+        repository.AddHistoryEvent(done.Id, "added");
+
+        clock.Advance(TimeSpan.FromDays(91));
+        repository.AddHistoryEvent(done.Id, "completed");
+
+        repository.PruneHistory(90).Should().Be(1, "only the 91-day-old event is past the limit");
+        repository.GetHistory(done.Id).Should().ContainSingle().Which.EventType.Should().Be("completed");
+    }
+
+    [Fact]
+    public void Prune_history_keeps_events_of_a_download_still_in_the_list()
+    {
+        // A paused download must not lose the trail explaining why it stopped, however old.
+        var (clock, repository) = NewDatedRepository();
+        var paused = NewItem("paused.zip");
+        paused.Status = DownloadStatus.Paused;
+        paused.Id = repository.Insert(paused);
+        repository.AddHistoryEvent(paused.Id, "paused");
+
+        clock.Advance(TimeSpan.FromDays(365));
+
+        repository.PruneHistory(90).Should().Be(0);
+        repository.GetHistory(paused.Id).Should().ContainSingle();
+    }
+
+    [Fact]
+    public void Prune_history_drops_orphaned_events()
+    {
+        var (clock, repository) = NewDatedRepository();
+        var item = NewItem("gone.zip");
+        item.Id = repository.Insert(item);
+        repository.AddHistoryEvent(item.Id, "added");
+        repository.Delete(item.Id); // leaves the event with download_id NULL
+
+        clock.Advance(TimeSpan.FromDays(91));
+
+        repository.PruneHistory(90).Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void Prune_history_does_nothing_without_a_positive_limit(int days)
+    {
+        var (clock, repository) = NewDatedRepository();
+        var item = NewItem();
+        item.Status = DownloadStatus.Completed;
+        item.Id = repository.Insert(item);
+        repository.AddHistoryEvent(item.Id, "added");
+        clock.Advance(TimeSpan.FromDays(1000));
+
+        repository.PruneHistory(days).Should().Be(0);
+        repository.GetHistory(item.Id).Should().ContainSingle();
+    }
+
+    /// <summary>A second repository over the same database whose clock the test controls.</summary>
+    private (FakeClock Clock, SqliteDownloadRepository Repository) NewDatedRepository()
+    {
+        var clock = new FakeClock(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
+        var factory = new SqliteConnectionFactory(_temp.Combine("dated.db"));
+        new MigrationRunner(factory).Run();
+        return (clock, new SqliteDownloadRepository(factory, clock));
+    }
 }

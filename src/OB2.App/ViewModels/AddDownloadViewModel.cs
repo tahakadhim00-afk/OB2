@@ -103,6 +103,12 @@ public sealed partial class AddDownloadViewModel : ObservableObject, IDisposable
             ApplyCategoryFor(FileName);
         }
 
+        // After the category rule above, which picks a folder of its own from the name.
+        if (!string.IsNullOrWhiteSpace(prefill.SaveFolder))
+        {
+            SaveFolder = prefill.SaveFolder;
+        }
+
         if (prefill.FileSizeHint is > 0)
         {
             InfoText = Loc.Format("Add_Size", Fmt.Size(prefill.FileSizeHint));

@@ -53,6 +53,10 @@ internal static class CompositionRoot
             mediaTools: sp.GetRequiredService<MediaTools>()));
         services.AddSingleton<QueueManager>();
         services.AddSingleton(sp => new QueueScheduler(sp.GetRequiredService<QueueManager>(), sp.GetRequiredService<IQueueRepository>(), sp.GetRequiredService<IClock>()));
+        services.AddSingleton(sp => new BandwidthSchedule(
+            sp.GetRequiredService<DownloadEngine>().GlobalLimiter,
+            () => storage.Settings.SpeedLimits,
+            sp.GetRequiredService<IClock>()));
         services.AddSingleton(sp => new DownloadService(
             sp.GetRequiredService<DownloadEngine>(),
             sp.GetRequiredService<IDownloadRepository>(),

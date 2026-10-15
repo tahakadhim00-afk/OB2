@@ -125,6 +125,11 @@ internal sealed partial class DownloadJob : IDownloadJob, IDisposable
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             SafeClose();
+
+            // §10.3: taken while paused, because this is exactly the state a later resume has to
+            // validate. SafeClose has flushed, so the bytes are on disk. CancellationToken.None:
+            // the pause is already happening and the fingerprint must still be recorded.
+            await CaptureHeadFingerprintAsync(CancellationToken.None).ConfigureAwait(false);
             SetStatus(DownloadStatus.Paused);
             _repository.AddHistoryEvent(_id, "paused");
             LogPaused(_id, _item.DownloadedBytes);
@@ -168,6 +173,15 @@ internal sealed partial class DownloadJob : IDownloadJob, IDisposable
         if (resume && !probe.SupportsRanges && _segments.Any(s => s.Downloaded > 0))
         {
             // Progress cannot be kept without range support; start over.
+            resume = false;
+        }
+
+        // §10.3: with neither an ETag nor a Last-Modified, a file swapped for one of the same
+        // length passes every check above and resumes onto different bytes, which corrupts the
+        // result silently. Comparing the first bytes catches that at the cost of one request.
+        if (resume && !HasValidator(probe) && await HeadChangedAsync(context, ct).ConfigureAwait(false))
+        {
+            LogRemoteChanged(_id);
             resume = false;
         }
 
@@ -565,6 +579,80 @@ internal sealed partial class DownloadJob : IDownloadJob, IDisposable
         SetStatus(DownloadStatus.Completed);
         _repository.AddHistoryEvent(_id, "completed", destination);
         LogCompleted(_id, downloaded);
+    }
+
+    /// <summary>
+    /// Records a fingerprint of the first bytes of the part file, once, so a later resume can
+    /// tell whether the remote file changed. Only taken when the first segment has actually
+    /// reached that far: a hash of fewer bytes would never match the range fetched on resume.
+    /// </summary>
+    private async Task CaptureHeadFingerprintAsync(CancellationToken ct)
+    {
+        if (_item.HeadSha256 is not null || _segments.Count == 0)
+        {
+            return;
+        }
+
+        // The first segment starts at 0, so its progress is how many leading bytes exist.
+        var leading = _segments.OrderBy(s => s.Start).First() is { Start: 0 } first ? first.Downloaded : 0;
+        if (leading < HeadFingerprint.Length)
+        {
+            return;
+        }
+
+        if (await HeadFingerprint.OfFileAsync(_item.PartPath, HeadFingerprint.Length, ct).ConfigureAwait(false) is { } print)
+        {
+            _item.HeadSha256 = print.Hash;
+            _item.HeadBytes = print.Bytes;
+            _repository.Update(_item);
+        }
+    }
+
+    /// <summary>Whether the server offers something to compare a resume against.</summary>
+    private static bool HasValidator(ProbeResult probe) => probe.ETag is not null || probe.LastModified is not null;
+
+    /// <summary>
+    /// Compares the first bytes on disk with the same range fetched now. Returns false whenever
+    /// the answer is not clear: a resume is never refused on missing evidence, because the cost
+    /// of a wrong "changed" is re-downloading a file that was fine.
+    /// </summary>
+    private async Task<bool> HeadChangedAsync(RequestContext context, CancellationToken ct)
+    {
+        var stored = _item.HeadSha256;
+        if (stored is null || _item.HeadBytes is not > 0)
+        {
+            return false; // nothing recorded (an older download, or the first run)
+        }
+
+        var storedBytes = _item.HeadBytes.Value;
+
+        try
+        {
+            using var request = DownloadHttpClient.CreateRequest(HttpMethod.Get, new Uri(_item.Url), context);
+            request.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(0, storedBytes - 1);
+            using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+            if (response.StatusCode != System.Net.HttpStatusCode.PartialContent)
+            {
+                return false; // the server ignored the range; nothing to compare
+            }
+
+            var buffer = new byte[storedBytes];
+            await using var body = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+            var read = await body.ReadAtLeastAsync(buffer, buffer.Length, throwOnEndOfStream: false, ct).ConfigureAwait(false);
+            if (read < buffer.Length)
+            {
+                return false;
+            }
+
+            var fresh = HeadFingerprint.Of(buffer);
+            return HeadFingerprint.Differs(stored, storedBytes, fresh, read);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or IOException or TimeoutException && !ct.IsCancellationRequested)
+        {
+            // The check is a safety net, not a gate: a failure here leaves the resume as it was,
+            // and the transfer itself will report any real network problem.
+            return false;
+        }
     }
 
     private bool RemoteChanged(ProbeResult probe)

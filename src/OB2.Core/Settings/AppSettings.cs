@@ -64,6 +64,17 @@ public sealed class DownloadSettings
     /// <summary>§11.1: cookies are memory-only unless the user opts in.</summary>
     public bool RememberAuth { get; set; }
 
+    /// <summary>
+    /// Attempts made after a download has already failed, spaced by an increasing delay. The
+    /// retries inside one attempt (<see cref="MaxRetries"/>) handle a connection dropping; this
+    /// handles the line being down for minutes, so an overnight queue survives a brief outage.
+    /// Zero disables it.
+    /// </summary>
+    public int AutoRetryAttempts { get; set; }
+
+    /// <summary>Delay before the first automatic retry; doubles with each attempt.</summary>
+    public int AutoRetryDelaySeconds { get; set; } = 60;
+
     public const string DefaultUserAgent =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
 }
@@ -80,6 +91,35 @@ public sealed class SpeedLimitSettings
 {
     /// <summary>Global limit in bytes per second; null means unlimited.</summary>
     public long? GlobalBytesPerSecond { get; set; }
+
+    /// <summary>
+    /// An optional second limit that takes over inside a daily time window, so a line can run
+    /// unthrottled overnight and politely during the day. Null outside the window means the
+    /// window lifts the limit entirely.
+    /// </summary>
+    public BandwidthWindowSettings Window { get; set; } = new();
+}
+
+/// <summary>
+/// A daily window with its own speed limit. The window is expressed the same way a queue's
+/// schedule is (start, optional stop, weekdays) and evaluated by the same rules, so an
+/// overnight span such as 01:00 to 08:00 belongs to the day it started on.
+/// </summary>
+public sealed class BandwidthWindowSettings
+{
+    public bool Enabled { get; set; }
+
+    /// <summary>"HH:mm" local time.</summary>
+    public string Start { get; set; } = "01:00";
+
+    /// <summary>"HH:mm" local time; empty runs from <see cref="Start"/> to midnight.</summary>
+    public string Stop { get; set; } = "08:00";
+
+    /// <summary>Days the window applies on; empty means every day.</summary>
+    public List<DayOfWeek> Days { get; set; } = [];
+
+    /// <summary>Limit while the window is open. Null means unlimited inside it.</summary>
+    public long? BytesPerSecond { get; set; }
 }
 
 /// <summary>§8.4.</summary>

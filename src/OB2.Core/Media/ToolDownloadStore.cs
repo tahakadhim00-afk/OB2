@@ -115,6 +115,8 @@ internal sealed class ToolDownloadStore : IDownloadRepository
 
     public IReadOnlyList<HistoryEvent> GetHistory(long downloadId) => [];
 
+    public int PruneHistory(int retentionDays) => 0; // nothing is recorded, so nothing expires
+
     public IReadOnlyList<long> MarkInterruptedAsPaused()
     {
         lock (_lock)

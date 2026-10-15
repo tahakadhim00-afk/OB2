@@ -176,6 +176,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         RefreshRowNames();
     }
 
+    /// <summary>§10.3: part files left behind by a crash or a deleted row.</summary>
+    [RelayCommand]
+    private void Orphans() => _dialogs.ShowOrphans();
+
     [RelayCommand]
     private void StartQueue() => _service.Queues.StartQueue(SelectedQueueId ?? _service.DefaultQueueId);
 

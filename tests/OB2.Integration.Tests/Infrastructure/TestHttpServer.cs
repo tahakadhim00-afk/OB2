@@ -28,6 +28,8 @@ namespace OB2.Integration.Tests.Infrastructure;
 /// <item><c>cookie=a=b</c> require that cookie, else 403</item>
 /// <item><c>disposition=NAME</c> send Content-Disposition: attachment</item>
 /// <item><c>etag=X</c> override the ETag</item>
+/// <item><c>novalidator=1</c> send neither ETag nor Last-Modified</item>
+/// <item><c>variant=N</c> shift the body by N, so the same length holds different bytes</item>
 /// <item><c>token=T&amp;uses=K</c> a signed URL: the first K GETs carrying token T succeed, later ones get 403</item>
 /// </list>
 /// <c>/redirect?to=/path</c> answers 302. <c>/status/{code}</c> answers that code.
@@ -60,9 +62,13 @@ public sealed class TestHttpServer : IAsyncDisposable
 
     public int RejectedResponses => Volatile.Read(ref _rejectedResponses);
 
+    /// <summary>Body bytes actually written, so a test can catch bandwidth the client discards.</summary>
+    public long BytesSent => Interlocked.Read(ref _bytesSent);
+
     private int _activeResponses;
     private int _maxConcurrentResponses;
     private int _rejectedResponses;
+    private long _bytesSent;
 
     public static async Task<TestHttpServer> StartAsync(int port = 0)
     {
@@ -93,11 +99,11 @@ public sealed class TestHttpServer : IAsyncDisposable
     public static byte ByteAt(long offset) =>
         (byte)(Pattern[offset % Period] ^ (byte)(offset / Period) ^ (byte)(offset / Period >> 8));
 
-    public static void Fill(Span<byte> destination, long offset)
+    public static void Fill(Span<byte> destination, long offset, int variant = 0)
     {
         for (var i = 0; i < destination.Length; i++)
         {
-            destination[i] = ByteAt(offset + i);
+            destination[i] = ByteAt(offset + i + variant);
         }
     }
 
@@ -212,8 +218,13 @@ public sealed class TestHttpServer : IAsyncDisposable
             response.Headers.ContentDisposition = $"attachment; filename=\"{ascii}\"; filename*=UTF-8''{Uri.EscapeDataString(disposition!)}";
         }
 
-        response.Headers.ETag = query.TryGetValue("etag", out var etag) ? $"\"{etag}\"" : $"\"v1-{size}\"";
-        response.Headers.LastModified = "Wed, 01 Jan 2025 00:00:00 GMT";
+        if (!query.ContainsKey("novalidator"))
+        {
+            // §10.3: without these a resume has nothing to compare but the first bytes.
+            response.Headers.ETag = query.TryGetValue("etag", out var etag) ? $"\"{etag}\"" : $"\"v1-{size}\"";
+            response.Headers.LastModified = "Wed, 01 Jan 2025 00:00:00 GMT";
+        }
+
         response.ContentType = "application/octet-stream";
 
         long from = 0, to = size - 1;
@@ -260,8 +271,15 @@ public sealed class TestHttpServer : IAsyncDisposable
             ? Int(query, "stallAfter", 0)
             : -1;
 
-        var active = Interlocked.Increment(ref _activeResponses);
-        if (active > Int(query, "maxConcurrent", int.MaxValue))
+        // UrlProber asks for "bytes=0-0" to learn whether ranges work. A server that ignores
+        // Range answers 200 and starts the whole entity, and the client drops that body as soon
+        // as it has read the headers -- but the abort takes a moment to arrive, so the dying
+        // response would otherwise be counted as a download connection and make the
+        // concurrency assertions race. It still streams and still counts towards BytesSent.
+        var isRangeProbe = !isHead && request.Headers.Range.ToString() == "bytes=0-0";
+
+        var active = isRangeProbe ? 0 : Interlocked.Increment(ref _activeResponses);
+        if (!isRangeProbe && active > Int(query, "maxConcurrent", int.MaxValue))
         {
             // Emulates a server that refuses extra connections (§16.1).
             Interlocked.Decrement(ref _activeResponses);
@@ -272,18 +290,25 @@ public sealed class TestHttpServer : IAsyncDisposable
             return;
         }
 
-        InterlockedMax(ref _maxConcurrentResponses, active);
+        if (!isRangeProbe)
+        {
+            InterlockedMax(ref _maxConcurrentResponses, active);
+        }
+
         try
         {
-            await WriteBodyAsync(context, from, to, bps, dropAfter, stallAfter);
+            await WriteBodyAsync(context, from, to, bps, dropAfter, stallAfter, Int(query, "variant", 0), n => Interlocked.Add(ref _bytesSent, n));
         }
         finally
         {
-            Interlocked.Decrement(ref _activeResponses);
+            if (!isRangeProbe)
+            {
+                Interlocked.Decrement(ref _activeResponses);
+            }
         }
     }
 
-    private static async Task WriteBodyAsync(HttpContext context, long from, long to, int bps, long dropAfter, long stallAfter)
+    private static async Task WriteBodyAsync(HttpContext context, long from, long to, int bps, long dropAfter, long stallAfter, int variant, Action<int> wrote)
     {
         var chunk = bps > 0 ? Math.Clamp(bps / 10, 1024, 64 * 1024) : 64 * 1024;
         var buffer = new byte[chunk];
@@ -306,9 +331,10 @@ public sealed class TestHttpServer : IAsyncDisposable
 
             if (n > 0)
             {
-                Fill(buffer.AsSpan(0, n), offset);
+                Fill(buffer.AsSpan(0, n), offset, variant);
                 await context.Response.Body.WriteAsync(buffer.AsMemory(0, n), ct);
                 await context.Response.Body.FlushAsync(ct);
+                wrote(n);
                 offset += n;
                 sent += n;
             }

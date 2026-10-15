@@ -24,6 +24,7 @@
     <sys:String x:Key="Tb_Scheduler">Scheduler</sys:String>
     <sys:String x:Key="Tb_StartQueue">Start Queue</sys:String>
     <sys:String x:Key="Tb_StopQueue">Stop Queue</sys:String>
+    <sys:String x:Key="Tb_Orphans">Orphans</sys:String>
     <sys:String x:Key="Tb_Add_Tip">Add a download by address (Ctrl+N)</sys:String>
     <sys:String x:Key="Tb_Resume_Tip">Start or resume the selected downloads (Space)</sys:String>
     <sys:String x:Key="Tb_Stop_Tip">Pause the selected downloads (Space)</sys:String>
@@ -172,7 +173,26 @@
     <sys:String x:Key="Settings_CategoryFolder">Folder (empty = default\name)</sys:String>
     <sys:String x:Key="Settings_NewCategory">New category</sys:String>
     <sys:String x:Key="Settings_ResetUserAgent">Reset</sys:String>
+    <sys:String x:Key="Settings_AutoRetry">Retry failed downloads</sys:String>
+    <sys:String x:Key="Settings_AutoRetryHint">After a download has failed, OB2 can start it again on its own, waiting longer before each attempt. Useful for a queue left running overnight. Errors that cannot be fixed by trying again, such as a wrong checksum or a missing file, are never retried.</sys:String>
+    <sys:String x:Key="Settings_AutoRetryAttempts">Attempts (0 = do not retry)</sys:String>
+    <sys:String x:Key="Settings_AutoRetryDelay">Wait before the first (seconds)</sys:String>
+    <sys:String x:Key="Settings_WindowEnabled">Use a different speed limit at certain hours</sys:String>
+    <sys:String x:Key="Settings_WindowHint">Inside these hours the limit below applies instead of the one above. Leave it at 0 to download at full speed during the window, for example overnight.</sys:String>
+    <sys:String x:Key="Settings_WindowLimit">Limit in the window (KB/s, 0 = none)</sys:String>
+    <sys:String x:Key="Settings_WindowTimeInvalid">The window times must look like 23:00.</sys:String>
     <sys:String x:Key="Settings_CategoryNamesInvalid">Every category needs a name, and no two can share one.</sys:String>
+
+    <!-- Recovered orphan files (§10.3) -->
+    <sys:String x:Key="Orphans_Title">Recovered orphan files</sys:String>
+    <sys:String x:Key="Orphans_Explain">These partial files are in your download folders but no longer belong to any download. OB2 never deletes them on its own. Their address is not recorded, so continuing one means entering its address again; the file is kept and reused if the address matches.</sys:String>
+    <sys:String x:Key="Orphans_None">No orphaned files found.</sys:String>
+    <sys:String x:Key="Orphans_Found">{0} file(s), {1} in total.</sys:String>
+    <sys:String x:Key="Orphans_Rescan">Scan again</sys:String>
+    <sys:String x:Key="Orphans_Reveal">Show in folder</sys:String>
+    <sys:String x:Key="Orphans_DownloadAgain">Download again…</sys:String>
+    <sys:String x:Key="Orphans_LastChanged">Last changed</sys:String>
+    <sys:String x:Key="Orphans_DeleteFailed">{0} could not be deleted: {1}</sys:String>
 
     <!-- Scheduler (FR-13 to FR-17) -->
     <sys:String x:Key="Scheduler_Title">Scheduler</sys:String>
