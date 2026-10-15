@@ -12,7 +12,7 @@ public sealed class SqliteDownloadRepository : IDownloadRepository
 {
     private const string Columns = """
         id, url, final_url, filename, dest_path, category_id, queue_id, status, total_bytes,
-        downloaded_bytes, connections, supports_ranges, etag, last_modified, checksum_algo,
+        downloaded_bytes, connections, supports_ranges, etag, last_modified, head_sha256, head_bytes, checksum_algo,
         checksum_value, referrer, user_agent, headers_json, speed_limit_bps, error_code,
         error_message, created_at, started_at, completed_at, source, queue_position, media_format,
         media_container
@@ -34,11 +34,11 @@ public sealed class SqliteDownloadRepository : IDownloadRepository
         using var command = connection.CreateCommand();
         command.CommandText = """
             INSERT INTO downloads (url, final_url, filename, dest_path, category_id, queue_id, status, total_bytes,
-              downloaded_bytes, connections, supports_ranges, etag, last_modified, checksum_algo, checksum_value,
+              downloaded_bytes, connections, supports_ranges, etag, last_modified, head_sha256, head_bytes, checksum_algo, checksum_value,
               referrer, user_agent, headers_json, speed_limit_bps, error_code, error_message, created_at,
               started_at, completed_at, source, queue_position, media_format, media_container)
             VALUES ($url, $final_url, $filename, $dest_path, $category_id, $queue_id, $status, $total_bytes,
-              $downloaded_bytes, $connections, $supports_ranges, $etag, $last_modified, $checksum_algo, $checksum_value,
+              $downloaded_bytes, $connections, $supports_ranges, $etag, $last_modified, $head_sha256, $head_bytes, $checksum_algo, $checksum_value,
               $referrer, $user_agent, $headers_json, $speed_limit_bps, $error_code, $error_message, $created_at,
               $started_at, $completed_at, $source, $queue_position, $media_format, $media_container);
             SELECT last_insert_rowid();
@@ -56,7 +56,7 @@ public sealed class SqliteDownloadRepository : IDownloadRepository
             UPDATE downloads SET url = $url, final_url = $final_url, filename = $filename, dest_path = $dest_path,
               category_id = $category_id, queue_id = $queue_id, status = $status, total_bytes = $total_bytes,
               downloaded_bytes = $downloaded_bytes, connections = $connections, supports_ranges = $supports_ranges,
-              etag = $etag, last_modified = $last_modified, checksum_algo = $checksum_algo,
+              etag = $etag, last_modified = $last_modified, head_sha256 = $head_sha256, head_bytes = $head_bytes, checksum_algo = $checksum_algo,
               checksum_value = $checksum_value, referrer = $referrer, user_agent = $user_agent,
               headers_json = $headers_json, speed_limit_bps = $speed_limit_bps, error_code = $error_code,
               error_message = $error_message, created_at = $created_at, started_at = $started_at,
@@ -301,6 +301,8 @@ public sealed class SqliteDownloadRepository : IDownloadRepository
         p.AddWithValue("$supports_ranges", item.SupportsRanges ? 1 : 0);
         p.AddWithValue("$etag", Db(item.ETag));
         p.AddWithValue("$last_modified", Db(item.LastModified));
+        p.AddWithValue("$head_sha256", Db(item.HeadSha256));
+        p.AddWithValue("$head_bytes", Db(item.HeadBytes));
         p.AddWithValue("$checksum_algo", Db(item.ChecksumAlgo));
         p.AddWithValue("$checksum_value", Db(item.ChecksumValue));
         p.AddWithValue("$referrer", Db(item.Referrer));
@@ -320,7 +322,8 @@ public sealed class SqliteDownloadRepository : IDownloadRepository
 
     private static DownloadItem Read(SqliteDataReader r)
     {
-        var headers = r.IsDBNull(18) ? null : JsonSerializer.Deserialize<Dictionary<string, string>>(r.GetString(18));
+        // Ordinals follow the Columns list above; adding a column there shifts every one after it.
+        var headers = r.IsDBNull(20) ? null : JsonSerializer.Deserialize<Dictionary<string, string>>(r.GetString(20));
         return new DownloadItem
         {
             Id = r.GetInt64(0),
@@ -337,23 +340,25 @@ public sealed class SqliteDownloadRepository : IDownloadRepository
             SupportsRanges = r.GetInt64(11) != 0,
             ETag = Str(r, 12),
             LastModified = Str(r, 13),
-            ChecksumAlgo = Str(r, 14),
-            ChecksumValue = Str(r, 15),
-            Referrer = Str(r, 16),
-            UserAgent = Str(r, 17),
+            HeadSha256 = Str(r, 14),
+            HeadBytes = Long(r, 15),
+            ChecksumAlgo = Str(r, 16),
+            ChecksumValue = Str(r, 17),
+            Referrer = Str(r, 18),
+            UserAgent = Str(r, 19),
             Headers = headers is null
                 ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                 : new Dictionary<string, string>(headers, StringComparer.OrdinalIgnoreCase),
-            SpeedLimitBps = Long(r, 19),
-            ErrorCode = Str(r, 20),
-            ErrorMessage = Str(r, 21),
-            CreatedAt = Parse(r.GetString(22)),
-            StartedAt = r.IsDBNull(23) ? null : Parse(r.GetString(23)),
-            CompletedAt = r.IsDBNull(24) ? null : Parse(r.GetString(24)),
-            Source = DownloadStatusExtensions.ParseDbString<DownloadSource>(r.GetString(25)),
-            QueuePosition = r.GetInt64(26),
-            MediaFormat = Str(r, 27),
-            MediaContainer = Str(r, 28),
+            SpeedLimitBps = Long(r, 21),
+            ErrorCode = Str(r, 22),
+            ErrorMessage = Str(r, 23),
+            CreatedAt = Parse(r.GetString(24)),
+            StartedAt = r.IsDBNull(25) ? null : Parse(r.GetString(25)),
+            CompletedAt = r.IsDBNull(26) ? null : Parse(r.GetString(26)),
+            Source = DownloadStatusExtensions.ParseDbString<DownloadSource>(r.GetString(27)),
+            QueuePosition = r.GetInt64(28),
+            MediaFormat = Str(r, 29),
+            MediaContainer = Str(r, 30),
         };
     }
 

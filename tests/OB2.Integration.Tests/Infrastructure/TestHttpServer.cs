@@ -28,6 +28,8 @@ namespace OB2.Integration.Tests.Infrastructure;
 /// <item><c>cookie=a=b</c> require that cookie, else 403</item>
 /// <item><c>disposition=NAME</c> send Content-Disposition: attachment</item>
 /// <item><c>etag=X</c> override the ETag</item>
+/// <item><c>novalidator=1</c> send neither ETag nor Last-Modified</item>
+/// <item><c>variant=N</c> shift the body by N, so the same length holds different bytes</item>
 /// <item><c>token=T&amp;uses=K</c> a signed URL: the first K GETs carrying token T succeed, later ones get 403</item>
 /// </list>
 /// <c>/redirect?to=/path</c> answers 302. <c>/status/{code}</c> answers that code.
@@ -97,11 +99,11 @@ public sealed class TestHttpServer : IAsyncDisposable
     public static byte ByteAt(long offset) =>
         (byte)(Pattern[offset % Period] ^ (byte)(offset / Period) ^ (byte)(offset / Period >> 8));
 
-    public static void Fill(Span<byte> destination, long offset)
+    public static void Fill(Span<byte> destination, long offset, int variant = 0)
     {
         for (var i = 0; i < destination.Length; i++)
         {
-            destination[i] = ByteAt(offset + i);
+            destination[i] = ByteAt(offset + i + variant);
         }
     }
 
@@ -216,8 +218,13 @@ public sealed class TestHttpServer : IAsyncDisposable
             response.Headers.ContentDisposition = $"attachment; filename=\"{ascii}\"; filename*=UTF-8''{Uri.EscapeDataString(disposition!)}";
         }
 
-        response.Headers.ETag = query.TryGetValue("etag", out var etag) ? $"\"{etag}\"" : $"\"v1-{size}\"";
-        response.Headers.LastModified = "Wed, 01 Jan 2025 00:00:00 GMT";
+        if (!query.ContainsKey("novalidator"))
+        {
+            // §10.3: without these a resume has nothing to compare but the first bytes.
+            response.Headers.ETag = query.TryGetValue("etag", out var etag) ? $"\"{etag}\"" : $"\"v1-{size}\"";
+            response.Headers.LastModified = "Wed, 01 Jan 2025 00:00:00 GMT";
+        }
+
         response.ContentType = "application/octet-stream";
 
         long from = 0, to = size - 1;
@@ -290,7 +297,7 @@ public sealed class TestHttpServer : IAsyncDisposable
 
         try
         {
-            await WriteBodyAsync(context, from, to, bps, dropAfter, stallAfter, n => Interlocked.Add(ref _bytesSent, n));
+            await WriteBodyAsync(context, from, to, bps, dropAfter, stallAfter, Int(query, "variant", 0), n => Interlocked.Add(ref _bytesSent, n));
         }
         finally
         {
@@ -301,7 +308,7 @@ public sealed class TestHttpServer : IAsyncDisposable
         }
     }
 
-    private static async Task WriteBodyAsync(HttpContext context, long from, long to, int bps, long dropAfter, long stallAfter, Action<int> wrote)
+    private static async Task WriteBodyAsync(HttpContext context, long from, long to, int bps, long dropAfter, long stallAfter, int variant, Action<int> wrote)
     {
         var chunk = bps > 0 ? Math.Clamp(bps / 10, 1024, 64 * 1024) : 64 * 1024;
         var buffer = new byte[chunk];
@@ -324,7 +331,7 @@ public sealed class TestHttpServer : IAsyncDisposable
 
             if (n > 0)
             {
-                Fill(buffer.AsSpan(0, n), offset);
+                Fill(buffer.AsSpan(0, n), offset, variant);
                 await context.Response.Body.WriteAsync(buffer.AsMemory(0, n), ct);
                 await context.Response.Body.FlushAsync(ct);
                 wrote(n);
