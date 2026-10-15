@@ -16,6 +16,66 @@
         <Setter Property="ToolTipService.ShowOnDisabled" Value="True" />
     </Style>
 
+    <!-- Action colours for toolbar glyphs. Picked for contrast on both light and dark
+         backgrounds; a disabled command drops back to grey so it never shouts, and
+         high contrast hands the colour back to the system (NFR Accessibility). -->
+    <SolidColorBrush x:Key="GoBrush" Color="#1B8A3A" />
+    <SolidColorBrush x:Key="StopBrush" Color="#C42B1C" />
+    <SolidColorBrush x:Key="DangerBrush" Color="#A4262C" />
+    <SolidColorBrush x:Key="AddBrush" Color="#0F6CBD" />
+
+    <Style x:Key="ActionGlyph" TargetType="TextBlock" BasedOn="{StaticResource Glyph}">
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding IsEnabled, RelativeSource={RelativeSource AncestorType=Button}}" Value="False">
+                <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+            </DataTrigger>
+            <DataTrigger Binding="{Binding Source={x:Static SystemParameters.HighContrast}}" Value="True">
+                <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}" />
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+
+    <Style x:Key="GoGlyph" TargetType="TextBlock" BasedOn="{StaticResource ActionGlyph}">
+        <Setter Property="Foreground" Value="{StaticResource GoBrush}" />
+    </Style>
+
+    <Style x:Key="StopGlyph" TargetType="TextBlock" BasedOn="{StaticResource ActionGlyph}">
+        <Setter Property="Foreground" Value="{StaticResource StopBrush}" />
+    </Style>
+
+    <Style x:Key="DangerGlyph" TargetType="TextBlock" BasedOn="{StaticResource ActionGlyph}">
+        <Setter Property="Foreground" Value="{StaticResource DangerBrush}" />
+    </Style>
+
+    <Style x:Key="AddGlyph" TargetType="TextBlock" BasedOn="{StaticResource ActionGlyph}">
+        <Setter Property="Foreground" Value="{StaticResource AddBrush}" />
+    </Style>
+
+    <!-- Same colours inside a MenuItem.Icon: smaller, and greying follows the menu item. -->
+    <Style x:Key="MenuGlyph" TargetType="TextBlock" BasedOn="{StaticResource Glyph}">
+        <Setter Property="FontSize" Value="14" />
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding IsEnabled, RelativeSource={RelativeSource AncestorType=MenuItem}}" Value="False">
+                <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+            </DataTrigger>
+            <DataTrigger Binding="{Binding Source={x:Static SystemParameters.HighContrast}}" Value="True">
+                <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.MenuTextBrushKey}}" />
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+
+    <Style x:Key="GoMenuGlyph" TargetType="TextBlock" BasedOn="{StaticResource MenuGlyph}">
+        <Setter Property="Foreground" Value="{StaticResource GoBrush}" />
+    </Style>
+
+    <Style x:Key="StopMenuGlyph" TargetType="TextBlock" BasedOn="{StaticResource MenuGlyph}">
+        <Setter Property="Foreground" Value="{StaticResource StopBrush}" />
+    </Style>
+
+    <Style x:Key="DangerMenuGlyph" TargetType="TextBlock" BasedOn="{StaticResource MenuGlyph}">
+        <Setter Property="Foreground" Value="{StaticResource DangerBrush}" />
+    </Style>
+
     <Style x:Key="ToolbarLabel" TargetType="TextBlock">
         <Setter Property="Margin" Value="0,3,0,0" />
         <Setter Property="HorizontalAlignment" Value="Center" />
@@ -30,6 +90,20 @@
         <Setter Property="MinWidth" Value="96" />
         <Setter Property="Padding" Value="12,4" />
         <Setter Property="Margin" Value="8,0,0,0" />
+    </Style>
+
+    <!-- A dialog button that confirms something destructive; red text, system chrome. -->
+    <Style x:Key="DangerDialogButton" TargetType="Button" BasedOn="{StaticResource DialogButton}">
+        <Setter Property="Foreground" Value="{StaticResource DangerBrush}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Style.Triggers>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+            </Trigger>
+            <DataTrigger Binding="{Binding Source={x:Static SystemParameters.HighContrast}}" Value="True">
+                <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}" />
+            </DataTrigger>
+        </Style.Triggers>
     </Style>
 
     <Style x:Key="FieldLabel" TargetType="Label">
