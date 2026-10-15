@@ -3,7 +3,7 @@
  * @jest-environment-options {"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PL1&t=42"}
  */
 import type { FormatsOutcome } from '../src/capture';
-import { isMediaCandidate, isMediaOption, isYouTubeHost, mediaLabel, optionLabel, youTubeVideoPage } from '../src/media';
+import { isMediaCandidate, isMediaChoice, isMediaOption, isYouTubeHost, mediaLabel, mediaSubtitleOf, optionLabel, subtitleLabel, youTubeVideoPage } from '../src/media';
 import { MediaOverlay } from '../src/overlay';
 import { formatBytes } from '../src/format';
 
@@ -169,6 +169,46 @@ describe('quality menu on a YouTube watch page (D-72)', () => {
     expect(items()).toHaveLength(0);
   });
 
+  it('lists the subtitle tracks with a button per format, each a download of its own (D-74)', async () => {
+    listFormats.mockResolvedValueOnce({
+      ...LISTED,
+      subtitles: [
+        { format: 'subs:en', language: 'en', name: 'English', automatic: false, containers: ['srt', 'ass', 'vtt'] },
+        { format: 'auto-subs:en-orig', language: 'en-orig', name: 'English (Original)', automatic: true, containers: ['srt', 'ass', 'vtt'] },
+      ],
+    });
+
+    main().click();
+    await settle();
+    const rows = Array.from(shadow().querySelectorAll('.sub'));
+    expect(notes()).toEqual(['Subtitles']);
+    expect(rows.map((r) => r.querySelector('.name')!.textContent)).toEqual(['English', 'English (Original) · auto-generated']);
+    expect(Array.from(rows[0].querySelectorAll('.fmt'), (b) => b.textContent)).toEqual(['SRT', 'ASS', 'VTT']);
+    expect(items().at(-1)!.textContent).toBe('More choices in OB2… (audio track, folder)'); // still last
+
+    const ass = rows[1].querySelectorAll<HTMLButtonElement>('.fmt')[1];
+    expect(ass.getAttribute('aria-label')).toBe('English (Original) · auto-generated subtitles as ASS');
+    ass.click();
+    expect(send).toHaveBeenCalledWith({ url: WATCH, page: true, format: 'auto-subs:en-orig', container: 'ass', name: 'Launch day / highlights' });
+  });
+
+  it('says so when the video has no subtitles', async () => {
+    listFormats.mockResolvedValueOnce({ ...LISTED, subtitles: [] });
+
+    main().click();
+    await settle();
+
+    expect(notes()).toEqual(['Subtitles: none on this video']);
+  });
+
+  it('shows no subtitle section when OB2 predates subtitles', async () => {
+    main().click(); // LISTED has no subtitles field
+    await settle();
+
+    expect(notes()).toEqual([]);
+    expect(shadow().querySelectorAll('.sub')).toHaveLength(0);
+  });
+
   it('drops an answer that comes after the menu was closed', async () => {
     let answer!: (o: FormatsOutcome) => void;
     listFormats.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
@@ -195,6 +235,23 @@ describe('quality entries (D-72)', () => {
     expect(isMediaOption({ format: 'bestvideo+bestaudio/best', container: 'mp4', audioOnly: false })).toBe(false);
     expect(isMediaOption({ format: '137', container: '../mp4', audioOnly: false })).toBe(false);
     expect(isMediaOption({ format: '137', container: 'mp4' })).toBe(false);
+  });
+
+  it('takes subtitle tracks only as srt, ass or vtt, with plain language keys (D-74)', () => {
+    expect(isMediaChoice('subs:en', 'srt')).toBe(true);
+    expect(isMediaChoice('auto-subs:pt-BR', 'vtt')).toBe(true);
+    expect(isMediaChoice('subs:en', 'mp4')).toBe(false);
+    expect(isMediaChoice('subs:en.*', 'srt')).toBe(false); // yt-dlp reads --sub-langs as patterns
+    expect(isMediaChoice('subs:en,fr', 'srt')).toBe(false);
+    expect(isMediaChoice('subs:-en', 'srt')).toBe(false);
+
+    const track = { format: 'subs:en', language: 'en', name: ' English ', automatic: false, containers: ['srt', 'txt', 'ass'] };
+    expect(mediaSubtitleOf(track)).toEqual({ ...track, name: 'English', containers: ['srt', 'ass'] });
+    expect(mediaSubtitleOf({ ...track, containers: ['txt'] })).toBeUndefined();
+    expect(mediaSubtitleOf({ ...track, format: '137' })).toBeUndefined();
+    expect(mediaSubtitleOf({ ...track, automatic: 'no' })).toBeUndefined();
+    expect(subtitleLabel({ ...track, name: 'Arabic', automatic: true })).toBe('Arabic · auto-generated');
+    expect(isMediaCandidate({ url: WATCH, page: true, format: 'subs:en', container: 'srt', name: 'Clip' })).toBe(true);
   });
 
   it('lets a picked quality through only on a video page entry', () => {

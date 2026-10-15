@@ -92,6 +92,12 @@ internal sealed partial class MediaJob : IDownloadJob, IDisposable
             }
 
             Directory.CreateDirectory(_item.SaveFolder);
+            if (IsSubtitles)
+            {
+                // D-74: a few kilobytes; start over rather than trust a file stopped mid-conversion.
+                TryDeleteFolder(_item.MediaPartsFolder);
+            }
+
             var resumed = Directory.Exists(_item.MediaPartsFolder) && Directory.EnumerateFileSystemEntries(_item.MediaPartsFolder).Any();
             Directory.CreateDirectory(_item.MediaPartsFolder);
             _item.StartedAt ??= _clock.UtcNow;
@@ -152,19 +158,11 @@ internal sealed partial class MediaJob : IDownloadJob, IDisposable
         return _item.Clone();
     }
 
+    private bool IsSubtitles => SubtitleTrack.IsSpec(_item.MediaFormat);
+
     private void Complete()
     {
-        var file = _finalFile is { Length: > 0 } printed ? Path.GetFullPath(printed) : _item.DestPath;
-        if (!File.Exists(file) && File.Exists(_item.DestPath))
-        {
-            file = _item.DestPath; // the name OB2 asked for, if the printed one came back garbled (D-73)
-        }
-
-        if (!File.Exists(file))
-        {
-            throw new DownloadFailedException(ErrorCodes.FileError, "yt-dlp finished, but the file it reported is not there.");
-        }
-
+        var file = IsSubtitles ? PlaceSubtitles() : FinishedFile();
         SafePath.EnsureInside(_item.SaveFolder, file);
         var size = new FileInfo(file).Length;
         _item.DestPath = file;
@@ -177,6 +175,31 @@ internal sealed partial class MediaJob : IDownloadJob, IDisposable
         SetStatus(DownloadStatus.Completed);
         _repository.AddHistoryEvent(_id, "completed", file);
         LogCompleted(_id, size);
+    }
+
+    private string FinishedFile()
+    {
+        var file = _finalFile is { Length: > 0 } printed ? Path.GetFullPath(printed) : _item.DestPath;
+        if (!File.Exists(file) && File.Exists(_item.DestPath))
+        {
+            file = _item.DestPath; // the name OB2 asked for, if the printed one came back garbled (D-73)
+        }
+
+        return File.Exists(file) ? file : throw new DownloadFailedException(ErrorCodes.FileError, "yt-dlp finished, but the file it reported is not there.");
+    }
+
+    /// <summary>
+    /// D-74: yt-dlp saved the subtitles in the parts folder under its own name. They become
+    /// <see cref="DownloadItem.DestPath"/>, or a free name beside it if a file took that one meanwhile.
+    /// </summary>
+    private string PlaceSubtitles()
+    {
+        var saved = YtDlp.SubtitleFile(_item)
+            ?? throw new DownloadFailedException(ErrorCodes.SiteError, "yt-dlp saved no subtitles. The video may no longer have this track.");
+        // Only on a clash: UniquePath would count this download's own parts folder as taking the name.
+        var target = File.Exists(_item.DestPath) ? UniquePath.Allocate(_item.DestPath) : _item.DestPath;
+        File.Move(saved, target);
+        return target;
     }
 
     private void OnOutput(string line)

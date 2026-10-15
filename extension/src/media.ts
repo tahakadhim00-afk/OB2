@@ -3,7 +3,7 @@
 // so streaming manifests and their segments (HLS, DASH) are left out, as are URLs that return
 // only one byte range of a file.
 
-import type { MediaOption } from './protocol';
+import type { MediaOption, MediaSubtitle } from './protocol';
 import { parseHttpUrl } from './rules';
 
 export interface MediaCandidate {
@@ -18,7 +18,7 @@ export interface MediaCandidate {
   page?: boolean;
   /**
    * D-72: with `page`, one quality picked on the button's menu: yt-dlp's format selector, the
-   * finished file's extension, and its name (the video's title).
+   * finished file's extension, and its name (the video's title). D-74: or a subtitle track.
    */
   format?: string;
   container?: string;
@@ -27,10 +27,30 @@ export interface MediaCandidate {
 
 const FORMAT_SPEC = /^[A-Za-z0-9_][A-Za-z0-9_.=@-]{0,79}(?:\+[A-Za-z0-9_][A-Za-z0-9_.=@-]{0,79})?$/;
 const CONTAINER = /^[a-z0-9]{1,5}$/;
+const SUBTITLE_SPEC = /^(?:auto-)?subs:[A-Za-z0-9][A-Za-z0-9_-]{0,34}$/;
+const SUBTITLE_CONTAINER = /^(?:srt|ass|vtt)$/;
 
-/** D-72: a format and container OB2 may have offered; mirrors ProtocolValidator.IsMediaChoice in the app. */
+/**
+ * D-72: a format and container OB2 may have offered; mirrors ProtocolValidator.IsMediaChoice in
+ * the app. D-74: subtitle tracks (`subs:en`, `auto-subs:en-orig`) go only with srt, ass or vtt.
+ */
 export function isMediaChoice(format: unknown, container: unknown): boolean {
-  return typeof format === 'string' && typeof container === 'string' && FORMAT_SPEC.test(format) && CONTAINER.test(container);
+  if (typeof format !== 'string' || typeof container !== 'string') return false;
+  return SUBTITLE_SPEC.test(format) ? SUBTITLE_CONTAINER.test(container) : FORMAT_SPEC.test(format) && CONTAINER.test(container);
+}
+
+/** D-74: one subtitle track of a `media_formats` reply, with only the containers OB2 may have offered. */
+export function mediaSubtitleOf(value: unknown): MediaSubtitle | undefined {
+  const s = value as MediaSubtitle | undefined;
+  if (!s || typeof s.format !== 'string' || !SUBTITLE_SPEC.test(s.format) || typeof s.language !== 'string' || typeof s.name !== 'string') return undefined;
+  if (typeof s.automatic !== 'boolean' || !Array.isArray(s.containers)) return undefined;
+  const containers = s.containers.filter((c): c is string => isMediaChoice(s.format, c));
+  return containers.length > 0 ? { format: s.format, language: s.language, name: s.name.trim() || s.language, automatic: s.automatic, containers } : undefined;
+}
+
+/** "English", or "English (Original) · auto-generated" for captions the site's speech recognition made (D-74). */
+export function subtitleLabel(subtitle: MediaSubtitle): string {
+  return subtitle.automatic ? `${subtitle.name} · auto-generated` : subtitle.name;
 }
 
 /** One entry of a `media_formats` reply, checked before the menu shows it. */

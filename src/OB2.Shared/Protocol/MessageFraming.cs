@@ -157,9 +157,12 @@ public static partial class ProtocolValidator
     /// <summary>
     /// D-72: a format selector and container a <c>media_formats</c> reply may offer. The selector
     /// becomes yt-dlp's <c>-f</c> value, so it is one or two plain format ids, never an expression.
+    /// D-74: or a subtitle track (<c>subs:en</c>, <c>auto-subs:en-orig</c>) saved as srt, ass or vtt;
+    /// the language becomes <c>--sub-langs</c>, which reads patterns, so it is letters, digits, <c>_</c> and <c>-</c>.
     /// </summary>
     public static bool IsMediaChoice(string? format, string? container) =>
-        format is not null && container is not null && FormatSpec().IsMatch(format) && Container().IsMatch(container);
+        format is not null && container is not null
+        && (SubtitleSpec().IsMatch(format) ? SubtitleContainer().IsMatch(container) : FormatSpec().IsMatch(format) && Container().IsMatch(container));
 
     /// <summary>One or two yt-dlp format ids (<c>137</c>, <c>137+140</c>, <c>hls-720</c>).</summary>
     [GeneratedRegex(@"^[A-Za-z0-9_][A-Za-z0-9_.=@-]{0,79}(?:\+[A-Za-z0-9_][A-Za-z0-9_.=@-]{0,79})?\z")]
@@ -167,4 +170,11 @@ public static partial class ProtocolValidator
 
     [GeneratedRegex(@"^[a-z0-9]{1,5}\z")]
     private static partial Regex Container();
+
+    /// <summary>Mirrors <c>SubtitleTrack.Spec</c> in OB2.Core.</summary>
+    [GeneratedRegex(@"^(?:auto-)?subs:[A-Za-z0-9][A-Za-z0-9_-]{0,34}\z")]
+    private static partial Regex SubtitleSpec();
+
+    [GeneratedRegex(@"^(?:srt|ass|vtt)\z")]
+    private static partial Regex SubtitleContainer();
 }

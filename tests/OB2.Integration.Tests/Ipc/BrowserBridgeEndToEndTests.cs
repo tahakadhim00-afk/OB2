@@ -137,8 +137,20 @@ public sealed class BrowserBridgeEndToEndTests : IAsyncLifetime
         ack.Type.Should().Be(MessageTypes.Ack, ack.Payload?.ToString());
         ack.PayloadAs<AckPayload>()!.DownloadId.Should().NotBeNull();
 
+        // D-74: subtitles picked on the button are a download of their own, named with their language.
+        var subtitles = await host.SendAsync(ProtocolMessage.Create(MessageTypes.AddDownload, new AddDownloadPayload
+        {
+            Url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            MediaPage = true,
+            MediaFormat = "auto-subs:en-orig",
+            MediaContainer = "srt",
+            FilenameHint = "Launch day.srt",
+            Source = "chrome-media",
+        }));
+        subtitles.Type.Should().Be(MessageTypes.Ack, subtitles.Payload?.ToString());
+
         var status = (await host.SendAsync(ProtocolMessage.Simple(MessageTypes.GetStatus))).PayloadAs<StatusPayload>()!;
-        status.Active.Concat(status.Recent).Select(d => d.FileName).Should().Contain("Launch day.mp4");
+        status.Active.Concat(status.Recent).Select(d => d.FileName).Should().Contain(["Launch day.mp4", "Launch day.en-orig.srt"]);
     }
 
     [Fact]

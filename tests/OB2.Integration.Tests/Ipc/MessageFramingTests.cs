@@ -187,6 +187,15 @@ public sealed class MessageFramingTests
     [InlineData("137\n", "mp4", true, false)]
     [InlineData("137+140", "../x", true, false)]
     [InlineData("137+140", null, true, false)]
+    [InlineData("subs:en", "srt", true, true)] // D-74: subtitles
+    [InlineData("auto-subs:en-orig", "ass", true, true)]
+    [InlineData("subs:pt-BR", "vtt", true, true)]
+    [InlineData("subs:en", "srt", false, false)]
+    [InlineData("subs:en", "mp4", true, false)]
+    [InlineData("subs:en.*", "srt", true, false)] // --sub-langs reads patterns
+    [InlineData("subs:-en", "srt", true, false)]
+    [InlineData("subs:en,fr", "srt", true, false)]
+    [InlineData("subs:", "srt", true, false)]
     public void A_quality_from_the_button_is_plain_format_ids(string format, string? container, bool mediaPage, bool accepted)
     {
         var message = ProtocolMessage.Create(MessageTypes.AddDownload, new AddDownloadPayload

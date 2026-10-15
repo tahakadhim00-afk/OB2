@@ -60,6 +60,9 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <Label Content="{StaticResource Media_Video}" Target="{Binding ElementName=VideoBox}" Style="{StaticResource FieldLabel}" />
@@ -70,16 +73,30 @@
             <ComboBox x:Name="AudioBox" Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" ItemsSource="{Binding Audios}" SelectedItem="{Binding SelectedAudio}"
                       IsEnabled="{Binding IsAudioEnabled}" Margin="0,2" />
 
-            <CheckBox Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Content="{StaticResource Media_AudioOnly}" IsChecked="{Binding AudioOnly}" Margin="0,6,0,2" />
+            <CheckBox Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Content="{StaticResource Media_AudioOnly}" IsChecked="{Binding AudioOnly}"
+                      IsEnabled="{Binding IsAudioOnlyEnabled}" Margin="0,6,0,2" />
 
-            <Label Grid.Row="3" Content="{StaticResource Add_SaveAs}" Target="{Binding ElementName=NameBox}" Style="{StaticResource FieldLabel}" />
-            <TextBox x:Name="NameBox" Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding FileName, UpdateSourceTrigger=PropertyChanged}" Margin="0,2" />
+            <!-- D-74: subtitles, a download of their own -->
+            <Label Grid.Row="3" Content="{StaticResource Media_Subtitles}" Target="{Binding ElementName=SubtitleBox}" Style="{StaticResource FieldLabel}" Margin="0,6,0,0" />
+            <ComboBox x:Name="SubtitleBox" Grid.Row="3" Grid.Column="1" ItemsSource="{Binding Subtitles}" SelectedItem="{Binding SelectedSubtitle}"
+                      IsEnabled="{Binding HasSubtitles}" Margin="0,8,0,2" />
+            <ComboBox Grid.Row="3" Grid.Column="2" ItemsSource="{Binding SubtitleFormats}" SelectedItem="{Binding SelectedSubtitleFormat}"
+                      IsEnabled="{Binding IsSubtitleChosen}" AutomationProperties.Name="{StaticResource Media_SubtitleFormat}" MinWidth="64" Margin="6,8,0,2" />
 
-            <Label Grid.Row="4" Content="{StaticResource Add_Folder}" Target="{Binding ElementName=FolderBox}" Style="{StaticResource FieldLabel}" />
-            <TextBox x:Name="FolderBox" Grid.Row="4" Grid.Column="1" Text="{Binding SaveFolder, UpdateSourceTrigger=PropertyChanged}" Margin="0,2" />
-            <Button Grid.Row="4" Grid.Column="2" Content="{StaticResource Common_Browse}" Click="OnBrowse" Margin="6,2,0,2" Padding="10,0" />
+            <CheckBox Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2" Content="{StaticResource Media_SubtitlesOnly}" IsChecked="{Binding SubtitlesOnly}"
+                      IsEnabled="{Binding IsSubtitleChosen}" Margin="0,6,0,2" />
 
-            <TextBlock Grid.Row="5" Grid.Column="1" Grid.ColumnSpan="2" Style="{StaticResource Hint}" Text="{Binding SizeText}" Margin="0,4,0,0" />
+            <TextBlock Grid.Row="5" Grid.Column="1" Grid.ColumnSpan="2" Style="{StaticResource Hint}" Text="{Binding SubtitleNameText}" Margin="0,2,0,0"
+                       Visibility="{Binding IsSubtitleNameVisible, Converter={StaticResource BoolToVisibility}}" />
+
+            <Label Grid.Row="6" Content="{StaticResource Add_SaveAs}" Target="{Binding ElementName=NameBox}" Style="{StaticResource FieldLabel}" Margin="0,6,0,0" />
+            <TextBox x:Name="NameBox" Grid.Row="6" Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding FileName, UpdateSourceTrigger=PropertyChanged}" Margin="0,8,0,2" />
+
+            <Label Grid.Row="7" Content="{StaticResource Add_Folder}" Target="{Binding ElementName=FolderBox}" Style="{StaticResource FieldLabel}" />
+            <TextBox x:Name="FolderBox" Grid.Row="7" Grid.Column="1" Text="{Binding SaveFolder, UpdateSourceTrigger=PropertyChanged}" Margin="0,2" />
+            <Button Grid.Row="7" Grid.Column="2" Content="{StaticResource Common_Browse}" Click="OnBrowse" Margin="6,2,0,2" Padding="10,0" />
+
+            <TextBlock Grid.Row="8" Grid.Column="1" Grid.ColumnSpan="2" Style="{StaticResource Hint}" Text="{Binding SizeText}" Margin="0,4,0,0" />
         </Grid>
 
         <TextBlock Style="{StaticResource ErrorText}" Text="{Binding ErrorText}" Margin="0,8,0,0" />

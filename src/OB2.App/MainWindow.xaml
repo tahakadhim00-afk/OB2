@@ -34,30 +34,30 @@
             <ToolBarTray IsLocked="True" Background="Transparent">
                 <ToolBar ToolBarTray.IsLocked="True" Band="0" Background="Transparent">
                     <Button Style="{StaticResource ToolbarButton}" Command="{Binding AddUrlCommand}" ToolTip="{StaticResource Tb_Add_Tip}" AutomationProperties.Name="{StaticResource Tb_Add}">
-                        <StackPanel><TextBlock Style="{StaticResource Glyph}" Text="&#xE710;" /><TextBlock Style="{StaticResource ToolbarLabel}" Text="{StaticResource Tb_Add}" /></StackPanel>
+                        <StackPanel><TextBlock Style="{StaticResource AddGlyph}" Text="&#xE710;" /><TextBlock Style="{StaticResource ToolbarLabel}" Text="{StaticResource Tb_Add}" /></StackPanel>
                     </Button>
                     <Separator />
                     <Button Style="{StaticResource ToolbarButton}" Command="{Binding ResumeCommand}" ToolTip="{StaticResource Tb_Resume_Tip}" AutomationProperties.Name="{StaticResource Tb_Resume}">
-                        <StackPanel><TextBlock Style="{StaticResource Glyph}" Text="&#xE768;" /><TextBlock Style="{StaticResource ToolbarLabel}" Text="{StaticResource Tb_Resume}" /></StackPanel>
+                        <StackPanel><TextBlock Style="{StaticResource GoGlyph}" Text="&#xE768;" /><TextBlock Style="{StaticResource ToolbarLabel}" Text="{StaticResource Tb_Resume}" /></StackPanel>
                     </Button>
                     <Button Style="{StaticResource ToolbarButton}" Command="{Binding StopCommand}" ToolTip="{StaticResource Tb_Stop_Tip}" AutomationProperties.Name="{StaticResource Tb_Stop}">
-                        <StackPanel><TextBlock Style="{StaticResource Glyph}" Text="&#xE769;" /><TextBlock Style="{StaticResource ToolbarLabel}" Text="{StaticResource Tb_Stop}" /></StackPanel>
+                        <StackPanel><TextBlock Style="{StaticResource StopGlyph}" Text="&#xE769;" /><TextBlock Style="{StaticResource ToolbarLabel}" Text="{StaticResource Tb_Stop}" /></StackPanel>
                     </Button>
                     <Button Style="{StaticResource ToolbarButton}" Command="{Binding StopAllCommand}" ToolTip="{StaticResource Tb_StopAll_Tip}" AutomationProperties.Name="{StaticResource Tb_StopAll}">
-                        <StackPanel><TextBlock Style="{StaticResource Glyph}" Text="&#xE71A;" /><TextBlock Style="{StaticResource ToolbarLabel}" Text="{StaticResource Tb_StopAll}" /></StackPanel>
+                        <StackPanel><TextBlock Style="{StaticResource StopGlyph}" Text="&#xE71A;" /><TextBlock Style="{StaticResource ToolbarLabel}" Text="{StaticResource Tb_StopAll}" /></StackPanel>
                     </Button>
                     <Button Style="{StaticResource ToolbarButton}" Command="{Binding ResumeAllCommand}" AutomationProperties.Name="{StaticResource Tb_ResumeAll}">
-                        <StackPanel><TextBlock Style="{StaticResource Glyph}" Text="&#xE8EE;" /><TextBlock Style="{StaticResource ToolbarLabel}" Text="{StaticResource Tb_ResumeAll}" /></StackPanel>
+                        <StackPanel><TextBlock Style="{StaticResource GoGlyph}" Text="&#xE8EE;" /><TextBlock Style="{StaticResource ToolbarLabel}" Text="{StaticResource Tb_ResumeAll}" /></StackPanel>
                     </Button>
                     <Button Style="{StaticResource ToolbarButton}" Command="{Binding DeleteCommand}" ToolTip="{StaticResource Tb_Delete_Tip}" AutomationProperties.Name="{StaticResource Tb_Delete}">
-                        <StackPanel><TextBlock Style="{StaticResource Glyph}" Text="&#xE74D;" /><TextBlock Style="{StaticResource ToolbarLabel}" Text="{StaticResource Tb_Delete}" /></StackPanel>
+                        <StackPanel><TextBlock Style="{StaticResource DangerGlyph}" Text="&#xE74D;" /><TextBlock Style="{StaticResource ToolbarLabel}" Text="{StaticResource Tb_Delete}" /></StackPanel>
                     </Button>
                     <Separator />
                     <Button Style="{StaticResource ToolbarButton}" Command="{Binding StartQueueCommand}" AutomationProperties.Name="{StaticResource Tb_StartQueue}">
-                        <StackPanel><TextBlock Style="{StaticResource Glyph}" Text="&#xE8B0;" /><TextBlock Style="{StaticResource ToolbarLabel}" Text="{StaticResource Tb_StartQueue}" /></StackPanel>
+                        <StackPanel><TextBlock Style="{StaticResource GoGlyph}" Text="&#xE8B0;" /><TextBlock Style="{StaticResource ToolbarLabel}" Text="{StaticResource Tb_StartQueue}" /></StackPanel>
                     </Button>
                     <Button Style="{StaticResource ToolbarButton}" Command="{Binding StopQueueCommand}" AutomationProperties.Name="{StaticResource Tb_StopQueue}">
-                        <StackPanel><TextBlock Style="{StaticResource Glyph}" Text="&#xE71A;" /><TextBlock Style="{StaticResource ToolbarLabel}" Text="{StaticResource Tb_StopQueue}" /></StackPanel>
+                        <StackPanel><TextBlock Style="{StaticResource StopGlyph}" Text="&#xE71A;" /><TextBlock Style="{StaticResource ToolbarLabel}" Text="{StaticResource Tb_StopQueue}" /></StackPanel>
                     </Button>
                     <Button Style="{StaticResource ToolbarButton}" Command="{Binding SchedulerCommand}" AutomationProperties.Name="{StaticResource Tb_Scheduler}">
                         <StackPanel><TextBlock Style="{StaticResource Glyph}" Text="&#xE787;" /><TextBlock Style="{StaticResource ToolbarLabel}" Text="{StaticResource Tb_Scheduler}" /></StackPanel>
@@ -141,8 +141,12 @@
                             <MenuItem Header="{StaticResource Menu_OpenFolder}" Command="{Binding OpenFolderCommand}" />
                             <MenuItem Header="{StaticResource Menu_CopyUrl}" Command="{Binding CopyUrlCommand}" />
                             <Separator />
-                            <MenuItem Header="{StaticResource Tb_Resume}" Command="{Binding ResumeCommand}" />
-                            <MenuItem Header="{StaticResource Tb_Stop}" Command="{Binding StopCommand}" />
+                            <MenuItem Header="{StaticResource Tb_Resume}" Command="{Binding ResumeCommand}">
+                                <MenuItem.Icon><TextBlock Style="{StaticResource GoMenuGlyph}" Text="&#xE768;" /></MenuItem.Icon>
+                            </MenuItem>
+                            <MenuItem Header="{StaticResource Tb_Stop}" Command="{Binding StopCommand}">
+                                <MenuItem.Icon><TextBlock Style="{StaticResource StopMenuGlyph}" Text="&#xE769;" /></MenuItem.Icon>
+                            </MenuItem>
                             <MenuItem Header="{StaticResource Menu_DownloadLater}" Command="{Binding DownloadLaterCommand}" />
                             <MenuItem Header="{StaticResource Menu_MoveToQueue}" ItemsSource="{Binding QueueList}">
                                 <MenuItem.ItemContainerStyle>
@@ -156,7 +160,9 @@
                             <MenuItem Header="{StaticResource Menu_MoveUp}" Command="{Binding MoveUpCommand}" />
                             <MenuItem Header="{StaticResource Menu_MoveDown}" Command="{Binding MoveDownCommand}" />
                             <Separator />
-                            <MenuItem Header="{StaticResource Tb_Delete}" Command="{Binding DeleteCommand}" InputGestureText="Del" />
+                            <MenuItem Header="{StaticResource Tb_Delete}" Command="{Binding DeleteCommand}" InputGestureText="Del">
+                                <MenuItem.Icon><TextBlock Style="{StaticResource DangerMenuGlyph}" Text="&#xE74D;" /></MenuItem.Icon>
+                            </MenuItem>
                         </ContextMenu>
                     </DataGrid.ContextMenu>
                     <DataGrid.Columns>
@@ -241,8 +247,13 @@
                                 <TextBox Text="{Binding DestPath, Mode=OneWay}" IsReadOnly="True" BorderThickness="0" Background="Transparent" Margin="0,0,0,4" />
                                 <StackPanel Orientation="Horizontal" Visibility="{Binding HasError, Converter={StaticResource BoolToVisibility}}">
                                     <TextBlock Style="{StaticResource ErrorText}" Text="{Binding ErrorText}" MaxWidth="360" VerticalAlignment="Center" />
-                                    <Button Content="{StaticResource Detail_Retry}" Margin="8,0,0,0" Padding="10,2"
-                                            Command="{Binding DataContext.ResumeCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
+                                    <Button Margin="8,0,0,0" Padding="10,2" AutomationProperties.Name="{StaticResource Detail_Retry}"
+                                            Command="{Binding DataContext.ResumeCommand, RelativeSource={RelativeSource AncestorType=Window}}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Style="{StaticResource GoGlyph}" FontSize="14" VerticalAlignment="Center" Text="&#xE72C;" />
+                                            <TextBlock Text="{StaticResource Detail_Retry}" Margin="5,0,0,0" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Button>
                                 </StackPanel>
                             </StackPanel>
                             <DockPanel Grid.Column="2">

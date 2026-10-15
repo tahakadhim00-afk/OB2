@@ -92,6 +92,7 @@ public sealed partial class BrowserBridge : IIpcHandler
             Source = source,
             MediaPage = payload.MediaPage == true,
             MediaFormat = payload.MediaFormat,
+            MediaContainer = payload.MediaContainer,
         };
 
         // §11.1: a URL with embedded credentials (user:pass@host) is only accepted after the user confirms it.
@@ -136,12 +137,14 @@ public sealed partial class BrowserBridge : IIpcHandler
         return ProtocolMessage.Create(MessageTypes.Ack, new AckPayload(item.Id, item.Status.ToDbString()), request.Id);
     }
 
-    /// <summary>D-72: a quality picked on the button, added as the Download Video window would add it.</summary>
+    /// <summary>D-72: a quality (D-74: or subtitles) picked on the button, added as the Download Video window would add it.</summary>
     private async Task<ProtocolMessage> AddMediaAsync(string id, AddDownloadPayload payload, Uri url, DownloadSource source, CancellationToken cancellationToken)
     {
         var container = payload.MediaContainer!;
-        // The extension names it after the title that came with the formats; the container wins.
-        var name = FileNameSanitizer.Sanitize(Path.ChangeExtension(payload.FilenameHint is { Length: > 0 } hint ? hint : "video", container));
+        // The extension names it after the title that came with the formats ("Title.mp4"); the
+        // container wins, and subtitles add their language ("Title.en.srt").
+        var selection = new MediaSelection(payload.MediaFormat!, container, null);
+        var name = FileNameSanitizer.Sanitize(selection.FileName(Path.GetFileNameWithoutExtension(payload.FilenameHint is { Length: > 0 } hint ? hint : "video")));
         var item = await _service.AddMediaAsync(
             new AddDownloadOptions
             {
@@ -185,9 +188,13 @@ public sealed partial class BrowserBridge : IIpcHandler
             .Where(o => ProtocolValidator.IsMediaChoice(o.Selection.FormatSpec, o.Selection.Container))
             .Select(o => new MediaOptionPayload(o.Selection.FormatSpec, o.Selection.Container, o.AudioOnly, o.Quality, o.Codec, o.Track, o.Selection.EstimatedSize))
             .ToList();
+        var subtitles = info.Subtitles
+            .Where(t => SubtitleTrack.Formats.All(f => ProtocolValidator.IsMediaChoice(t.Spec, f)))
+            .Select(t => new MediaSubtitlePayload(t.Spec, t.Language, t.Name, t.Automatic, SubtitleTrack.Formats))
+            .ToList();
         return options.Count == 0
             ? ProtocolMessage.ErrorReply(request.Id, ProtocolErrors.MediaFailed, "The page has no video or audio that OB2 can download.")
-            : ProtocolMessage.Create(MessageTypes.MediaFormats, new MediaFormatsPayload(info.Title, info.Duration?.TotalSeconds, options), request.Id);
+            : ProtocolMessage.Create(MessageTypes.MediaFormats, new MediaFormatsPayload(info.Title, info.Duration?.TotalSeconds, options, subtitles), request.Id);
     }
 
     private StatusPayload BuildStatus()

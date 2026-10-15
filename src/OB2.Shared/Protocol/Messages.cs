@@ -104,6 +104,7 @@ public static class ProtocolJson
 [JsonSerializable(typeof(StatusPayload))]
 [JsonSerializable(typeof(MediaFormatsRequest))]
 [JsonSerializable(typeof(MediaFormatsPayload))]
+[JsonSerializable(typeof(MediaSubtitlePayload))]
 public sealed partial class ProtocolJsonContext : JsonSerializerContext;
 
 /// <summary><c>add_download</c> payload, exactly as in §8.3.</summary>
@@ -141,11 +142,12 @@ public sealed record AddDownloadPayload
     /// <summary>
     /// D-72: with <see cref="MediaPage"/>, the yt-dlp format selector picked on the browser's
     /// button (<c>137+140</c>), from a <c>media_formats</c> reply. The app downloads it without
-    /// asking again, unless confirmation is on.
+    /// asking again, unless confirmation is on. D-74: or a subtitle track's <c>format</c>
+    /// (<c>subs:en</c>, <c>auto-subs:en-orig</c>).
     /// </summary>
     public string? MediaFormat { get; init; }
 
-    /// <summary>D-72: the finished file's extension that goes with <see cref="MediaFormat"/>.</summary>
+    /// <summary>D-72: the finished file's extension that goes with <see cref="MediaFormat"/> (D-74: srt, ass or vtt for subtitles).</summary>
     public string? MediaContainer { get; init; }
 }
 
@@ -155,11 +157,21 @@ public sealed record MediaFormatsRequest
     public string? Url { get; init; }
 }
 
-/// <summary><c>media_formats</c> reply (D-72): the page's title and the button's menu entries, best first.</summary>
-public sealed record MediaFormatsPayload(string Title, double? DurationSeconds, IReadOnlyList<MediaOptionPayload> Options);
+/// <summary>
+/// <c>media_formats</c> reply (D-72): the page's title and the button's menu entries, best first.
+/// D-74: <paramref name="Subtitles"/> lists the tracks OB2 can save, empty when the video has none.
+/// </summary>
+public sealed record MediaFormatsPayload(string Title, double? DurationSeconds, IReadOnlyList<MediaOptionPayload> Options, IReadOnlyList<MediaSubtitlePayload>? Subtitles = null);
 
 /// <summary>One quality: <paramref name="Format"/> and <paramref name="Container"/> go back in <c>add_download</c>.</summary>
 public sealed record MediaOptionPayload(string Format, string Container, bool AudioOnly, string? Quality, string? Codec, string? Track, long? Size);
+
+/// <summary>
+/// D-74: one subtitle track. <paramref name="Format"/> and one of <paramref name="Containers"/>
+/// go back in <c>add_download</c> as <c>mediaFormat</c> and <c>mediaContainer</c>.
+/// </summary>
+/// <param name="Automatic">Made by the site's speech recognition (YouTube's auto-generated captions).</param>
+public sealed record MediaSubtitlePayload(string Format, string Language, string Name, bool Automatic, IReadOnlyList<string> Containers);
 
 public sealed record AckPayload(long? DownloadId, string Status);
 

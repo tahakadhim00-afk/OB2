@@ -4,11 +4,13 @@
 // (players that feed the element a blob: URL). The button lives in a closed shadow root so page
 // CSS and scripts can't restyle or read it, and it is built without innerHTML (Trusted Types).
 // D-72: on a video page (YouTube) a click lists the qualities OB2 reads with yt-dlp, and each
-// entry downloads that quality.
+// entry downloads that quality. D-74: then the video's subtitle tracks, each with a button per
+// format (SRT, ASS, VTT) that downloads it as a file of its own.
 
 import type { FormatsFailure, FormatsOutcome } from './capture';
 import { formatBytes } from './format';
-import { isDownloadableMediaUrl, isYouTubeHost, mediaLabel, optionLabel, youTubeVideoPage, type MediaCandidate } from './media';
+import { isDownloadableMediaUrl, isYouTubeHost, mediaLabel, optionLabel, subtitleLabel, youTubeVideoPage, type MediaCandidate } from './media';
+import type { MediaSubtitle } from './protocol';
 import { scanPage } from './scan';
 
 export type SendResult = 'sent' | 'browser' | 'unreachable' | 'incognito' | 'failed';
@@ -59,6 +61,12 @@ const CSS = `
 .item:hover, .item:focus-visible { background: #e8f0fe; outline: none; }
 .item.more { border-top: 1px solid #dadce0; color: #1a73e8; }
 .note { padding: 6px 10px; color: #5f6368; white-space: normal; overflow-wrap: anywhere; }
+.note.heading { border-top: 1px solid #dadce0; padding-bottom: 2px; font-size: 12px; }
+.sub { display: flex; align-items: center; gap: 4px; padding: 2px 8px 2px 10px; }
+.sub .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fmt { flex: none; padding: 2px 6px; border: 1px solid #dadce0; border-radius: 3px; background: none; color: #1a73e8;
+  font: inherit; font-size: 12px; cursor: pointer; }
+.fmt:hover, .fmt:focus-visible { background: #e8f0fe; outline: none; }
 `;
 
 /** The element's own http(s) source: what it plays now, else its src or <source> children. */
@@ -335,7 +343,7 @@ export class MediaOverlay {
       });
       const more = this.menuItem('More choices in OB2… (audio track, folder)', page.url, () => void this.sendMedia(whole));
       more.querySelector('button')!.classList.add('more');
-      this.fillMenu([...items, more]);
+      this.fillMenu([...items, ...this.subtitleItems(outcome.subtitles, whole, name), more]);
       return;
     }
 
@@ -346,6 +354,42 @@ export class MediaOverlay {
       items.push(this.menuItem('Open in OB2…', page.url, () => void this.sendMedia(whole)));
     }
     this.fillMenu(items);
+  }
+
+  /**
+   * D-74: a "Subtitles" heading, then one row per track with a button per format; each button
+   * downloads that track as a file of its own, named after the video. Nothing from an OB2 that
+   * predates subtitles.
+   */
+  private subtitleItems(subtitles: MediaSubtitle[] | undefined, page: MediaCandidate, name: string | undefined): HTMLLIElement[] {
+    if (!subtitles) return [];
+    const heading = this.menuNote(subtitles.length > 0 ? 'Subtitles' : 'Subtitles: none on this video');
+    heading.classList.add('heading');
+    return [heading, ...subtitles.map((subtitle) => this.subtitleRow(subtitle, page, name))];
+  }
+
+  private subtitleRow(subtitle: MediaSubtitle, page: MediaCandidate, name: string | undefined): HTMLLIElement {
+    const li = this.doc.createElement('li');
+    li.setAttribute('role', 'none');
+    li.className = 'sub';
+    const label = this.doc.createElement('span');
+    label.className = 'name';
+    label.textContent = subtitleLabel(subtitle);
+    label.title = label.textContent;
+    li.append(label);
+    for (const container of subtitle.containers) {
+      const button = this.doc.createElement('button');
+      button.type = 'button';
+      button.className = 'fmt';
+      button.setAttribute('role', 'menuitem');
+      button.textContent = container.toUpperCase();
+      button.title = `${subtitleLabel(subtitle)} subtitles as ${container.toUpperCase()}`;
+      button.setAttribute('aria-label', button.title);
+      const choice: MediaCandidate = { ...page, format: subtitle.format, container, name };
+      button.addEventListener('click', () => void this.sendMedia(choice));
+      li.append(button);
+    }
+    return li;
   }
 
   /** The page's qualities, asked once and kept for a while; a failure is asked again next time. */

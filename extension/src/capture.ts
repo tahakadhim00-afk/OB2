@@ -2,10 +2,11 @@
 // The browser download is paused, not cancelled, while OB2 is asked to take it. It is cancelled
 // only after OB2 acknowledges; on any failure it is resumed, so Chrome finishes it (fail-open).
 
-import { isMediaOption, mediaFileName, type MediaCandidate } from './media';
+import { isMediaOption, mediaFileName, mediaSubtitleOf, type MediaCandidate } from './media';
 import { CAPTURE_TIMEOUT_MS, HostError, MEDIA_FORMATS_TIMEOUT_MS, STATUS_TIMEOUT_MS, sendToHost } from './native';
 import {
-  createMessage, ErrorCode, MessageType, type AckPayload, type AddDownloadPayload, type MediaFormatsPayload, type MediaFormatsRequest, type MediaOption, type StatusPayload,
+  createMessage, ErrorCode, MessageType, type AckPayload, type AddDownloadPayload, type MediaFormatsPayload, type MediaFormatsRequest, type MediaOption, type MediaSubtitle,
+  type StatusPayload,
 } from './protocol';
 import { decide, knownSize, loadSettings, parseHttpUrl, RULES_MAX_AGE_MS, saveRules, type SkipReason } from './rules';
 import type { FoundLink } from './scan';
@@ -142,11 +143,15 @@ export async function downloadVideoPageWithOb2(
 /** Why the button's quality menu has no qualities to show (D-72). */
 export type FormatsFailure = 'unreachable' | 'tools-missing' | 'media-failed' | 'timeout' | 'incognito' | 'failed';
 
-export type FormatsOutcome = { action: 'listed'; title: string; options: MediaOption[] } | { action: 'failed'; reason: FormatsFailure; message?: string };
+/** `subtitles` (D-74) is absent when the OB2 that answered predates subtitles, and empty when the video has none. */
+export type FormatsOutcome =
+  | { action: 'listed'; title: string; options: MediaOption[]; subtitles?: MediaSubtitle[] }
+  | { action: 'failed'; reason: FormatsFailure; message?: string };
 
 /**
- * D-72: the qualities a video page offers, for the button's menu. OB2 asks yt-dlp, which takes a
- * few seconds; the host starts OB2 if needed, as for a capture. The reply is checked before use.
+ * D-72: the qualities a video page offers, for the button's menu (D-74: and its subtitle tracks).
+ * OB2 asks yt-dlp, which takes a few seconds; the host starts OB2 if needed, as for a capture.
+ * The reply is checked before use.
  */
 export async function fetchMediaFormats(videoPage: string, incognito = false): Promise<FormatsOutcome> {
   if (incognito) return { action: 'failed', reason: 'incognito' }; // D-61
@@ -155,7 +160,10 @@ export async function fetchMediaFormats(videoPage: string, incognito = false): P
     const reply = await sendToHost<MediaFormatsPayload>(request, MEDIA_FORMATS_TIMEOUT_MS);
     const options = reply.type === MessageType.MediaFormats && Array.isArray(reply.payload?.options) ? reply.payload.options.filter(isMediaOption) : [];
     if (options.length === 0) return { action: 'failed', reason: 'failed' };
-    return { action: 'listed', title: typeof reply.payload?.title === 'string' ? reply.payload.title : '', options };
+    const outcome: FormatsOutcome = { action: 'listed', title: typeof reply.payload?.title === 'string' ? reply.payload.title : '', options };
+    const subtitles = reply.payload?.subtitles;
+    if (Array.isArray(subtitles)) outcome.subtitles = subtitles.map(mediaSubtitleOf).filter((s): s is MediaSubtitle => s !== undefined);
+    return outcome;
   } catch (error) {
     return { action: 'failed', ...formatsFailure(error) };
   }

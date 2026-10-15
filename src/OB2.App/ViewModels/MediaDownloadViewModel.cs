@@ -24,7 +24,8 @@ public enum MediaDialogState
 
 /// <summary>
 /// Download Video window (D-71): installs yt-dlp, Deno and ffmpeg on first use, asks yt-dlp what
-/// the page offers, and adds the chosen picture quality and audio track as a download.
+/// the page offers, and adds the chosen picture quality and audio track as a download. D-74: a
+/// chosen subtitle track becomes a download of its own beside the video, or the only one.
 /// </summary>
 public sealed partial class MediaDownloadViewModel : ObservableObject, IDisposable
 {
@@ -35,6 +36,9 @@ public sealed partial class MediaDownloadViewModel : ObservableObject, IDisposab
     private readonly Uri _pageUrl;
     private readonly CancellationTokenSource _cts = new();
     private MediaInfo? _info;
+
+    /// <summary>The choice <see cref="FileName"/> was made for, to find the title in a name the user edited.</summary>
+    private MediaSelection? _named;
     private bool _nameEdited;
     private bool _folderEdited;
     private bool _audioEdited;
@@ -60,6 +64,25 @@ public sealed partial class MediaDownloadViewModel : ObservableObject, IDisposab
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsVideoEnabled))]
     private bool _audioOnly;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsSubtitleChosen))]
+    private Choice<SubtitleTrack?>? _selectedSubtitle;
+
+    [ObservableProperty]
+    private Choice<string>? _selectedSubtitleFormat;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsVideoEnabled), nameof(IsAudioOnlyEnabled))]
+    private bool _subtitlesOnly;
+
+    [ObservableProperty]
+    private bool _hasSubtitles;
+
+    /// <summary>"Added as its own download: Clip.en.srt" while subtitles go with the video.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsSubtitleNameVisible))]
+    private string? _subtitleNameText;
 
     [ObservableProperty]
     private bool _isAudioEnabled = true;
@@ -95,7 +118,9 @@ public sealed partial class MediaDownloadViewModel : ObservableObject, IDisposab
         _pageUrl = pageUrl;
         PageText = pageUrl.AbsoluteUri;
         ToolsText = Loc.Format("Media_ToolsBody", Fmt.Size(MediaToolInstaller.ApproximateTotalBytes), installer.Tools.Folder);
-        SaveFolder = _service.SaveFolderFor(_service.CategoryFor("video.mp4")?.Id);
+        SubtitleFormats = [.. SubtitleTrack.Formats.Select(f => new Choice<string>(f, f.ToUpperInvariant()))];
+        Set(() => SelectedSubtitleFormat = SubtitleFormats[0]);
+        SaveFolder = _service.SaveFolderFor(_service.VideoCategory?.Id);
         _folderEdited = false;
 
         if (inspector.Tools.IsInstalled)
@@ -119,6 +144,11 @@ public sealed partial class MediaDownloadViewModel : ObservableObject, IDisposab
 
     public ObservableCollection<Choice<MediaFormat>> Audios { get; } = [];
 
+    /// <summary>D-74: "None" first, then the tracks the page has.</summary>
+    public ObservableCollection<Choice<SubtitleTrack?>> Subtitles { get; } = [];
+
+    public IReadOnlyList<Choice<string>> SubtitleFormats { get; }
+
     public bool IsNeedsTools => State == MediaDialogState.NeedsTools;
 
     public bool IsInstalling => State == MediaDialogState.InstallingTools;
@@ -129,7 +159,13 @@ public sealed partial class MediaDownloadViewModel : ObservableObject, IDisposab
 
     public bool IsFailed => State == MediaDialogState.Failed;
 
-    public bool IsVideoEnabled => !AudioOnly;
+    public bool IsVideoEnabled => !AudioOnly && !SubtitlesOnly;
+
+    public bool IsAudioOnlyEnabled => !SubtitlesOnly;
+
+    public bool IsSubtitleChosen => SelectedSubtitle?.Value is not null;
+
+    public bool IsSubtitleNameVisible => SubtitleNameText is not null;
 
     public void Dispose()
     {
@@ -166,11 +202,41 @@ public sealed partial class MediaDownloadViewModel : ObservableObject, IDisposab
 
     partial void OnAudioOnlyChanged(bool value) => UpdateSelection();
 
+    partial void OnSelectedSubtitleChanged(Choice<SubtitleTrack?>? value)
+    {
+        if (value?.Value is null)
+        {
+            SubtitlesOnly = false;
+        }
+
+        if (!_updating)
+        {
+            UpdateSelection();
+        }
+    }
+
+    partial void OnSelectedSubtitleFormatChanged(Choice<string>? value)
+    {
+        if (!_updating)
+        {
+            UpdateSelection();
+        }
+    }
+
+    partial void OnSubtitlesOnlyChanged(bool value)
+    {
+        if (!_updating)
+        {
+            UpdateSelection();
+        }
+    }
+
     partial void OnFileNameChanged(string value)
     {
         if (!_updating)
         {
             _nameEdited = true;
+            UpdateSubtitleName();
         }
     }
 
@@ -294,17 +360,42 @@ public sealed partial class MediaDownloadViewModel : ObservableObject, IDisposab
                 Audios.Add(new Choice<MediaFormat>(audio, AudioLabel(audio)));
             }
 
+            Subtitles.Clear();
+            Subtitles.Add(new Choice<SubtitleTrack?>(null, Loc.Get(info.Subtitles.Count > 0 ? "Media_SubtitlesNone" : "Media_SubtitlesNoneFound")));
+            foreach (var track in info.Subtitles)
+            {
+                Subtitles.Add(new Choice<SubtitleTrack?>(track, track.Automatic ? Loc.Format("Media_SubtitleAuto", track.Name) : track.Name));
+            }
+
+            HasSubtitles = info.Subtitles.Count > 0;
+            SelectedSubtitle = Subtitles[0];
+
             SelectedVideo = Videos.FirstOrDefault();
             SelectedAudio = Audios.FirstOrDefault(a => a.Value == MediaChoices.AudioFor(SelectedVideo?.Value, Audios.Select(c => c.Value).ToList())) ?? Audios.FirstOrDefault();
             AudioOnly = Videos.Count == 0;
-            Preselect(_prefill.MediaFormat);
+            Preselect(_prefill.MediaFormat, _prefill.MediaContainer);
         });
         UpdateSelection();
     }
 
-    /// <summary>D-72: the quality picked on the browser's button (<c>137+140</c>, or <c>140</c> for sound alone).</summary>
-    private void Preselect(string? formatSpec)
+    /// <summary>
+    /// D-72: the quality picked on the browser's button (<c>137+140</c>, or <c>140</c> for sound
+    /// alone). D-74: or subtitles (<c>subs:en</c>) in the format picked with them.
+    /// </summary>
+    private void Preselect(string? formatSpec, string? container)
     {
+        if (SubtitleTrack.IsSpec(formatSpec))
+        {
+            if (Subtitles.FirstOrDefault(s => s.Value?.Spec == formatSpec) is { } track)
+            {
+                SelectedSubtitle = track;
+                SelectedSubtitleFormat = SubtitleFormats.FirstOrDefault(f => f.Value == container) ?? SelectedSubtitleFormat;
+                SubtitlesOnly = true;
+            }
+
+            return;
+        }
+
         var ids = formatSpec?.Split('+') ?? [];
         var video = ids.Length > 0 ? Videos.FirstOrDefault(v => v.Value.Id == ids[0]) : null;
         var audio = ids.Length > 0 ? Audios.FirstOrDefault(a => a.Value.Id == ids[^1]) : null;
@@ -327,24 +418,40 @@ public sealed partial class MediaDownloadViewModel : ObservableObject, IDisposab
     /// <summary>Keeps the file name's extension, the size and the folder in step with the choice.</summary>
     private void UpdateSelection()
     {
-        IsAudioEnabled = AudioOnly || SelectedVideo?.Value is not { HasAudio: true };
-        if (Selection() is not { } selection)
+        IsAudioEnabled = !SubtitlesOnly && (AudioOnly || SelectedVideo?.Value is not { HasAudio: true });
+        if (MainSelection() is not { } selection)
         {
             SizeText = string.Empty;
+            SubtitleNameText = null;
             return;
         }
 
-        SizeText = selection.EstimatedSize is { } size ? Loc.Format("Media_Size", Fmt.Size(size)) : Loc.Get("Media_SizeUnknown");
+        SizeText = selection.IsSubtitles ? string.Empty
+            : selection.EstimatedSize is { } size ? Loc.Format("Media_Size", Fmt.Size(size))
+            : Loc.Get("Media_SizeUnknown");
         Set(() =>
         {
-            var stem = _nameEdited && FileName.Length > 0 ? Path.GetFileNameWithoutExtension(FileName) : FileNameSanitizer.Sanitize(_info?.Title ?? "video");
-            FileName = stem + "." + selection.Container;
+            FileName = selection.FileName(_nameEdited && FileName.Length > 0 ? (_named ?? selection).Stem(FileName) : FileNameSanitizer.Sanitize(_info?.Title ?? "video"));
+            _named = selection;
             if (!_folderEdited)
             {
-                SaveFolder = _service.SaveFolderFor(_service.CategoryFor(FileName)?.Id);
+                SaveFolder = _service.SaveFolderFor(_service.CategoryFor(selection, FileName)?.Id);
             }
         });
+        UpdateSubtitleName();
     }
+
+    /// <summary>D-74: names the subtitles' own download while they go with the video.</summary>
+    private void UpdateSubtitleName() =>
+        SubtitleNameText = !SubtitlesOnly && SubtitleSelection() is { } subtitles && _named is { } named
+            ? Loc.Format("Media_SubtitlesBeside", FileNameSanitizer.Sanitize(subtitles.FileName(StemFor(named))))
+            : null;
+
+    /// <summary>The title part of "Save as", for the downloads <paramref name="named"/> and anything added beside it.</summary>
+    private string StemFor(MediaSelection named) => named.Stem(string.IsNullOrWhiteSpace(FileName) ? "video" : FileName.Trim());
+
+    /// <summary>What "Save as" names: the picture and sound, or the subtitles when they are all that is wanted.</summary>
+    private MediaSelection? MainSelection() => SubtitlesOnly ? SubtitleSelection() : Selection();
 
     private MediaSelection? Selection()
     {
@@ -353,9 +460,12 @@ public sealed partial class MediaDownloadViewModel : ObservableObject, IDisposab
         return video is null && audio is null ? null : MediaChoices.Select(video, audio);
     }
 
+    private MediaSelection? SubtitleSelection() =>
+        SelectedSubtitle?.Value is { } track && SelectedSubtitleFormat is { } format ? MediaChoices.Select(track, format.Value) : null;
+
     private async Task SubmitAsync(bool startNow)
     {
-        if (Selection() is not { } selection)
+        if (MainSelection() is not { } selection)
         {
             return;
         }
@@ -365,19 +475,15 @@ public sealed partial class MediaDownloadViewModel : ObservableObject, IDisposab
         try
         {
             // The extension follows the choice even if the user typed another one.
-            var name = FileNameSanitizer.Sanitize(Path.ChangeExtension(string.IsNullOrWhiteSpace(FileName) ? "video" : FileName.Trim(), selection.Container));
-            var options = new AddDownloadOptions
+            var stem = StemFor(selection);
+            var folder = string.IsNullOrWhiteSpace(SaveFolder) ? null : SaveFolder.Trim();
+            var item = await AddAsync(selection, stem, folder, startNow);
+            if (!SubtitlesOnly && SubtitleSelection() is { } subtitles)
             {
-                Url = _pageUrl,
-                FileName = name,
-                SaveFolder = string.IsNullOrWhiteSpace(SaveFolder) ? null : SaveFolder.Trim(),
-                StartNow = startNow,
-                Referrer = _prefill.Referrer,
-                Source = _prefill.Source,
-                MediaFormat = selection.FormatSpec,
-                MediaContainer = selection.Container,
-            };
-            var item = await _service.AddMediaAsync(options, selection.EstimatedSize);
+                // D-74: a download of their own, beside the video and named after it.
+                await AddAsync(subtitles, stem, item.SaveFolder, startNow);
+            }
+
             CloseRequested?.Invoke(this, item);
         }
         catch (Exception ex) when (ex is IOException or ArgumentException or UnauthorizedAccessException or UnsafePathException)
@@ -389,6 +495,21 @@ public sealed partial class MediaDownloadViewModel : ObservableObject, IDisposab
             IsBusy = false;
         }
     }
+
+    private Task<DownloadItem> AddAsync(MediaSelection selection, string stem, string? folder, bool startNow) =>
+        _service.AddMediaAsync(
+            new AddDownloadOptions
+            {
+                Url = _pageUrl,
+                FileName = FileNameSanitizer.Sanitize(selection.FileName(stem)),
+                SaveFolder = folder,
+                StartNow = startNow,
+                Referrer = _prefill.Referrer,
+                Source = _prefill.Source,
+                MediaFormat = selection.FormatSpec,
+                MediaContainer = selection.Container,
+            },
+            selection.EstimatedSize);
 
     private static string VideoLabel(MediaFormat f)
     {

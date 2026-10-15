@@ -3,10 +3,31 @@ using System.Globalization;
 namespace OB2.Core.Media;
 
 /// <summary>What the user picked, as yt-dlp needs it.</summary>
-/// <param name="FormatSpec">yt-dlp's <c>-f</c> value: one format id, or <c>video+audio</c>.</param>
+/// <param name="FormatSpec">yt-dlp's <c>-f</c> value: one format id, or <c>video+audio</c>; or a subtitle track's <see cref="SubtitleTrack.Spec"/> (D-74).</param>
 /// <param name="Container">The finished file's extension.</param>
 /// <param name="EstimatedSize">Sum of the known part sizes; null when none is known.</param>
-public sealed record MediaSelection(string FormatSpec, string Container, long? EstimatedSize);
+public sealed record MediaSelection(string FormatSpec, string Container, long? EstimatedSize)
+{
+    /// <summary>D-74: one subtitle track, not picture or sound.</summary>
+    public bool IsSubtitles => SubtitleTrack.IsSpec(FormatSpec);
+
+    /// <summary>
+    /// "Clip.mp4". Subtitles carry their language, "Clip.en.srt", so a player that opens
+    /// Clip.mp4 picks them up from the same folder.
+    /// </summary>
+    public string FileName(string stem) =>
+        SubtitleTrack.TryParseSpec(FormatSpec, out var language, out _) ? $"{stem}.{language}.{Container}" : $"{stem}.{Container}";
+
+    /// <summary>The title part of a name <see cref="FileName"/> made; any other name without its extension.</summary>
+    public string Stem(string fileName)
+    {
+        ArgumentNullException.ThrowIfNull(fileName);
+        var suffix = FileName(string.Empty);
+        return fileName.Length > suffix.Length && fileName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)
+            ? fileName[..^suffix.Length]
+            : Path.GetFileNameWithoutExtension(fileName);
+    }
+}
 
 /// <summary>
 /// One entry of the quality menu on the browser's video button (D-72): a picture quality with the
@@ -90,6 +111,15 @@ public static class MediaChoices
 
         long? size = video.Size is null && audio.Size is null ? null : (video.Size ?? 0) + (audio.Size ?? 0);
         return new MediaSelection($"{video.Id}+{audio.Id}", MergesInto(video, audio), size);
+    }
+
+    /// <summary>D-74: a subtitle track saved as <paramref name="format"/> (one of <see cref="SubtitleTrack.Formats"/>).</summary>
+    public static MediaSelection Select(SubtitleTrack track, string format)
+    {
+        ArgumentNullException.ThrowIfNull(track);
+        return SubtitleTrack.Formats.Contains(format)
+            ? new MediaSelection(track.Spec, format, null)
+            : throw new ArgumentException($"Subtitles are saved as {string.Join(", ", SubtitleTrack.Formats)}.", nameof(format));
     }
 
     /// <summary>

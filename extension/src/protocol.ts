@@ -56,7 +56,10 @@ export interface AddDownloadPayload {
   autoStart: boolean;
   /** A video page (YouTube and others) for OB2's quality chooser, not a file (D-71). */
   mediaPage?: boolean;
-  /** D-72: with `mediaPage`, the quality picked on the button: a `format` and `container` from `media_formats`. */
+  /**
+   * D-72: with `mediaPage`, the quality picked on the button: a `format` and `container` from `media_formats`.
+   * D-74: or a subtitle track's `format` (`subs:en`) and one of its `containers` (`srt`).
+   */
   mediaFormat?: string;
   mediaContainer?: string;
 }
@@ -78,10 +81,22 @@ export interface MediaOption {
   size?: number;
 }
 
+/** D-74: one subtitle track; `format` and one of `containers` go back in `add_download`. */
+export interface MediaSubtitle {
+  format: string;
+  language: string;
+  name: string;
+  /** Made by the site's speech recognition (YouTube's auto-generated captions). */
+  automatic: boolean;
+  containers: string[];
+}
+
 export interface MediaFormatsPayload {
   title: string;
   durationSeconds?: number;
   options: MediaOption[];
+  /** D-74: empty when the video has none; absent from an OB2 that predates subtitles. */
+  subtitles?: MediaSubtitle[];
 }
 
 export interface AckPayload {

@@ -22,6 +22,7 @@ public partial class ConfirmWindow : Window
         var window = new ConfirmWindow { Title = Loc.Get("Delete_Title") };
         window.MessageText.Text = Loc.Format("Delete_Message", count);
         window.ConfirmButton.Content = Loc.Get("Delete_Confirm");
+        window.ConfirmButton.SetResourceReference(StyleProperty, "DangerDialogButton");
         if (offerFileDeletion)
         {
             window.Option.Content = Loc.Get("Delete_AlsoFile");

@@ -170,6 +170,98 @@ public sealed class MediaChoicesTests
     }
 }
 
+public sealed class SubtitleTests
+{
+    // Trimmed from a real `yt-dlp -J` answer for a YouTube video (D-74).
+    private const string YouTubeJson = """
+        {
+          "title": "Launch day", "formats": [ { "format_id": "18", "ext": "mp4", "height": 360 } ],
+          "subtitles": {
+            "en": [
+              { "ext": "json3", "name": "English", "url": "https://www.youtube.com/api/timedtext?v=x&lang=en&fmt=json3" },
+              { "ext": "srt", "name": "English", "url": "https://www.youtube.com/api/timedtext?v=x&lang=en&fmt=srt" } ],
+            "de-DE": [ { "ext": "vtt", "name": "German (Germany)", "url": "https://www.youtube.com/api/timedtext?v=x&lang=de-DE&fmt=vtt" } ],
+            "live_chat": [ { "ext": "json", "url": "https://www.youtube.com/live_chat_replay?continuation=x" } ],
+            "en.*": [ { "ext": "srt", "name": "Pattern", "url": "https://example.com/a.srt" } ]
+          },
+          "automatic_captions": {
+            "en": [
+              { "ext": "vtt", "protocol": "m3u8_native", "url": "https://manifest.googlevideo.com/api/manifest/hls_timedtext_playlist/x" },
+              { "ext": "srt", "name": "English", "url": "https://www.youtube.com/api/timedtext?v=x&kind=asr&lang=en&fmt=srt" } ],
+            "en-orig": [ { "ext": "srt", "name": "English (Original)", "url": "https://www.youtube.com/api/timedtext?v=x&kind=asr&lang=en&fmt=srt" } ],
+            "ar": [ { "ext": "srt", "name": "Arabic", "url": "https://www.youtube.com/api/timedtext?v=x&kind=asr&lang=en&tlang=ar&fmt=srt" } ],
+            "de-DE": [ { "ext": "vtt", "protocol": "m3u8_native", "url": "https://manifest.googlevideo.com/api/manifest/hls_timedtext_playlist/y" } ]
+          }
+        }
+        """;
+
+    [Fact]
+    public void Lists_the_sites_tracks_then_auto_generated_ones_without_translations()
+    {
+        var tracks = MediaInfo.Parse(YouTubeJson).Subtitles;
+
+        // live_chat has no subtitle format, "en.*" is not a plain key, "ar" is a machine
+        // translation, and the automatic "en" and "de-DE" repeat languages the site has.
+        tracks.Should().Equal(
+            new SubtitleTrack("en", "English", false),
+            new SubtitleTrack("de-DE", "German (Germany)", false),
+            new SubtitleTrack("en-orig", "English (Original)", true));
+    }
+
+    [Fact]
+    public void Without_the_sites_own_track_the_auto_generated_one_keeps_the_plain_language_key()
+    {
+        var info = MediaInfo.Parse("""
+            { "title": "Clip", "format_id": "18", "ext": "mp4", "automatic_captions": {
+              "en-orig": [ { "ext": "srt", "name": "English (Original)", "url": "https://www.youtube.com/api/timedtext?kind=asr&lang=en" } ],
+              "en": [ { "ext": "srt", "name": "English", "url": "https://www.youtube.com/api/timedtext?kind=asr&lang=en" } ],
+              "fr": [ { "ext": "srt", "name": "French", "url": "https://www.youtube.com/api/timedtext?kind=asr&lang=en&tlang=fr" } ] } }
+            """);
+
+        info.Subtitles.Should().Equal(new SubtitleTrack("en", "English", true));
+        MediaInfo.Parse("""{ "title": "Clip", "format_id": "18", "ext": "mp4" }""").Subtitles.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("subs:en", "en", false)]
+    [InlineData("subs:pt-BR", "pt-BR", false)]
+    [InlineData("auto-subs:en-orig", "en-orig", true)]
+    public void A_spec_names_the_language_and_whether_the_site_made_it(string spec, string language, bool automatic)
+    {
+        SubtitleTrack.TryParseSpec(spec, out var lang, out var auto).Should().BeTrue();
+        (lang, auto).Should().Be((language, automatic));
+        new SubtitleTrack(language, "x", automatic).Spec.Should().Be(spec);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("137+140")]
+    [InlineData("subs:")]
+    [InlineData("subs:-en")]
+    [InlineData("subs:en,fr")]
+    [InlineData("subs:en.*")]
+    [InlineData("auto-subs:en fr")]
+    public void Anything_else_is_not_a_subtitle_spec(string? spec)
+    {
+        SubtitleTrack.IsSpec(spec).Should().BeFalse();
+    }
+
+    [Fact]
+    public void Subtitles_are_named_after_the_video_with_their_language()
+    {
+        var subtitles = MediaChoices.Select(new SubtitleTrack("en", "English", false), "srt");
+
+        subtitles.Should().Be(new MediaSelection("subs:en", "srt", null));
+        subtitles.IsSubtitles.Should().BeTrue();
+        subtitles.FileName("Clip").Should().Be("Clip.en.srt");
+        subtitles.Stem("Clip.en.srt").Should().Be("Clip");
+        subtitles.Stem("My subs.srt").Should().Be("My subs");
+        new MediaSelection("137+140", "mp4", null).FileName("Clip.v2").Should().Be("Clip.v2.mp4");
+        new MediaSelection("137+140", "mp4", null).Stem("Clip.v2.mp4").Should().Be("Clip.v2");
+        FluentActions.Invoking(() => MediaChoices.Select(new SubtitleTrack("en", "English", false), "txt")).Should().Throw<ArgumentException>();
+    }
+}
+
 public sealed class MediaInspectorTests : IDisposable
 {
     private static readonly Uri Page = new("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
@@ -291,6 +383,39 @@ public sealed class YtDlpTests
 
         item.MediaFormat = "140";
         YtDlp.DownloadArguments(Tools, item).Should().NotContain("--merge-output-format");
+    }
+
+    [Fact]
+    public void Subtitle_arguments_save_one_track_into_the_parts_folder_converted()
+    {
+        // D-74: yt-dlp prints no path with --skip-download, so the parts folder holds the result.
+        var item = new DownloadItem
+        {
+            Url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            FileName = "100% fun.en-orig.ass",
+            DestPath = @"C:\Videos\100% fun.en-orig.ass",
+            MediaFormat = "auto-subs:en-orig",
+            MediaContainer = "ass",
+        };
+
+        var args = YtDlp.DownloadArguments(Tools, item);
+
+        args.Should().Contain(["--skip-download", "--write-auto-subs", "--ignore-config"]).And.NotContain(["-f", "--write-subs"]);
+        args.Should().ContainInOrder("--sub-langs", "en-orig");
+        args.Should().ContainInOrder("--sub-format", "ass/srt/vtt/ssa");
+        args.Should().ContainInOrder("--convert-subs", "ass");
+        args.Should().ContainInOrder("-P", @"home:C:\Videos\100% fun.en-orig.ass.parts");
+        args.Should().ContainInOrder("-o", "subtitle:subtitles.%(ext)s");
+        args.TakeLast(2).Should().Equal("--", item.Url);
+
+        // VTT is converted from the site's SRT when there is one: YouTube's own VTT repeats lines.
+        item.MediaFormat = "subs:en";
+        item.MediaContainer = "vtt";
+        args = YtDlp.DownloadArguments(Tools, item);
+        args.Should().Contain("--write-subs").And.ContainInOrder("--sub-format", "srt/vtt/ass/ssa");
+
+        item.MediaContainer = "mp4";
+        FluentActions.Invoking(() => YtDlp.DownloadArguments(Tools, item)).Should().Throw<ArgumentException>();
     }
 
     [Fact]

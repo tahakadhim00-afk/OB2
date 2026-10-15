@@ -2,6 +2,7 @@ using OB2.Core.Downloads;
 using OB2.Core.Engine;
 using OB2.Core.Http;
 using OB2.Core.Integrity;
+using OB2.Core.Media;
 using OB2.Core.Organization;
 using OB2.Core.Settings;
 
@@ -108,6 +109,16 @@ public sealed class DownloadService
 
     public Category? CategoryFor(string? fileName) => CategoryResolver.Match(_categories.List(), fileName);
 
+    /// <summary>Where a download from a video page goes (D-71).</summary>
+    public Category? VideoCategory => CategoryFor("video.mp4");
+
+    /// <summary>D-74: subtitles go with their video, so they take its category and folder.</summary>
+    public Category? CategoryFor(MediaSelection selection, string fileName)
+    {
+        ArgumentNullException.ThrowIfNull(selection);
+        return selection.IsSubtitles ? VideoCategory : CategoryFor(fileName);
+    }
+
     public string SaveFolderFor(long? categoryId)
     {
         var category = categoryId is { } id ? _categories.List().FirstOrDefault(c => c.Id == id) : null;
@@ -159,6 +170,11 @@ public sealed class DownloadService
         if (options.MediaFormat is null || options.FileName is null)
         {
             throw new ArgumentException("A media download needs its formats and file name.", nameof(options));
+        }
+
+        if (options.CategoryId is null && SubtitleTrack.IsSpec(options.MediaFormat))
+        {
+            options = options with { CategoryId = VideoCategory?.Id }; // D-74: beside the video
         }
 
         var probe = new ProbeResult(options.Url, estimatedSize, false, options.FileName, null, null, null);
