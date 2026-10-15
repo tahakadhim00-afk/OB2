@@ -56,29 +56,47 @@ public partial class App : Application
             return;
         }
 
-        var settings = _storage.Settings;
-        if (string.IsNullOrEmpty(settings.Ipc.PipeName))
+        // Composing the services and opening the window can fail too (a locked database, a
+        // tray icon Explorer will not accept, a corrupt settings file). Until the error
+        // boundary is registered nothing would catch it, so the whole sequence reports the
+        // same way the storage failure above does rather than dying without a word.
+        try
         {
-            // §11.1: per-install random pipe name, read by host.exe from settings.json.
-            settings.Ipc.PipeName = IpcSettings.NewPipeName();
-            await _storage.SettingsStore.SaveAsync(settings);
-        }
+            var settings = _storage.Settings;
+            if (string.IsNullOrEmpty(settings.Ipc.PipeName))
+            {
+                // §11.1: per-install random pipe name, read by host.exe from settings.json.
+                settings.Ipc.PipeName = IpcSettings.NewPipeName();
+                await _storage.SettingsStore.SaveAsync(settings);
+            }
 
-        if (!_storage.InstanceLock.IsFirstInstance && await ForwardToRunningInstanceAsync(settings.Ipc.PipeName))
+            if (!_storage.InstanceLock.IsFirstInstance && await ForwardToRunningInstanceAsync(settings.Ipc.PipeName))
+            {
+                // §8.5: a second ob2.exe hands its URL (or just "show yourself") to the running one.
+                _storage.Dispose();
+                _storage = null;
+                Shutdown(0);
+                return;
+            }
+
+            _services = CompositionRoot.Build(_storage, Arguments.DataRoot);
+            _logger = _services.GetRequiredService<ILogger<App>>();
+            RegisterErrorBoundary();
+            StartServices();
+            StartBrowserBridge(settings.Ipc.PipeName);
+            SyncStartWithWindows(settings);
+        }
+        catch (Exception ex)
         {
-            // §8.5: a second ob2.exe hands its URL (or just "show yourself") to the running one.
-            _storage.Dispose();
-            _storage = null;
-            Shutdown(0);
-            return;
+            // _logger may not exist yet, so the dialog is the one guaranteed report.
+            _logger?.LogCritical(ex, "Startup failed");
+            MessageBox.Show(
+                Format("Startup_FailedMessage", ex.Message),
+                Text("Startup_FailedTitle"),
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            Shutdown(1);
         }
-
-        _services = CompositionRoot.Build(_storage, Arguments.DataRoot);
-        _logger = _services.GetRequiredService<ILogger<App>>();
-        RegisterErrorBoundary();
-        StartServices();
-        StartBrowserBridge(settings.Ipc.PipeName);
-        SyncStartWithWindows(settings);
     }
 
     private async Task<bool> ForwardToRunningInstanceAsync(string pipeName)
@@ -141,15 +159,37 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         _logger?.LogInformation("OB2 exiting with code {ExitCode}", e.ApplicationExitCode);
-        _schedulerTimer?.Stop();
-        _trayTimer?.Stop();
-        _memoryTimer?.Stop();
-        _pipeServer?.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(2));
+
+        // Every step runs even if an earlier one fails. The instance lock is a FileShare.None
+        // file handle released by _storage, so skipping it would leave the next launch thinking
+        // another copy is still running (§8.5).
+        CloseQuietly("timers", () =>
+        {
+            _schedulerTimer?.Stop();
+            _trayTimer?.Stop();
+            _memoryTimer?.Stop();
+        });
+
+        CloseQuietly("pipe server", () => _pipeServer?.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(2)));
 
         // Disposing the engine checkpoints and pauses every running download (§11.3).
-        _services?.Dispose();
-        _storage?.Dispose();
+        CloseQuietly("services", () => _services?.Dispose());
+        CloseQuietly("storage", () => _storage?.Dispose());
+
         base.OnExit(e);
+    }
+
+    /// <summary>Runs one shutdown step, logging rather than propagating a failure.</summary>
+    private void CloseQuietly(string step, Action action)
+    {
+        try
+        {
+            action();
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Shutdown step {Step} failed", step);
+        }
     }
 
     /// <summary>Exit from the tray or a completion action: really close instead of hiding.</summary>
@@ -369,19 +409,54 @@ public partial class App : Application
 
     private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
-        _logger?.LogError(e.Exception, "Unhandled UI exception");
-        MessageBox.Show(
-            Format("Error_UnexpectedMessage", e.Exception.Message),
-            Text("Error_UnexpectedTitle"),
-            MessageBoxButton.OK,
-            MessageBoxImage.Warning);
+        // The boundary itself must not throw: a second exception raised in here would not be
+        // handled again and would take the process down, which is the very thing it prevents.
+        // Marking it handled first keeps the app alive even if reporting fails.
         e.Handled = true;
+
+        try
+        {
+            _logger?.LogError(e.Exception, "Unhandled UI exception");
+        }
+        catch (Exception logFailure)
+        {
+            System.Diagnostics.Debug.WriteLine($"Error boundary could not log: {logFailure}");
+        }
+
+        try
+        {
+            MessageBox.Show(
+                Format("Error_UnexpectedMessage", e.Exception.Message),
+                Text("Error_UnexpectedTitle"),
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+        catch (Exception dialogFailure)
+        {
+            System.Diagnostics.Debug.WriteLine($"Error boundary could not report: {dialogFailure}");
+        }
     }
 
-    private string Text(string key) => (string)FindResource(key);
+    /// <summary>
+    /// Resource lookup that cannot throw. <see cref="FrameworkElement.FindResource"/> raises on a
+    /// missing key, which is not survivable inside the error boundary, so a missing string falls
+    /// back to its key the way <see cref="Loc.Get"/> does everywhere else.
+    /// </summary>
+    private string Text(string key) => TryFindResource(key) as string ?? key;
 
-    private string Format(string key, params object[] args) =>
-        string.Format(CultureInfo.CurrentCulture, Text(key), args);
+    private string Format(string key, params object[] args)
+    {
+        var format = Text(key);
+        try
+        {
+            return string.Format(CultureInfo.CurrentCulture, format, args);
+        }
+        catch (FormatException)
+        {
+            // A malformed or placeholder-free string must not mask the error being reported.
+            return args.Length > 0 ? $"{format} {string.Join(' ', args)}" : format;
+        }
+    }
 }
 
 /// <summary>GUI command line (§8.5): <c>ob2.exe ["https://…"] [--data dir] [--minimized] [--from-host]</c>.</summary>

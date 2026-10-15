@@ -60,9 +60,13 @@ public sealed class TestHttpServer : IAsyncDisposable
 
     public int RejectedResponses => Volatile.Read(ref _rejectedResponses);
 
+    /// <summary>Body bytes actually written, so a test can catch bandwidth the client discards.</summary>
+    public long BytesSent => Interlocked.Read(ref _bytesSent);
+
     private int _activeResponses;
     private int _maxConcurrentResponses;
     private int _rejectedResponses;
+    private long _bytesSent;
 
     public static async Task<TestHttpServer> StartAsync(int port = 0)
     {
@@ -260,8 +264,15 @@ public sealed class TestHttpServer : IAsyncDisposable
             ? Int(query, "stallAfter", 0)
             : -1;
 
-        var active = Interlocked.Increment(ref _activeResponses);
-        if (active > Int(query, "maxConcurrent", int.MaxValue))
+        // UrlProber asks for "bytes=0-0" to learn whether ranges work. A server that ignores
+        // Range answers 200 and starts the whole entity, and the client drops that body as soon
+        // as it has read the headers -- but the abort takes a moment to arrive, so the dying
+        // response would otherwise be counted as a download connection and make the
+        // concurrency assertions race. It still streams and still counts towards BytesSent.
+        var isRangeProbe = !isHead && request.Headers.Range.ToString() == "bytes=0-0";
+
+        var active = isRangeProbe ? 0 : Interlocked.Increment(ref _activeResponses);
+        if (!isRangeProbe && active > Int(query, "maxConcurrent", int.MaxValue))
         {
             // Emulates a server that refuses extra connections (§16.1).
             Interlocked.Decrement(ref _activeResponses);
@@ -272,18 +283,25 @@ public sealed class TestHttpServer : IAsyncDisposable
             return;
         }
 
-        InterlockedMax(ref _maxConcurrentResponses, active);
+        if (!isRangeProbe)
+        {
+            InterlockedMax(ref _maxConcurrentResponses, active);
+        }
+
         try
         {
-            await WriteBodyAsync(context, from, to, bps, dropAfter, stallAfter);
+            await WriteBodyAsync(context, from, to, bps, dropAfter, stallAfter, n => Interlocked.Add(ref _bytesSent, n));
         }
         finally
         {
-            Interlocked.Decrement(ref _activeResponses);
+            if (!isRangeProbe)
+            {
+                Interlocked.Decrement(ref _activeResponses);
+            }
         }
     }
 
-    private static async Task WriteBodyAsync(HttpContext context, long from, long to, int bps, long dropAfter, long stallAfter)
+    private static async Task WriteBodyAsync(HttpContext context, long from, long to, int bps, long dropAfter, long stallAfter, Action<int> wrote)
     {
         var chunk = bps > 0 ? Math.Clamp(bps / 10, 1024, 64 * 1024) : 64 * 1024;
         var buffer = new byte[chunk];
@@ -309,6 +327,7 @@ public sealed class TestHttpServer : IAsyncDisposable
                 Fill(buffer.AsSpan(0, n), offset);
                 await context.Response.Body.WriteAsync(buffer.AsMemory(0, n), ct);
                 await context.Response.Body.FlushAsync(ct);
+                wrote(n);
                 offset += n;
                 sent += n;
             }
