@@ -65,6 +65,10 @@
                     <Button Style="{StaticResource ToolbarButton}" Command="{Binding OptionsCommand}" AutomationProperties.Name="{StaticResource Tb_Options}">
                         <StackPanel><TextBlock Style="{StaticResource Glyph}" Text="&#xE713;" /><TextBlock Style="{StaticResource ToolbarLabel}" Text="{StaticResource Tb_Options}" /></StackPanel>
                     </Button>
+                    <Button Style="{StaticResource ToolbarButton}" Command="{Binding OrphansCommand}"
+                            ToolTip="{StaticResource Orphans_Explain}" AutomationProperties.Name="{StaticResource Orphans_Title}">
+                        <StackPanel><TextBlock Style="{StaticResource Glyph}" Text="&#xE7B8;" /><TextBlock Style="{StaticResource ToolbarLabel}" Text="{StaticResource Tb_Orphans}" /></StackPanel>
+                    </Button>
                 </ToolBar>
             </ToolBarTray>
             <Grid Grid.Column="1" Margin="8,0,12,0" VerticalAlignment="Center" Width="240">

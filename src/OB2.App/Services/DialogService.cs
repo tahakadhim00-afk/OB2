@@ -26,6 +26,8 @@ public sealed class DialogService : IDialogService
     private readonly AppSettings _settings;
     private readonly JsonSettingsStore _store;
     private readonly ICategoryRepository _categories;
+    private readonly IDownloadRepository _repository;
+    private readonly OB2.Core.Engine.BandwidthSchedule _bandwidth;
     private readonly IQueueRepository _queues;
 
     private readonly OB2.Shared.Ipc.NativeHostRegistration _registration;
@@ -33,7 +35,7 @@ public sealed class DialogService : IDialogService
     private readonly MediaInspector _inspector;
     private readonly MediaToolInstaller _installer;
 
-    public DialogService(DownloadService service, AppSettings settings, JsonSettingsStore store, ICategoryRepository categories, IQueueRepository queues, OB2.Shared.Ipc.NativeHostRegistration registration, OB2.Storage.Paths.StartupRegistration startup, MediaInspector inspector, MediaToolInstaller installer)
+    public DialogService(DownloadService service, AppSettings settings, JsonSettingsStore store, ICategoryRepository categories, IQueueRepository queues, IDownloadRepository repository, OB2.Core.Engine.BandwidthSchedule bandwidth, OB2.Shared.Ipc.NativeHostRegistration registration, OB2.Storage.Paths.StartupRegistration startup, MediaInspector inspector, MediaToolInstaller installer)
     {
         _inspector = inspector;
         _installer = installer;
@@ -44,6 +46,8 @@ public sealed class DialogService : IDialogService
         _store = store;
         _categories = categories;
         _queues = queues;
+        _repository = repository;
+        _bandwidth = bandwidth;
     }
 
     private static Window? Owner => Application.Current.MainWindow is { IsVisible: true } w ? w : null;
@@ -105,7 +109,7 @@ public sealed class DialogService : IDialogService
 
     public void ShowSettings()
     {
-        var window = new SettingsWindow(new SettingsViewModel(_settings, _store, _categories, _service.Engine, _service.DefaultSaveFolder, _registration, _startup)) { Owner = Owner };
+        var window = new SettingsWindow(new SettingsViewModel(_settings, _store, _categories, _service.Engine, _service.DefaultSaveFolder, _registration, _startup, _bandwidth)) { Owner = Owner };
         if (window.Owner is null)
         {
             window.WindowStartupLocation = WindowStartupLocation.CenterScreen;
@@ -118,6 +122,30 @@ public sealed class DialogService : IDialogService
     {
         var window = new SchedulerWindow(new SchedulerViewModel(_service, _queues, queueId)) { Owner = Owner };
         window.ShowDialog();
+    }
+
+    public void ShowOrphans()
+    {
+        var scanner = new OB2.Core.Files.OrphanScanner(_repository);
+        var window = new OrphanWindow(new OrphanViewModel(scanner, this, ScanFolders)) { Owner = Owner };
+        window.ShowDialog();
+    }
+
+    /// <summary>
+    /// Everywhere a part file could plausibly sit: the default folder, every category's folder,
+    /// and the folder of each download already listed (a download saved somewhere one-off leaves
+    /// its orphan there). Rescanned on each open so a folder changed in Options is picked up.
+    /// </summary>
+    private IEnumerable<string> ScanFolders()
+    {
+        var folders = new List<string> { _service.DefaultSaveFolder };
+        folders.AddRange(_categories.List()
+            .Select(c => c.ResolveSaveFolder(_service.DefaultSaveFolder)));
+        folders.AddRange(_repository.List()
+            .Select(d => Path.GetDirectoryName(d.DestPath))
+            .Where(f => !string.IsNullOrEmpty(f))
+            .Select(f => f!));
+        return folders.Distinct(StringComparer.OrdinalIgnoreCase);
     }
 
     public void ShowComplete(DownloadItem item)

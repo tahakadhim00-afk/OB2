@@ -9,6 +9,12 @@ public sealed record AddDownloadPrefill
 
     public string? FileNameHint { get; init; }
 
+    /// <summary>
+    /// Overrides the folder the dialog opens with. Used when re-downloading an orphaned part
+    /// file (§10.3), where saving next to the existing bytes is what makes the resume work.
+    /// </summary>
+    public string? SaveFolder { get; init; }
+
     public string? Referrer { get; init; }
 
     public string? Cookies { get; init; }
@@ -44,6 +50,9 @@ public interface IDialogService
     void ShowSettings();
 
     void ShowScheduler(long? queueId);
+
+    /// <summary>§10.3: partial files on disk that no download claims.</summary>
+    void ShowOrphans();
 
     void ShowComplete(DownloadItem item);
 

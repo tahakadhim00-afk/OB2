@@ -39,6 +39,8 @@
             </TabItem>
 
             <TabItem Header="{StaticResource Settings_Connection}">
+              <ScrollViewer VerticalScrollBarVisibility="Auto">
+               <StackPanel>
                 <Grid Margin="12">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
@@ -71,6 +73,39 @@
                         <TextBox x:Name="C7" Text="{Binding UserAgent, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap" Height="54" VerticalScrollBarVisibility="Auto" />
                     </DockPanel>
                 </Grid>
+
+                <!-- FR-9: a daily window with its own limit, e.g. unlimited overnight. -->
+                <GroupBox Margin="12,0,12,12" Padding="8">
+                    <GroupBox.Header>
+                        <CheckBox Content="{StaticResource Settings_WindowEnabled}" IsChecked="{Binding WindowEnabled}" />
+                    </GroupBox.Header>
+                    <StackPanel IsEnabled="{Binding WindowEnabled}">
+                        <TextBlock Style="{StaticResource Hint}" Text="{StaticResource Settings_WindowHint}" Margin="0,0,0,8" />
+                        <StackPanel Orientation="Horizontal" Margin="0,2">
+                            <Label Content="{StaticResource Scheduler_StartAt}" Target="{Binding ElementName=W1}" Style="{StaticResource FieldLabel}" Width="150" />
+                            <TextBox x:Name="W1" Width="70" Text="{Binding WindowStart, UpdateSourceTrigger=PropertyChanged}" />
+                            <Label Content="{StaticResource Scheduler_StopAt}" Target="{Binding ElementName=W2}" Style="{StaticResource FieldLabel}" Margin="12,0,0,0" />
+                            <TextBox x:Name="W2" Width="70" Text="{Binding WindowStop, UpdateSourceTrigger=PropertyChanged}" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,2">
+                            <Label Content="{StaticResource Settings_WindowLimit}" Target="{Binding ElementName=W3}" Style="{StaticResource FieldLabel}" Width="150" />
+                            <TextBox x:Name="W3" Width="80" Text="{Binding WindowLimitKBps, UpdateSourceTrigger=PropertyChanged}" />
+                        </StackPanel>
+                        <TextBlock Text="{StaticResource Scheduler_Days}" Margin="0,8,0,4" />
+                        <ItemsControl ItemsSource="{Binding WindowDays}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <CheckBox Content="{Binding Label}" IsChecked="{Binding IsChecked}" Margin="0,0,12,0" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </GroupBox>
+               </StackPanel>
+              </ScrollViewer>
             </TabItem>
 
             <TabItem Header="{StaticResource Browser_Tab}">

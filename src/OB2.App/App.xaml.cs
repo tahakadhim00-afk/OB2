@@ -242,7 +242,8 @@ public partial class App : Application
         var downloads = services.GetRequiredService<DownloadService>();
         RunFirstRunWizard(settings, downloads);
         var engine = services.GetRequiredService<DownloadEngine>();
-        engine.GlobalLimiter.BytesPerSecond = settings.SpeedLimits.GlobalBytesPerSecond;
+        // FR-9: sets the limiter from the plain limit or the window's, whichever applies now.
+        services.GetRequiredService<BandwidthSchedule>().Apply();
 
         // §11.3: interrupted downloads come back paused unless the user opted into auto-resume.
         // The window's view model subscribes first so it sees every status change.
@@ -287,10 +288,12 @@ public partial class App : Application
             completion.Run(args.Queue);
         });
 
-        // FR-16: evaluate schedules now and every 15 seconds.
+        // FR-16: evaluate schedules now and every 15 seconds. The bandwidth window (FR-9) rides
+        // the same tick, so the rate changes within 15 seconds of the window opening or closing.
         var scheduler = services.GetRequiredService<QueueScheduler>();
-        _schedulerTimer = new DispatcherTimer(TimeSpan.FromSeconds(15), DispatcherPriority.Background, async (_, _) => await TickSchedulerAsync(scheduler), Dispatcher);
-        _ = TickSchedulerAsync(scheduler);
+        var bandwidth = services.GetRequiredService<BandwidthSchedule>();
+        _schedulerTimer = new DispatcherTimer(TimeSpan.FromSeconds(15), DispatcherPriority.Background, async (_, _) => await TickSchedulerAsync(scheduler, bandwidth), Dispatcher);
+        _ = TickSchedulerAsync(scheduler, bandwidth);
 
         _trayTimer = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background, (_, _) =>
         {
@@ -364,8 +367,10 @@ public partial class App : Application
         _logger?.LogInformation("Startup: {Stage} {Ms:0} ms after process start", stage, (DateTime.Now - process.StartTime).TotalMilliseconds);
     }
 
-    private async Task TickSchedulerAsync(QueueScheduler scheduler)
+    private async Task TickSchedulerAsync(QueueScheduler scheduler, BandwidthSchedule bandwidth)
     {
+        // Independent of each other: a failing queue schedule must not leave the speed limit
+        // stuck at whatever it was when the window last changed, or the reverse.
         try
         {
             await scheduler.TickAsync();
@@ -373,6 +378,23 @@ public partial class App : Application
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             _logger?.LogError(ex, "Scheduler tick failed");
+        }
+
+        try
+        {
+            var wasOpen = bandwidth.IsWindowOpen;
+            bandwidth.Apply();
+            if (bandwidth.IsWindowOpen != wasOpen)
+            {
+                _logger?.LogInformation(
+                    "Bandwidth window {State}; limit now {Limit}",
+                    bandwidth.IsWindowOpen ? "open" : "closed",
+                    bandwidth.EffectiveBytesPerSecond?.ToString(CultureInfo.InvariantCulture) ?? "unlimited");
+            }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _logger?.LogError(ex, "Bandwidth window tick failed");
         }
     }
 

@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace OB2.Core.Settings;
 
 /// <summary>
@@ -39,6 +41,29 @@ public static class SettingsValidator
         {
             settings.SpeedLimits.GlobalBytesPerSecond = null;
             changes.Add("speedLimits.globalBytesPerSecond was not positive; set to unlimited");
+        }
+
+        // FR-9: a hand-edited window must not be able to leave the app throttled by a value it
+        // cannot read, so anything unusable disables the window rather than applying blindly.
+        settings.SpeedLimits.Window ??= new BandwidthWindowSettings();
+        var w = settings.SpeedLimits.Window;
+        w.Days ??= [];
+        if (w.BytesPerSecond is <= 0)
+        {
+            w.BytesPerSecond = null;
+            changes.Add("speedLimits.window.bytesPerSecond was not positive; set to unlimited");
+        }
+
+        if (w.Enabled && !TimeOnly.TryParse(w.Start, CultureInfo.InvariantCulture, out _))
+        {
+            w.Enabled = false;
+            changes.Add($"speedLimits.window.start '{w.Start}' is not a time; window disabled");
+        }
+
+        if (w.Enabled && !string.IsNullOrWhiteSpace(w.Stop) && !TimeOnly.TryParse(w.Stop, CultureInfo.InvariantCulture, out _))
+        {
+            w.Enabled = false;
+            changes.Add($"speedLimits.window.stop '{w.Stop}' is not a time; window disabled");
         }
 
         var c = settings.Capture;
