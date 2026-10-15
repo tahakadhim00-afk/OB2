@@ -9,8 +9,6 @@ Items noticed during a phase but outside its scope (PRD §0). Each one names the
 | Set the file timestamp from `Last-Modified` (FR-12, P2). The value is already stored. | Phase 2 | v1.1 |
 | Dynamic segment splitting: when a connection finishes early, split the largest remaining segment so no connection sits idle. | Phase 3 | v1.1 |
 | Detect HDD vs SSD and limit segments on rotating disks (§16.1). | Phase 3 | v1.1 |
-| Enforce `history.retentionDays` (§10.4). The setting exists; nothing prunes old rows yet. | Phase 4 | v1.0 |
-| List orphaned `.pgpart` files under "Recovered orphan files" (§10.3). They are never deleted, but they are not shown either. | Phase 4 | v1.0 |
 | FlaUI automation for the main flows (§14.1 UI row, P1). Phase 4 UI checks were manual plus UI Automation scripts. | Phase 4 | v1.0 |
 | Remember column order/width and window size between runs. | Phase 4 | v1.1 |
 | History CSV export (FR-26, P2) and clipboard monitor (FR-28, P2). | Phase 4 | v1.1 |
@@ -25,3 +23,13 @@ Items noticed during a phase but outside its scope (PRD §0). Each one names the
 | Options > Video sites: show the yt-dlp/Deno/ffmpeg versions, update yt-dlp, and remove the tools. Today "Update yt-dlp" lives in the Download Video window (D-71). | v1.0 | v1.1 |
 | Download YouTube streams with OB2's own segmented engine (yt-dlp only for the addresses, ffmpeg for the merge), for more speed on lines that limit each connection (D-71). | v1.0 | v1.1 |
 | Media button: videos inside closed shadow roots of custom players are not found, and only the frame that loaded a file offers it (a `blob:` player in the top page whose file was fetched by an iframe gets no button). | v1.0 | v1.1 |
+
+## Done in v1.0 after the first release
+
+| Item | Shipped as |
+|------|-----------|
+| `history.retentionDays` is applied on start; a paused or running download keeps its whole trail. | Enforce history retention |
+| Orphaned `.pgpart` files are listed in their own window with Delete, Show in folder, and Download again. | Orphan files window |
+| A daily bandwidth window with its own speed limit, sharing the queue scheduler's time rules. | Bandwidth window |
+| A failed download is started again after a growing delay; errors another attempt cannot fix are never retried. | Auto-retry |
+| A resume against a server with no ETag or Last-Modified compares the first 64 KB before continuing. | Resume fingerprint |
