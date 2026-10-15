@@ -198,6 +198,31 @@ public sealed class SqliteDownloadRepository : IDownloadRepository
         return events;
     }
 
+    public int PruneHistory(int retentionDays)
+    {
+        if (retentionDays <= 0)
+        {
+            return 0;
+        }
+
+        var cutoff = Format(_clock.UtcNow.AddDays(-retentionDays));
+        using var connection = _factory.Open();
+        using var command = connection.CreateCommand();
+
+        // An event is only dropped once nothing still points at it: either it was already
+        // orphaned (its download was deleted, leaving download_id NULL via ON DELETE SET NULL)
+        // or its download has finished. A paused or running download keeps its whole trail so
+        // the detail panel does not lose the reason it stopped.
+        command.CommandText = """
+            DELETE FROM history_events
+            WHERE occurred_at < $cutoff
+              AND (download_id IS NULL
+                   OR download_id IN (SELECT id FROM downloads WHERE status IN ('completed', 'failed', 'cancelled')))
+            """;
+        command.Parameters.AddWithValue("$cutoff", cutoff);
+        return command.ExecuteNonQuery();
+    }
+
     public IReadOnlyList<long> MarkInterruptedAsPaused()
     {
         using var connection = _factory.Open();

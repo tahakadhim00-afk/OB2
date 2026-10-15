@@ -33,6 +33,14 @@ public interface IDownloadRepository
     IReadOnlyList<HistoryEvent> GetHistory(long downloadId);
 
     /// <summary>
+    /// §10.4: drops history older than <paramref name="retentionDays"/>, and with it the rows of
+    /// finished downloads that are no longer referenced. Returns how many events were removed.
+    /// Events belonging to a download that is still listed are kept however old they are, so a
+    /// long-running or paused download never loses its own trail.
+    /// </summary>
+    int PruneHistory(int retentionDays);
+
+    /// <summary>
     /// Startup recovery (§11.3): downloads left probing/downloading/retrying by a crash
     /// become paused. Returns their ids.
     /// </summary>

@@ -179,6 +179,31 @@ public partial class App : Application
         base.OnExit(e);
     }
 
+    /// <summary>
+    /// §10.4: applies the history retention limit once per start. Null keeps history forever,
+    /// which is the default. A failure here must not stop the app from opening.
+    /// </summary>
+    private void PruneHistory(AppSettings settings)
+    {
+        if (settings.History.RetentionDays is not { } days || days <= 0)
+        {
+            return;
+        }
+
+        try
+        {
+            var removed = _services!.GetRequiredService<IDownloadRepository>().PruneHistory(days);
+            if (removed > 0)
+            {
+                _logger?.LogInformation("History: {Count} events older than {Days} days removed", removed, days);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "History could not be pruned");
+        }
+    }
+
     /// <summary>Runs one shutdown step, logging rather than propagating a failure.</summary>
     private void CloseQuietly(string step, Action action)
     {
@@ -222,6 +247,11 @@ public partial class App : Application
         // §11.3: interrupted downloads come back paused unless the user opted into auto-resume.
         // The window's view model subscribes first so it sees every status change.
         IReadOnlyList<long> interrupted = _storage!.InstanceLock.IsFirstInstance ? engine.RecoverInterrupted() : [];
+        if (_storage.InstanceLock.IsFirstInstance)
+        {
+            PruneHistory(settings);
+        }
+
         var viewModel = services.GetRequiredService<MainViewModel>();
         if (settings.Downloads.AutoResumeOnStartup)
         {
