@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using OB2.Core.Downloads;
 using OB2.Core.Engine;
 using OB2.Core.Http;
@@ -53,7 +54,7 @@ public sealed record AddDownloadOptions
 /// Application-level download operations shared by the window, tray, CLI hand-off, and
 /// browser capture. UI-free so it can be tested without WPF.
 /// </summary>
-public sealed class DownloadService
+public sealed class DownloadService : IDisposable
 {
     private readonly DownloadEngine _engine;
     private readonly IDownloadRepository _downloads;
@@ -61,6 +62,7 @@ public sealed class DownloadService
     private readonly IQueueRepository _queues;
     private readonly QueueManager _queueManager;
     private readonly Func<AppSettings> _settings;
+    private readonly AutoRetryService _autoRetry;
 
     public DownloadService(
         DownloadEngine engine,
@@ -68,7 +70,8 @@ public sealed class DownloadService
         ICategoryRepository categories,
         IQueueRepository queues,
         QueueManager queueManager,
-        Func<AppSettings> settings)
+        Func<AppSettings> settings,
+        ILogger<DownloadService>? logger = null)
     {
         _engine = engine;
         _downloads = downloads;
@@ -76,6 +79,10 @@ public sealed class DownloadService
         _queues = queues;
         _queueManager = queueManager;
         _settings = settings;
+
+        // FR-6 second layer: a download that has already failed is started again after a
+        // growing delay, so an outage of a few minutes does not end an overnight queue.
+        _autoRetry = new AutoRetryService(() => settings().Downloads, id => _engine.Start(id), logger);
         _engine.StatusChanged += OnStatusChanged;
     }
 
@@ -186,6 +193,9 @@ public sealed class DownloadService
     {
         foreach (var id in ids)
         {
+            // A deliberate Resume or Retry starts the auto-retry budget over: the user acting on
+            // a download should not inherit a count half spent by an earlier bad night.
+            _autoRetry.Reset(id);
             _engine.Start(id);
         }
     }
@@ -257,11 +267,20 @@ public sealed class DownloadService
         switch (item.Status)
         {
             case DownloadStatus.Completed:
+                _autoRetry.Reset(item.Id);
                 Completed?.Invoke(this, item);
                 break;
             case DownloadStatus.Failed:
+                _autoRetry.OnFailed(item);
                 Failed?.Invoke(this, item);
                 break;
         }
+    }
+
+    /// <summary>Stops any auto-retry waiting to fire; the container disposes this on exit.</summary>
+    public void Dispose()
+    {
+        _engine.StatusChanged -= OnStatusChanged;
+        _autoRetry.Dispose();
     }
 }

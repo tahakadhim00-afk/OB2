@@ -59,6 +59,13 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private int _globalLimitKBps;
 
+    /// <summary>0 disables retrying after a download has already failed.</summary>
+    [ObservableProperty]
+    private int _autoRetryAttempts;
+
+    [ObservableProperty]
+    private int _autoRetryDelaySeconds;
+
     [ObservableProperty]
     private bool _windowEnabled;
 
@@ -131,6 +138,9 @@ public sealed partial class SettingsViewModel : ObservableObject
         _readTimeout = settings.Downloads.ReadIdleTimeoutSeconds;
         _userAgent = settings.Downloads.UserAgent;
         _globalLimitKBps = (int)((settings.SpeedLimits.GlobalBytesPerSecond ?? 0) / 1024);
+
+        _autoRetryAttempts = settings.Downloads.AutoRetryAttempts;
+        _autoRetryDelaySeconds = settings.Downloads.AutoRetryDelaySeconds;
 
         var window = settings.SpeedLimits.Window;
         _windowEnabled = window.Enabled;
@@ -226,6 +236,8 @@ public sealed partial class SettingsViewModel : ObservableObject
         d.ConnectTimeoutSeconds = ConnectTimeout;
         d.ReadIdleTimeoutSeconds = ReadTimeout;
         d.UserAgent = UserAgent;
+        d.AutoRetryAttempts = Math.Max(0, AutoRetryAttempts);
+        d.AutoRetryDelaySeconds = Math.Max(1, AutoRetryDelaySeconds);
         _settings.SpeedLimits.GlobalBytesPerSecond = GlobalLimitKBps > 0 ? GlobalLimitKBps * 1024L : null;
         var window = _settings.SpeedLimits.Window;
         window.Enabled = WindowEnabled;

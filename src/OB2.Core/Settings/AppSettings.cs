@@ -64,6 +64,17 @@ public sealed class DownloadSettings
     /// <summary>§11.1: cookies are memory-only unless the user opts in.</summary>
     public bool RememberAuth { get; set; }
 
+    /// <summary>
+    /// Attempts made after a download has already failed, spaced by an increasing delay. The
+    /// retries inside one attempt (<see cref="MaxRetries"/>) handle a connection dropping; this
+    /// handles the line being down for minutes, so an overnight queue survives a brief outage.
+    /// Zero disables it.
+    /// </summary>
+    public int AutoRetryAttempts { get; set; }
+
+    /// <summary>Delay before the first automatic retry; doubles with each attempt.</summary>
+    public int AutoRetryDelaySeconds { get; set; } = 60;
+
     public const string DefaultUserAgent =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
 }

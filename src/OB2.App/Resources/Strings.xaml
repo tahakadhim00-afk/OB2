@@ -173,6 +173,10 @@
     <sys:String x:Key="Settings_CategoryFolder">Folder (empty = default\name)</sys:String>
     <sys:String x:Key="Settings_NewCategory">New category</sys:String>
     <sys:String x:Key="Settings_ResetUserAgent">Reset</sys:String>
+    <sys:String x:Key="Settings_AutoRetry">Retry failed downloads</sys:String>
+    <sys:String x:Key="Settings_AutoRetryHint">After a download has failed, OB2 can start it again on its own, waiting longer before each attempt. Useful for a queue left running overnight. Errors that cannot be fixed by trying again, such as a wrong checksum or a missing file, are never retried.</sys:String>
+    <sys:String x:Key="Settings_AutoRetryAttempts">Attempts (0 = do not retry)</sys:String>
+    <sys:String x:Key="Settings_AutoRetryDelay">Wait before the first (seconds)</sys:String>
     <sys:String x:Key="Settings_WindowEnabled">Use a different speed limit at certain hours</sys:String>
     <sys:String x:Key="Settings_WindowHint">Inside these hours the limit below applies instead of the one above. Leave it at 0 to download at full speed during the window, for example overnight.</sys:String>
     <sys:String x:Key="Settings_WindowLimit">Limit in the window (KB/s, 0 = none)</sys:String>
