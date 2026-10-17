@@ -65,6 +65,7 @@ public sealed class JsonSettingsStoreTests : IDisposable
         await File.WriteAllTextAsync(path, """
             {
               // user note
+              "version": 2,
               "downloads": { "connections": 4, },
             }
             """);
@@ -81,7 +82,7 @@ public sealed class JsonSettingsStoreTests : IDisposable
     public async Task Out_of_range_values_are_clamped_and_reported()
     {
         var path = _temp.Combine("settings.json");
-        await File.WriteAllTextAsync(path, """{ "downloads": { "connections": 64 } }""");
+        await File.WriteAllTextAsync(path, """{ "version": 2, "downloads": { "connections": 64 } }""");
 
         var result = await new JsonSettingsStore(path).LoadAsync();
 
@@ -102,6 +103,26 @@ public sealed class JsonSettingsStoreTests : IDisposable
         var backup = Directory.GetFiles(_temp.Path, "settings.json.corrupt-*").Should().ContainSingle().Subject;
         (await File.ReadAllTextAsync(backup)).Should().Be("{ this is not json");
         (await new JsonSettingsStore(path).LoadAsync()).Issues.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_version_1_file_is_upgraded_once_and_written_back()
+    {
+        var path = _temp.Combine("settings.json");
+        await File.WriteAllTextAsync(path, """{ "version": 1, "downloads": { "connections": 4 } }""");
+
+        var result = await new JsonSettingsStore(path).LoadAsync();
+
+        // FR-31: the user never had "start with Windows" on, so the new default must not claim they did.
+        result.Settings.General.StartWithWindows.Should().BeFalse();
+        result.Settings.Version.Should().Be(AppSettings.CurrentVersion);
+        result.Issues.Should().ContainSingle().Which.Should().Contain("startWithWindows");
+
+        // Written back, so the next launch sees a current file and reports nothing.
+        var reloaded = await new JsonSettingsStore(path).LoadAsync();
+        reloaded.Issues.Should().BeEmpty();
+        reloaded.Settings.General.StartWithWindows.Should().BeFalse();
+        reloaded.Settings.Downloads.Connections.Should().Be(4);
     }
 
     [Fact]

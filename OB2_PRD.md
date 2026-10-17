@@ -122,7 +122,7 @@ Priority: **P0** = MVP, **P1** = v1.0, **P2** = later.
 |----|-------------|----------|
 | FR-29 | Default save folder and per-category folders | P0 |
 | FR-30 | Default connection count, retry count, timeout, user agent | P0 |
-| FR-31 | Start with Windows (optional; off by default for portable use) | P1 |
+| FR-31 | Start with Windows (on by default for an installed copy, off for a portable one; switchable in Settings — D-75) | P1 |
 | FR-32 | Import and export settings as a JSON file | P2 |
 
 ---

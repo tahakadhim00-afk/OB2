@@ -4,7 +4,8 @@ namespace OB2.Core.Settings;
 
 /// <summary>
 /// Clamps out-of-range values loaded from a hand-edited or older settings file so the
-/// rest of the app can trust them. Returns a description of every change made.
+/// rest of the app can trust them, and carries a file written by an older version forward.
+/// Returns a description of every change made.
 /// </summary>
 public static class SettingsValidator
 {
@@ -23,6 +24,20 @@ public static class SettingsValidator
         settings.Logging ??= new LoggingSettings();
         settings.History ??= new HistorySettings();
         settings.Ipc ??= new IpcSettings();
+
+        // FR-31: "start with Windows" became a default in version 2. A file from before that
+        // omits the key, which would now read as the new default and switch it on for someone
+        // who never asked; an upgrade keeps it off and leaves the choice in Settings.
+        if (settings.Version < AppSettings.StartWithWindowsDefaultVersion)
+        {
+            settings.General.StartWithWindows = false;
+            changes.Add("general.startWithWindows kept off: this settings file predates it being a default");
+        }
+
+        if (settings.Version < AppSettings.CurrentVersion)
+        {
+            settings.Version = AppSettings.CurrentVersion;
+        }
 
         var d = settings.Downloads;
         d.Connections = Clamp(d.Connections, DownloadSettings.MinConnections, DownloadSettings.MaxConnections, "downloads.connections", changes);

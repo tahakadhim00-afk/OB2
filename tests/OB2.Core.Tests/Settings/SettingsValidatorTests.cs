@@ -26,10 +26,35 @@ public sealed class SettingsValidatorTests
         settings.Capture.MinSizeBytes.Should().Be(1024 * 1024);
         settings.Capture.ConfirmBeforeAdding.Should().BeTrue();
         settings.General.MinimizeToTrayOnClose.Should().BeTrue();
-        settings.General.StartWithWindows.Should().BeFalse();
+        settings.General.StartWithWindows.Should().BeTrue();
         settings.Logging.RetainedDays.Should().Be(7);
         settings.Logging.FileSizeLimitBytes.Should().Be(10 * 1024 * 1024);
         settings.History.RetentionDays.Should().BeNull();
+    }
+
+    [Fact]
+    public void A_settings_file_from_before_version_2_keeps_start_with_windows_off()
+    {
+        // The key is absent in such a file, so deserialization leaves the new default on.
+        var settings = new AppSettings { Version = 1 };
+        settings.General.StartWithWindows = true;
+
+        var changes = SettingsValidator.Normalize(settings);
+
+        settings.General.StartWithWindows.Should().BeFalse();
+        settings.Version.Should().Be(AppSettings.CurrentVersion);
+        changes.Should().ContainSingle(c => c.Contains("startWithWindows"));
+    }
+
+    [Fact]
+    public void A_current_settings_file_keeps_the_users_choice()
+    {
+        var settings = new AppSettings { Version = AppSettings.CurrentVersion };
+        settings.General.StartWithWindows = false;
+
+        SettingsValidator.Normalize(settings).Should().BeEmpty();
+
+        settings.General.StartWithWindows.Should().BeFalse();
     }
 
     [Theory]

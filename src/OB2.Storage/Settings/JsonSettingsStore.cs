@@ -66,8 +66,13 @@ public sealed class JsonSettingsStore
             issues.Add($"settings.json version {settings.Version} is newer than this app supports ({AppSettings.CurrentVersion}); unknown values are ignored");
         }
 
+        // Normalize may carry an older file forward (e.g. the version 2 "start with Windows"
+        // default), so an upgraded file is written back once instead of being re-upgraded on
+        // every launch.
+        var wasOlder = settings.Version < AppSettings.CurrentVersion;
         var changes = SettingsValidator.Normalize(settings);
         issues.AddRange(changes);
+        needsSave |= wasOlder;
 
         if (needsSave)
         {

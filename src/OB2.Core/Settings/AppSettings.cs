@@ -6,7 +6,15 @@ namespace OB2.Core.Settings;
 /// </summary>
 public sealed class AppSettings
 {
-    public const int CurrentVersion = 1;
+    public const int CurrentVersion = 2;
+
+    /// <summary>
+    /// Version 2 turned <see cref="GeneralSettings.StartWithWindows"/> on by default. A file
+    /// still at version 1 was written when the default was off, so its missing key means the
+    /// user never had it on; <see cref="SettingsValidator"/> keeps it off rather than letting
+    /// the new default switch it on behind their back.
+    /// </summary>
+    public const int StartWithWindowsDefaultVersion = 2;
 
     /// <summary>Format version of the settings file, for future migrations.</summary>
     public int Version { get; set; } = CurrentVersion;
@@ -145,7 +153,13 @@ public sealed class GeneralSettings
 {
     public bool MinimizeToTrayOnClose { get; set; } = true;
 
-    public bool StartWithWindows { get; set; }
+    /// <summary>
+    /// FR-31. On by default so a fresh install keeps capturing browser downloads after a
+    /// restart without the user having to find the option first. An installed copy registers
+    /// itself at the next start; a portable copy never does (its path may be a drive that is
+    /// not there), and an upgrade from a settings file written before version 2 keeps it off.
+    /// </summary>
+    public bool StartWithWindows { get; set; } = true;
 
     /// <summary>§9.3 Download Complete dialog.</summary>
     public bool ShowCompleteDialog { get; set; } = true;

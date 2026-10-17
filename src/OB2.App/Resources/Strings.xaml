@@ -159,6 +159,7 @@
     <sys:String x:Key="Settings_Notifications">Show Windows notifications for finished and failed downloads</sys:String>
     <sys:String x:Key="Settings_AutoResume">Resume interrupted downloads when OB2 starts</sys:String>
     <sys:String x:Key="Settings_StartWithWindows">Start OB2 in the tray when I sign in to Windows</sys:String>
+    <sys:String x:Key="Settings_StartWithWindowsTip">On by default. OB2 starts hidden in the notification area, so downloads from your browser are still captured and unfinished ones can carry on. Turn this off and OB2 only runs when you open it. A portable copy never adds itself to sign-in on its own, because the drive it is on may not be connected.</sys:String>
     <sys:String x:Key="Settings_RememberAuth">Remember website sign-ins for unfinished downloads</sys:String>
     <sys:String x:Key="Settings_RememberAuthTip">Keeps the cookies a browser handed over, encrypted for your Windows account, so a download that needs a sign-in can resume after OB2 restarts. They are deleted when the download finishes or you turn this off.</sys:String>
     <sys:String x:Key="Settings_Connections">Connections per download (1–32)</sys:String>

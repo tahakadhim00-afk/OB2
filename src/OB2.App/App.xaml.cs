@@ -143,6 +143,16 @@ public partial class App : Application
     /// <summary>FR-31: keep the Run value in step with the setting, e.g. after the folder moved.</summary>
     private void SyncStartWithWindows(AppSettings settings)
     {
+        // The setting is on by default, but a portable copy never registers itself unprompted:
+        // its path may be a removable drive, which would leave the sign-in pointing at nothing.
+        // It touches nothing here at all — not even to remove a value — because the value it
+        // found most likely belongs to an installed copy on this machine. Ticking the option in
+        // Settings still works for a portable copy; that path passes takeOver.
+        if (_storage!.Paths.IsPortable)
+        {
+            return;
+        }
+
         try
         {
             if (_services!.GetRequiredService<StartupRegistration>().Sync(settings.General.StartWithWindows, takeOver: false))
