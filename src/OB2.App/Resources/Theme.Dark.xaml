@@ -1,0 +1,49 @@
+<!--
+    Dark theme. Same keys as Theme.Light.xaml, different values.
+
+    The action colours are not the light theme's: #1B8A3A green, #C42B1C red and #0F6CBD blue
+    are chosen to read on white and turn muddy on a dark surface. Each is lightened until it
+    carries at least 4.5:1 against the surface it sits on (NFR Accessibility), which is why
+    the greens and reds here look washed out next to their light-theme twins.
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+
+    <!-- Surfaces. Not pure black: a near-black grey keeps the rows and panels legible
+         against each other, and is easier on the eyes on an OLED panel. -->
+    <SolidColorBrush x:Key="WindowBrush" Color="#1F1F1F" />
+    <SolidColorBrush x:Key="SurfaceBrush" Color="#252526" />
+    <SolidColorBrush x:Key="PanelBrush" Color="#2A2A2B" />
+    <SolidColorBrush x:Key="ControlBrush" Color="#333334" />
+    <SolidColorBrush x:Key="ControlHoverBrush" Color="#3E3E40" />
+    <SolidColorBrush x:Key="ControlPressedBrush" Color="#4A4A4C" />
+
+    <!-- Text. Slightly off-white: pure #FFFFFF on near-black glares. -->
+    <SolidColorBrush x:Key="TextBrush" Color="#F0F0F0" />
+    <SolidColorBrush x:Key="SecondaryTextBrush" Color="#A8A8A8" />
+    <SolidColorBrush x:Key="DisabledTextBrush" Color="#6E6E6E" />
+
+    <SolidColorBrush x:Key="BorderBrush" Color="#3F3F41" />
+    <SolidColorBrush x:Key="StrongBorderBrush" Color="#555557" />
+
+    <SolidColorBrush x:Key="AccentBrush" Color="#4CA0E0" />
+    <SolidColorBrush x:Key="SelectionBrush" Color="#2D5F8A" />
+    <SolidColorBrush x:Key="SelectionTextBrush" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="RowHoverBrush" Color="#2E3A44" />
+
+    <!-- Lightened so each keeps its meaning (green go, red stop) while staying readable. -->
+    <SolidColorBrush x:Key="GoBrush" Color="#4BC26B" />
+    <SolidColorBrush x:Key="StopBrush" Color="#FF6B5B" />
+    <SolidColorBrush x:Key="DangerBrush" Color="#FF7B72" />
+    <SolidColorBrush x:Key="AddBrush" Color="#4CA0E0" />
+    <SolidColorBrush x:Key="ErrorBrush" Color="#FF8A80" />
+
+    <SolidColorBrush x:Key="ProgressBrush" Color="#4BC26B" />
+    <SolidColorBrush x:Key="ProgressTrackBrush" Color="#3A3A3C" />
+
+    <!-- The wordmark: white artwork, for a dark background. See Theme.Light.xaml. -->
+    <sys:String x:Key="LogoPath">Resources/logo-dark.png</sys:String>
+
+
+</ResourceDictionary>

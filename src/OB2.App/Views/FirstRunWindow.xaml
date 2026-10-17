@@ -7,7 +7,7 @@
         WindowStartupLocation="CenterScreen">
     <!-- Flow D step 2: pick the save folder on first launch. -->
     <StackPanel Margin="20">
-        <Image Source="/Resources/logo.png" Height="48" HorizontalAlignment="Left" Margin="0,0,0,14"
+        <Image Source="{DynamicResource LogoImage}" Height="48" HorizontalAlignment="Left" Margin="0,0,0,14"
                RenderOptions.BitmapScalingMode="HighQuality" AutomationProperties.Name="{StaticResource App_Title}" />
         <TextBlock Text="{StaticResource FirstRun_Heading}" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,8" />
         <TextBlock Text="{StaticResource FirstRun_Body}" TextWrapping="Wrap" Margin="0,0,0,14" />

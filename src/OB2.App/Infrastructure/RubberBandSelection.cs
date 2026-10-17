@@ -124,11 +124,23 @@ internal static class RubberBandSelection
             return;
         }
 
-        // A drag ends here; a plain click falls through to the grid, which clears the selection.
         var wasDragging = state.IsDragging;
         Stop(grid);
+
         if (wasDragging)
         {
+            // The band already set the selection; the grid must not act on the release too.
+            e.Handled = true;
+            return;
+        }
+
+        // A plain click on the empty space below the rows clears the selection, the way the
+        // desktop and Explorer do. The DataGrid does not do this itself: it only changes the
+        // selection when the click lands on a row, so without this a selection could not be
+        // dropped without Ctrl-clicking each row.
+        if ((Keyboard.Modifiers & (ModifierKeys.Control | ModifierKeys.Shift)) == 0 && grid.SelectedItems.Count > 0)
+        {
+            grid.UnselectAll();
             e.Handled = true;
         }
     }

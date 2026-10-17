@@ -10,7 +10,7 @@
         Icon="/Resources/ob2.ico"
         Width="680" Height="520" MinWidth="560" MinHeight="420"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
-    <DockPanel Margin="12">
+    <DockPanel Margin="12" Background="{DynamicResource WindowBrush}">
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
             <TextBlock Style="{StaticResource ErrorText}" Text="{Binding ErrorText}" VerticalAlignment="Center" MaxWidth="360" />
             <Button Style="{StaticResource DialogButton}" Content="{StaticResource Common_Save}" Command="{Binding SaveCommand}" IsDefault="True" />
@@ -29,6 +29,11 @@
                         <TextBox x:Name="FolderBox" Text="{Binding DefaultFolder, UpdateSourceTrigger=PropertyChanged}" />
                         <Button Grid.Column="1" Content="{StaticResource Common_Browse}" Click="OnBrowseDefault" Margin="6,0,0,0" Padding="10,2" />
                     </Grid>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                        <Label Content="{StaticResource Settings_Theme}" Style="{StaticResource FieldLabel}" Target="{Binding ElementName=ThemeBox}" />
+                        <ComboBox x:Name="ThemeBox" Width="160" ItemsSource="{Binding ThemeChoices}" SelectedIndex="{Binding ThemeIndex}"
+                                  AutomationProperties.Name="{StaticResource Settings_Theme}" />
+                    </StackPanel>
                     <CheckBox Content="{StaticResource Settings_MinimizeToTray}" IsChecked="{Binding MinimizeToTray}" Margin="0,4" />
                     <CheckBox Content="{StaticResource Settings_ShowComplete}" IsChecked="{Binding ShowCompleteDialog}" Margin="0,4" />
                     <CheckBox Content="{StaticResource Settings_Notifications}" IsChecked="{Binding ShowNotifications}" Margin="0,4" />

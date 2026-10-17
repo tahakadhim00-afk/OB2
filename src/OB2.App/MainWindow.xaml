@@ -26,13 +26,14 @@
     </Window.InputBindings>
 
     <DockPanel>
-        <Grid DockPanel.Dock="Top">
+        <Grid DockPanel.Dock="Top" Background="{DynamicResource SurfaceBrush}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <ToolBarTray IsLocked="True" Background="Transparent">
-                <ToolBar ToolBarTray.IsLocked="True" Band="0" Background="Transparent">
+                <ToolBar ToolBarTray.IsLocked="True" Band="0" Background="Transparent"
+                         TextElement.Foreground="{DynamicResource TextBrush}">
                     <Button Style="{StaticResource ToolbarButton}" Command="{Binding AddUrlCommand}" ToolTip="{StaticResource Tb_Add_Tip}" AutomationProperties.Name="{StaticResource Tb_Add}">
                         <StackPanel><TextBlock Style="{StaticResource AddGlyph}" Text="&#xE710;" /><TextBlock Style="{StaticResource ToolbarLabel}" Text="{StaticResource Tb_Add}" /></StackPanel>
                     </Button>
@@ -99,16 +100,18 @@
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
-            <DockPanel>
-                <StackPanel DockPanel.Dock="Top" Margin="12,10,12,6">
-                    <Image Source="/Resources/logo.png" Height="34" HorizontalAlignment="Left"
+            <DockPanel Background="{DynamicResource PanelBrush}">
+                <StackPanel DockPanel.Dock="Top" Margin="12,10,12,6" Background="Transparent">
+                    <Image Source="{DynamicResource LogoImage}" Height="34" HorizontalAlignment="Left"
                            RenderOptions.BitmapScalingMode="HighQuality" AutomationProperties.Name="{StaticResource App_Title}" />
                     <TextBlock Text="{x:Static infra:AppInfo.VersionText}" Style="{StaticResource Hint}" Margin="2,4,0,0" />
                 </StackPanel>
                 <TreeView x:Name="NavTree" ItemsSource="{Binding Nav}" BorderThickness="0" Padding="2,4"
                           SelectedItemChanged="OnNavSelected" AutomationProperties.Name="{StaticResource Nav_All}">
                     <TreeView.ItemContainerStyle>
-                        <Style TargetType="TreeViewItem">
+                        <!-- BasedOn, or this would replace the themed TreeViewItem style and
+                             fall back to WPF's own white template. -->
+                        <Style TargetType="TreeViewItem" BasedOn="{StaticResource {x:Type TreeViewItem}}">
                             <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
                             <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
                             <Setter Property="Padding" Value="2,3" />
@@ -155,7 +158,7 @@
                             <MenuItem Header="{StaticResource Menu_DownloadLater}" Command="{Binding DownloadLaterCommand}" />
                             <MenuItem Header="{StaticResource Menu_MoveToQueue}" ItemsSource="{Binding QueueList}">
                                 <MenuItem.ItemContainerStyle>
-                                    <Style TargetType="MenuItem">
+                                    <Style TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
                                         <Setter Property="Header" Value="{Binding Name}" />
                                         <Setter Property="Command" Value="{Binding DataContext.MoveToQueueCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                                         <Setter Property="CommandParameter" Value="{Binding Id}" />

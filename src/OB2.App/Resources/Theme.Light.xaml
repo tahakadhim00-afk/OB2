@@ -1,0 +1,51 @@
+<!--
+    Light theme. These keys are the whole palette: every window and style reads colours
+    through them, so Theme.Dark.xaml only has to give the same keys different values.
+    The values here match what WPF's own control templates draw, so the light theme looks
+    exactly as it did before themes existed.
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+
+    <!-- Surfaces, from the window background up to pop-ups. -->
+    <SolidColorBrush x:Key="WindowBrush" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="SurfaceBrush" Color="#F3F3F3" />
+    <SolidColorBrush x:Key="PanelBrush" Color="#FAFAFA" />
+    <SolidColorBrush x:Key="ControlBrush" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="ControlHoverBrush" Color="#F0F0F0" />
+    <SolidColorBrush x:Key="ControlPressedBrush" Color="#E5E5E5" />
+
+    <!-- Text. SecondaryTextBrush is the "hint" grey. -->
+    <SolidColorBrush x:Key="TextBrush" Color="#1A1A1A" />
+    <SolidColorBrush x:Key="SecondaryTextBrush" Color="#5D5D5D" />
+    <SolidColorBrush x:Key="DisabledTextBrush" Color="#9A9A9A" />
+
+    <!-- Lines: borders, grid rules, separators. -->
+    <SolidColorBrush x:Key="BorderBrush" Color="#D6D6D6" />
+    <SolidColorBrush x:Key="StrongBorderBrush" Color="#B8B8B8" />
+
+    <!-- Selection and focus. -->
+    <SolidColorBrush x:Key="AccentBrush" Color="#0F6CBD" />
+    <SolidColorBrush x:Key="SelectionBrush" Color="#0F6CBD" />
+    <SolidColorBrush x:Key="SelectionTextBrush" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="RowHoverBrush" Color="#EDF4FB" />
+
+    <!-- Action colours for toolbar glyphs and status text. -->
+    <SolidColorBrush x:Key="GoBrush" Color="#1B8A3A" />
+    <SolidColorBrush x:Key="StopBrush" Color="#C42B1C" />
+    <SolidColorBrush x:Key="DangerBrush" Color="#A4262C" />
+    <SolidColorBrush x:Key="AddBrush" Color="#0F6CBD" />
+    <SolidColorBrush x:Key="ErrorBrush" Color="#B22222" />
+
+    <!-- Progress bars. -->
+    <SolidColorBrush x:Key="ProgressBrush" Color="#1B8A3A" />
+    <SolidColorBrush x:Key="ProgressTrackBrush" Color="#E6E6E6" />
+
+    <!-- The wordmark: dark artwork, for a light background. A string rather than a
+         BitmapImage, so the Image's own type converter resolves it against the app
+         assembly; ThemeManager hands it to the Image when the theme is applied. -->
+    <sys:String x:Key="LogoPath">Resources/logo.png</sys:String>
+
+
+</ResourceDictionary>

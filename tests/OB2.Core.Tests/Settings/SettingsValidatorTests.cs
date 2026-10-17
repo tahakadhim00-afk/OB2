@@ -27,6 +27,8 @@ public sealed class SettingsValidatorTests
         settings.Capture.ConfirmBeforeAdding.Should().BeTrue();
         settings.General.MinimizeToTrayOnClose.Should().BeTrue();
         settings.General.StartWithWindows.Should().BeTrue();
+        // Light, so an upgrade looks as it did; Options > General switches it.
+        settings.General.Theme.Should().Be(AppTheme.Light);
         settings.Logging.RetainedDays.Should().Be(7);
         settings.Logging.FileSizeLimitBytes.Should().Be(10 * 1024 * 1024);
         settings.History.RetentionDays.Should().BeNull();

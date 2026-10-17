@@ -63,6 +63,11 @@ public partial class App : Application
         try
         {
             var settings = _storage.Settings;
+
+            // Before any window is built, so nothing is ever shown in the wrong colours.
+            Infrastructure.ThemeManager.HookNewWindows();
+            Infrastructure.ThemeManager.Apply(settings.General.Theme);
+
             if (string.IsNullOrEmpty(settings.Ipc.PipeName))
             {
                 // §11.1: per-install random pipe name, read by host.exe from settings.json.

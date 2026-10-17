@@ -106,6 +106,21 @@ public sealed class JsonSettingsStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task The_theme_round_trips_by_name()
+    {
+        var path = _temp.Combine("settings.json");
+        var store = new JsonSettingsStore(path);
+        var settings = new AppSettings();
+        settings.General.Theme = AppTheme.Dark;
+
+        await store.SaveAsync(settings);
+
+        // Written as a name, so the file stays readable and hand-editable (§10.2).
+        (await File.ReadAllTextAsync(path)).Should().Contain("\"theme\": \"Dark\"");
+        (await new JsonSettingsStore(path).LoadAsync()).Settings.General.Theme.Should().Be(AppTheme.Dark);
+    }
+
+    [Fact]
     public async Task A_version_1_file_is_upgraded_once_and_written_back()
     {
         var path = _temp.Combine("settings.json");

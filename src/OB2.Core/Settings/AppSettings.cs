@@ -169,6 +169,19 @@ public sealed class GeneralSettings
 
     /// <summary>FR-27 Windows notification on completion or failure.</summary>
     public bool ShowNotifications { get; set; } = true;
+
+    /// <summary>
+    /// Which colours the windows use. Light by default, so an upgrade looks as it did and
+    /// the app does not change appearance on its own; Options &gt; General switches it.
+    /// </summary>
+    public AppTheme Theme { get; set; } = AppTheme.Light;
+}
+
+/// <summary>The colour schemes Options offers.</summary>
+public enum AppTheme
+{
+    Light,
+    Dark,
 }
 
 /// <summary>NFR Logging: rolling files, 7 days, 10 MB max each.</summary>

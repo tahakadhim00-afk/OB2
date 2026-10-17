@@ -106,6 +106,23 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private bool _rememberAuth;
 
+    /// <summary>Index into <see cref="ThemeChoices"/>; the order matches <see cref="AppTheme"/>.</summary>
+    [ObservableProperty]
+    private int _themeIndex;
+
+    /// <summary>
+    /// Built in the constructor, not in a field initializer: Loc reads the merged Strings
+    /// dictionary off Application.Current, which is not reliably there that early, and the
+    /// list came out blank.
+    /// </summary>
+    public IReadOnlyList<string> ThemeChoices { get; }
+
+    /// <summary>
+    /// Applied as soon as the user picks one, so the choice can be seen before Save. Cancelling
+    /// the window puts the saved theme back (see SettingsWindow).
+    /// </summary>
+    partial void OnThemeIndexChanged(int value) => ThemeManager.Apply((AppTheme)value);
+
     private readonly NativeHostRegistration? _registration;
     private readonly StartupRegistration? _startup;
 
@@ -120,6 +137,8 @@ public sealed partial class SettingsViewModel : ObservableObject
         _startup = startup;
         _startWithWindows = settings.General.StartWithWindows;
         _rememberAuth = settings.Downloads.RememberAuth;
+        ThemeChoices = [Loc.Get("Settings_ThemeLight"), Loc.Get("Settings_ThemeDark")];
+        _themeIndex = (int)settings.General.Theme;
         _confirmCapture = settings.Capture.ConfirmBeforeAdding;
         _captureMinSizeMb = Math.Round(settings.Capture.MinSizeBytes / 1048576.0, 2);
         _captureExtensions = string.Join(", ", settings.Capture.Extensions);
@@ -222,6 +241,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
 
         _settings.General.StartWithWindows = StartWithWindows;
+        _settings.General.Theme = (AppTheme)ThemeIndex;
         var d = _settings.Downloads;
         var rememberAuthChanged = RememberAuth != d.RememberAuth;
         d.RememberAuth = RememberAuth;

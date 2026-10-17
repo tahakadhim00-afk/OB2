@@ -21,8 +21,10 @@
 
   <ItemGroup>
     <Resource Include="Resources\ob2.ico" />
-    <!-- The OB2 wordmark, used straight from the logo artwork so there is one copy. -->
+    <!-- The OB2 wordmark, used straight from the logo artwork so there is one copy.
+         Two cuts of it: dark artwork for the light theme, white artwork for the dark one. -->
     <Resource Include="..\..\assets\logo\inside_app_logo.png" Link="Resources\logo.png" />
+    <Resource Include="..\..\assets\logo\dark_them_logo.png" Link="Resources\logo-dark.png" />
   </ItemGroup>
 
   <ItemGroup>

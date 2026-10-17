@@ -79,6 +79,7 @@ OB2 uses well-known open-source libraries for plumbing; see [Tech stack](#tech-s
 ### Desktop experience
 - A three-pane window (categories, download list, details) shows progress for each connection.
 - Tray icon, Windows notifications, drag-and-drop links, and start with Windows (on by default; Options > General turns it off).
+- Light and dark appearance, switched in Options > General.
 - A headless command line for scripts: `OB2.exe get <url>`.
 
 ---
