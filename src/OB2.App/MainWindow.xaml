@@ -133,6 +133,7 @@
 
                 <DataGrid x:Name="List" ItemsSource="{Binding DownloadsView}" SelectedItem="{Binding SelectedRow}"
                           SelectionChanged="OnListSelectionChanged" MouseDoubleClick="OnListDoubleClick"
+                          infra:RubberBandSelection.IsEnabled="True"
                           AutomationProperties.Name="{StaticResource Nav_All}">
                     <DataGrid.InputBindings>
                         <KeyBinding Key="Delete" Command="{Binding DeleteCommand}" />
