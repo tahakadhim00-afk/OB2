@@ -130,7 +130,7 @@ npm run build        # output: extension/dist
 
 ### Make a portable release
 ```powershell
-powershell -ExecutionPolicy Bypass -File build/publish.ps1 -Version 1.0.0 -IncludeHost
+powershell -ExecutionPolicy Bypass -File build/publish.ps1 -Version 1.1.0 -IncludeHost
 ```
 This produces `publish/OB2-portable/`, containing `OB2.exe`, `host.exe`, `chrome-extension/`, `portable.flag`, and `README.txt`. It also writes `publish/OB2-portable.zip` and `publish/SHA256SUMS.txt`. Leave out `-IncludeHost` to build the app alone.
 
