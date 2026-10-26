@@ -1,5 +1,43 @@
-import { decide, DEFAULT_RULES, fileExtension, isExcluded, loadSettings, saveRules, type DownloadFacts, type StoredSettings } from '../src/rules';
+import {
+  decide, DEFAULT_RULES, fileExtension, isExcluded, loadButtonPosition, loadSettings, MEDIA_BUTTON_POSITIONS_KEY, saveButtonPosition, saveRules, type DownloadFacts,
+  type StoredSettings,
+} from '../src/rules';
 import { installChrome } from './chromeMock';
+
+describe('where the video button was moved, per site (D-81)', () => {
+  it('is kept per site', async () => {
+    installChrome();
+    await saveButtonPosition('www.youtube.com', { x: 0.1, y: 0.9 });
+    await saveButtonPosition('movie-box.co', { x: 0.5, y: 0 });
+
+    expect(await loadButtonPosition('www.youtube.com')).toEqual({ x: 0.1, y: 0.9 });
+    expect(await loadButtonPosition('movie-box.co')).toEqual({ x: 0.5, y: 0 });
+    expect(await loadButtonPosition('elsewhere.example')).toBeUndefined();
+  });
+
+  it('ignores what it would not have written', async () => {
+    const chrome = installChrome();
+    chrome.storage[MEDIA_BUTTON_POSITIONS_KEY] = { 'a.example': { x: 2, y: 0 }, 'b.example': 'top', 'c.example': { x: 0.2, y: 0.3 } };
+
+    expect(await loadButtonPosition('a.example')).toBeUndefined();
+    expect(await loadButtonPosition('b.example')).toBeUndefined();
+    expect(await loadButtonPosition('c.example')).toEqual({ x: 0.2, y: 0.3 });
+    await saveButtonPosition('d.example', { x: Number.NaN, y: 0 });
+    expect(await loadButtonPosition('d.example')).toBeUndefined();
+  });
+
+  it('forgets the site moved longest ago after 200', async () => {
+    installChrome();
+    await saveButtonPosition('first.example', { x: 0, y: 0 });
+    for (let i = 0; i < 199; i++) await saveButtonPosition(`site${i}.example`, { x: 0, y: 0 });
+    await saveButtonPosition('first.example', { x: 1, y: 1 }); // moved again: now the newest
+    await saveButtonPosition('one-more.example', { x: 0, y: 0 });
+
+    expect(await loadButtonPosition('first.example')).toEqual({ x: 1, y: 1 });
+    expect(await loadButtonPosition('site0.example')).toBeUndefined();
+    expect(await loadButtonPosition('site1.example')).toEqual({ x: 0, y: 0 });
+  });
+});
 
 const settings = (overrides: Partial<StoredSettings> = {}): StoredSettings => ({
   captureEnabled: true,

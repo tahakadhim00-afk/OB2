@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using OB2.Core.Downloads;
+using OB2.Core.Http;
 using OB2.Core.Time;
 
 namespace OB2.Core.Media;
@@ -18,12 +19,16 @@ public static class YtDlp
     public const string ProgressTemplate =
         ProgressPrefix + "%(info.format_id)s|%(progress.status)s|%(progress.downloaded_bytes)s|%(progress.total_bytes)s|%(progress.total_bytes_estimate)s|%(progress.speed)s";
 
-    /// <summary><c>yt-dlp -J</c>: everything about one video, formats included, as JSON on one line.</summary>
-    public static IReadOnlyList<string> InfoArguments(MediaTools tools, Uri url)
+    /// <summary>
+    /// <c>yt-dlp -J</c>: everything about one video, formats included, as JSON on one line.
+    /// D-79: <paramref name="referrer"/> is the page whose player loaded <paramref name="url"/>.
+    /// D-80: <paramref name="headers"/> and <paramref name="userAgent"/> are what the browser sent for it.
+    /// </summary>
+    public static IReadOnlyList<string> InfoArguments(MediaTools tools, Uri url, Uri? referrer = null, IReadOnlyDictionary<string, string>? headers = null, string? userAgent = null)
     {
         ArgumentNullException.ThrowIfNull(tools);
         ArgumentNullException.ThrowIfNull(url);
-        return [.. tools.CommonArguments, "--dump-single-json", "--no-playlist", "--", url.AbsoluteUri];
+        return [.. tools.CommonArguments, .. RefererArguments(url.AbsoluteUri, referrer?.AbsoluteUri), .. BrowserArguments(url.AbsoluteUri, headers, userAgent), "--dump-single-json", "--no-playlist", "--", url.AbsoluteUri];
     }
 
     /// <summary>
@@ -42,7 +47,7 @@ public static class YtDlp
             return SubtitleArguments(tools, item, language, automatic);
         }
 
-        var args = new List<string>(tools.CommonArguments)
+        var args = new List<string>([.. tools.CommonArguments, .. RefererArguments(item.Url, item.Referrer), .. BrowserArguments(item.Url, item.Headers, item.UserAgent)])
         {
             "--no-playlist",
             "--newline",
@@ -95,7 +100,7 @@ public static class YtDlp
         // YouTube's auto-generated VTT repeats every line as it scrolls and carries karaoke tags
         // into the converted file; its SRT has each line once.
         string[] preference = format == "vtt" ? ["srt", "vtt", "ass", "ssa"] : [format, "srt", "vtt", "ass", "ssa"];
-        var args = new List<string>(tools.CommonArguments)
+        var args = new List<string>([.. tools.CommonArguments, .. RefererArguments(item.Url, item.Referrer), .. BrowserArguments(item.Url, item.Headers, item.UserAgent)])
         {
             "--no-playlist",
             "--newline",
@@ -179,6 +184,48 @@ public static class YtDlp
         return message.Length > 400 ? message[..400] + "…" : message;
     }
 
+    /// <summary>D-79: <see cref="ErrorMessage"/> says yt-dlp has no extractor for the site and found nothing in the page.</summary>
+    public static bool IsUnsupported(string? message) => message?.StartsWith("Unsupported URL", StringComparison.Ordinal) == true;
+
+    /// <summary>
+    /// D-79: a stream that a player loaded is often refused without the page that embeds it, as
+    /// the browser sent it. YouTube needs none and gets none, so its downloads run as before.
+    /// </summary>
+    private static string[] RefererArguments(string url, string? referrer) =>
+        Uri.TryCreate(referrer, UriKind.Absolute, out var page) && page.Scheme is "http" or "https"
+        && !string.Equals(page.AbsoluteUri, url, StringComparison.Ordinal)
+        && !(Uri.TryCreate(url, UriKind.Absolute, out var target) && VideoSites.YouTubeVideo(target) is not null)
+            ? ["--referer", page.AbsoluteUri]
+            : [];
+
+    /// <summary>
+    /// D-80: the headers the browser sent for a stream (Origin, the player's own tokens) and its
+    /// user agent, only for a stream that came with them: yt-dlp's extractors set their own per
+    /// site, and YouTube's would break with another user agent. Cookies and Authorization never
+    /// go on a command line (D-71); OB2's own stream job sends cookies itself.
+    /// </summary>
+    private static string[] BrowserArguments(string url, IReadOnlyDictionary<string, string>? headers, string? userAgent)
+    {
+        var kept = DownloadHttpClient.PersistableHeaders(headers);
+        if (kept.Count == 0 || (Uri.TryCreate(url, UriKind.Absolute, out var target) && VideoSites.YouTubeVideo(target) is not null))
+        {
+            return [];
+        }
+
+        var args = new List<string>();
+        if (userAgent is { Length: > 0 })
+        {
+            args.AddRange(["--user-agent", userAgent]);
+        }
+
+        foreach (var (name, value) in kept)
+        {
+            args.AddRange(["--add-header", $"{name}:{value}"]);
+        }
+
+        return [.. args];
+    }
+
     /// <summary>In an output template only <c>%</c> is special.</summary>
     private static string EscapeTemplate(string text) => text.Replace("%", "%%", StringComparison.Ordinal);
 
@@ -200,19 +247,95 @@ public sealed class MediaInspector
 
     private readonly MediaTools _tools;
     private readonly IClock _clock;
+    private readonly StreamManifestReader? _streams;
     private readonly Dictionary<string, (MediaInfo Info, DateTimeOffset At)> _recent = new(StringComparer.Ordinal);
     private readonly Lock _lock = new();
 
-    public MediaInspector(MediaTools tools, IClock? clock = null)
+    /// <param name="streams">D-80: OB2's own reader for HLS and DASH streams; without it streams go to yt-dlp alone.</param>
+    public MediaInspector(MediaTools tools, IClock? clock = null, StreamManifestReader? streams = null)
     {
         _tools = tools ?? throw new ArgumentNullException(nameof(tools));
         _clock = clock ?? SystemClock.Instance;
+        _streams = streams;
     }
 
     public MediaTools Tools => _tools;
 
+    /// <summary>D-79: the most streams tried for one page; each is a yt-dlp run of a few seconds.</summary>
+    public const int MaxStreams = 5;
+
+    /// <summary>
+    /// D-80: a stream as the page's player requested it. OB2 reads it itself first (its formats
+    /// then download without yt-dlp); when that fails, yt-dlp tries with the same headers. A stream
+    /// that is copy-protected or live is refused at once.
+    /// </summary>
+    /// <exception cref="MediaException">Neither could read it; the reason is OB2's own, the clearer one.</exception>
+    public async Task<MediaInfo> InspectStreamAsync(StreamRequest stream, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+        if (!_tools.IsInstalled)
+        {
+            throw new MediaException("yt-dlp, ffmpeg and Deno are not installed.");
+        }
+
+        lock (_lock)
+        {
+            if (_recent.TryGetValue(stream.Url.AbsoluteUri, out var kept) && _clock.UtcNow - kept.At < KeepFor)
+            {
+                return kept.Info;
+            }
+        }
+
+        MediaException? own = null;
+        if (_streams is not null)
+        {
+            try
+            {
+                var info = (await _streams.ReadAsync(stream, cancellationToken).ConfigureAwait(false)).ToMediaInfo();
+                Keep(stream.Url, info);
+                return info;
+            }
+            catch (MediaException ex) when (ex.Conclusive)
+            {
+                throw;
+            }
+            catch (MediaException ex)
+            {
+                own = ex;
+            }
+            catch (HttpStatusException ex)
+            {
+                own = new MediaException($"The stream's server refused it: {ex.Message}", ex);
+            }
+            catch (HttpRequestException ex)
+            {
+                own = new MediaException($"The stream's server could not be reached: {ex.Message}", ex);
+            }
+            catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+            {
+                own = new MediaException("The stream's server did not answer in time.", ex);
+            }
+        }
+
+        try
+        {
+            var referrer = Uri.TryCreate(stream.Referrer, UriKind.Absolute, out var page) ? page : null;
+            var info = await RunAsync(stream.Url, referrer, stream.Headers, stream.UserAgent, cancellationToken).ConfigureAwait(false);
+            Keep(stream.Url, info);
+            return info;
+        }
+        catch (MediaException) when (own is not null)
+        {
+            throw own;
+        }
+    }
+
     /// <exception cref="MediaException">yt-dlp failed (unsupported site, private video, network…).</exception>
-    public async Task<MediaInfo> InspectAsync(Uri url, CancellationToken cancellationToken = default)
+    public Task<MediaInfo> InspectAsync(Uri url, CancellationToken cancellationToken = default) => InspectAsync(url, null, cancellationToken);
+
+    /// <param name="referrer">D-79: the page whose player loaded <paramref name="url"/>, sent as Referer.</param>
+    /// <exception cref="MediaException">yt-dlp failed (unsupported site, private video, network…).</exception>
+    public async Task<MediaInfo> InspectAsync(Uri url, Uri? referrer, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(url);
         if (!_tools.IsInstalled)
@@ -228,7 +351,86 @@ public sealed class MediaInspector
             }
         }
 
-        var info = await RunAsync(url, cancellationToken).ConfigureAwait(false);
+        var info = await RunAsync(url, referrer, null, null, cancellationToken).ConfigureAwait(false);
+        Keep(url, info);
+        return info;
+    }
+
+    /// <summary>
+    /// D-79: what a video page offers, from the page or from a stream its player loaded. yt-dlp
+    /// reads the page first: a site it knows gives the title, every audio track and the
+    /// subtitles. When it doesn't know the site (it failed, or only guessed from the page's
+    /// HTML), the <paramref name="streams"/> are tried in the order the player loaded them
+    /// (D-80: as the browser requested them, <see cref="InspectStreamAsync"/>), and the first one
+    /// that has formats wins. Its answer carries <paramref name="title"/> (the tab's), since a
+    /// stream's own name is "master" or "index", and is kept under the stream's address for the
+    /// download that follows.
+    /// </summary>
+    /// <returns>The address the formats belong to: <paramref name="page"/> or one of <paramref name="streams"/>.</returns>
+    /// <exception cref="MediaException">Neither the page nor any stream could be read.</exception>
+    public async Task<(Uri Source, MediaInfo Info)> InspectPageAsync(Uri page, IReadOnlyList<StreamRequest> streams, string? title, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(page);
+        ArgumentNullException.ThrowIfNull(streams);
+        MediaInfo? fromPage = null;
+        MediaException? pageFailure = null;
+        try
+        {
+            fromPage = await InspectAsync(page, cancellationToken).ConfigureAwait(false);
+        }
+        catch (MediaException ex) when (streams.Count > 0)
+        {
+            pageFailure = ex;
+        }
+        catch (MediaException ex) when (ex.Unsupported)
+        {
+            throw new MediaException("yt-dlp does not support this site, and the player has not loaded a stream OB2 can read yet. Play the video for a moment, then try again.", ex) { Unsupported = true };
+        }
+
+        if (fromPage is { Formats.Count: > 0 } && (streams.Count == 0 || !fromPage.IsGeneric))
+        {
+            return (page, fromPage);
+        }
+
+        MediaException? streamFailure = null;
+        foreach (var stream in streams.Take(MaxStreams))
+        {
+            try
+            {
+                var info = await InspectStreamAsync(stream, cancellationToken).ConfigureAwait(false);
+                if (info.Formats.Count > 0)
+                {
+                    if (title is { Length: > 0 } && (info.IsGeneric || info.FromStream))
+                    {
+                        info = info with { Title = title };
+                        Keep(stream.Url, info);
+                    }
+
+                    return (stream.Url, info);
+                }
+            }
+            catch (MediaException ex) when (ex.Conclusive)
+            {
+                throw; // copy-protected or live: another stream of the same player is no different
+            }
+            catch (MediaException ex)
+            {
+                streamFailure ??= ex;
+            }
+        }
+
+        if (fromPage is not null)
+        {
+            return (page, fromPage); // a guess from the page's HTML, or nothing to offer
+        }
+
+        throw pageFailure is { Unsupported: true } && streamFailure is not null
+            ? new MediaException($"yt-dlp does not support this site, and OB2 could not read the video's stream either: {streamFailure.Message}", streamFailure) { Unsupported = true }
+            : pageFailure!;
+    }
+
+    private void Keep(Uri url, MediaInfo info)
+    {
         lock (_lock)
         {
             _recent[url.AbsoluteUri] = (info, _clock.UtcNow);
@@ -237,18 +439,16 @@ public sealed class MediaInspector
                 _recent.Remove(_recent.MinBy(e => e.Value.At).Key);
             }
         }
-
-        return info;
     }
 
-    private async Task<MediaInfo> RunAsync(Uri url, CancellationToken cancellationToken)
+    private async Task<MediaInfo> RunAsync(Uri url, Uri? referrer, IReadOnlyDictionary<string, string>? headers, string? userAgent, CancellationToken cancellationToken)
     {
         var output = new StringBuilder();
         var errors = new List<string>();
         int code;
         try
         {
-            code = await _tools.Runner.RunAsync(_tools.YtDlpPath, YtDlp.InfoArguments(_tools, url), line => output.AppendLine(line), errors.Add, cancellationToken).ConfigureAwait(false);
+            code = await _tools.Runner.RunAsync(_tools.YtDlpPath, YtDlp.InfoArguments(_tools, url, referrer, headers, userAgent), line => output.AppendLine(line), errors.Add, cancellationToken).ConfigureAwait(false);
         }
         catch (System.ComponentModel.Win32Exception ex)
         {
@@ -257,7 +457,10 @@ public sealed class MediaInspector
 
         if (code != 0)
         {
-            throw new MediaException(YtDlp.ErrorMessage(errors) ?? $"yt-dlp stopped with exit code {code}.");
+            var reason = YtDlp.ErrorMessage(errors);
+            throw YtDlp.IsUnsupported(reason)
+                ? new MediaException("yt-dlp does not support this site.") { Unsupported = true }
+                : new MediaException(reason ?? $"yt-dlp stopped with exit code {code}.");
         }
 
         return MediaInfo.Parse(output.ToString());

@@ -1,6 +1,7 @@
 // Capture rules (§8.4): minimum size, file types, excluded domains. The app owns them
 // (Options > Browser); the extension caches the copy that arrives with each status reply.
 
+import type { ButtonPosition } from './overlay';
 import type { CaptureRules } from './protocol';
 
 /** Same defaults as CaptureSettings in the app, used until the app has been reached once. */
@@ -54,6 +55,38 @@ export async function loadMediaButtonEnabled(): Promise<boolean> {
 
 export async function setMediaButtonEnabled(enabled: boolean): Promise<void> {
   await chrome.storage.local.set({ [MEDIA_BUTTON_KEY]: enabled });
+}
+
+/** D-81: where the user dragged the video button, by site (host name). */
+export const MEDIA_BUTTON_POSITIONS_KEY = 'mediaButtonPositions';
+/** The sites remembered; the one moved longest ago is forgotten first. */
+const MAX_BUTTON_POSITIONS = 200;
+
+export async function loadButtonPosition(site: string): Promise<ButtonPosition | undefined> {
+  const position = (await storedPositions())[site];
+  return isButtonPosition(position) ? position : undefined;
+}
+
+export async function saveButtonPosition(site: string, position: ButtonPosition): Promise<void> {
+  if (!site || !isButtonPosition(position)) return;
+  const positions = await storedPositions();
+  delete positions[site]; // re-added last: the most recently moved
+  positions[site] = { x: position.x, y: position.y };
+  const sites = Object.keys(positions);
+  for (const old of sites.slice(0, Math.max(0, sites.length - MAX_BUTTON_POSITIONS))) delete positions[old];
+  await chrome.storage.local.set({ [MEDIA_BUTTON_POSITIONS_KEY]: positions });
+}
+
+async function storedPositions(): Promise<Record<string, unknown>> {
+  const stored = (await chrome.storage.local.get([MEDIA_BUTTON_POSITIONS_KEY])) as Record<string, unknown>;
+  const positions = stored[MEDIA_BUTTON_POSITIONS_KEY];
+  return positions && typeof positions === 'object' && !Array.isArray(positions) ? { ...(positions as Record<string, unknown>) } : {};
+}
+
+function isButtonPosition(value: unknown): value is ButtonPosition {
+  const p = value as ButtonPosition | undefined;
+  const fraction = (n: unknown) => typeof n === 'number' && Number.isFinite(n) && n >= 0 && n <= 1;
+  return !!p && fraction(p.x) && fraction(p.y);
 }
 
 function isRules(value: unknown): value is CaptureRules {

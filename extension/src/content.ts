@@ -4,12 +4,13 @@
 // FR-24: the "Download with OB2" button over videos (overlay.ts). The background tells this frame
 // which media files it loaded; nothing about the page is sent anywhere until the button is clicked.
 // D-72: a click on a video page (YouTube) asks OB2 for the page's qualities (listFormats).
+// D-79: with the streams this frame's player loaded, which OB2 reads when yt-dlp doesn't know the site.
 // D-70: the popup's "Find downloads" reads the page's links through scanPage (scan.ts).
 
 import type { CaptureOutcome, FormatsOutcome } from './capture';
-import { isMediaCandidate, type MediaCandidate } from './media';
+import { isMediaCandidate, isRequestHeaders, isStreamAddress, type MediaCandidate, type StreamInfo } from './media';
 import { MediaOverlay, type SendResult } from './overlay';
-import { loadMediaButtonEnabled, MEDIA_BUTTON_KEY } from './rules';
+import { loadButtonPosition, loadMediaButtonEnabled, MEDIA_BUTTON_KEY, saveButtonPosition } from './rules';
 import { SCAN_GLOBAL, scanPage, type PageScan } from './scan';
 
 function shiftClickedLink(event: MouseEvent): string | undefined {
@@ -53,9 +54,9 @@ async function sendMedia(media: MediaCandidate): Promise<SendResult> {
 }
 
 /** D-72: asked only when the button is clicked on a video page; OB2 lists its qualities. */
-async function listFormats(pageUrl: string): Promise<FormatsOutcome> {
+async function listFormats(pageUrl: string, streams: readonly StreamInfo[]): Promise<FormatsOutcome> {
   try {
-    const outcome = (await chrome.runtime.sendMessage({ type: 'ob2-media-formats', url: pageUrl })) as FormatsOutcome | undefined;
+    const outcome = (await chrome.runtime.sendMessage({ type: 'ob2-media-formats', url: pageUrl, streams })) as FormatsOutcome | undefined;
     return outcome ?? { action: 'failed', reason: 'failed' };
   } catch {
     return { action: 'failed', reason: 'failed' }; // the extension was reloaded since this page loaded
@@ -70,10 +71,12 @@ function startMediaButton(): void {
   // D-70: the popup's "Find downloads". Lives in the extension's isolated world, out of the page's reach.
   (globalThis as Record<string, unknown>)[SCAN_GLOBAL] = (): PageScan => scanPage(document, overlay.detectedMedia());
   chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
-    const m = message as { type?: string; media?: unknown } | undefined;
+    const m = message as { type?: string; media?: unknown; url?: unknown; headers?: unknown } | undefined;
     if (sender.id !== chrome.runtime.id) return false;
     if (m?.type === 'ob2-media' && isMediaCandidate(m.media)) {
       overlay.addDetected(m.media);
+    } else if (m?.type === 'ob2-stream' && isStreamAddress(m.url)) {
+      overlay.addStream(m.url, isRequestHeaders(m.headers) ? m.headers : {});
     } else if (m?.type === 'ob2-context-media') {
       sendResponse(overlay.mediaForContextMenu() ?? null);
     }
@@ -83,6 +86,14 @@ function startMediaButton(): void {
   loadMediaButtonEnabled()
     .then((enabled) => (overlay.enabled = enabled))
     .catch(() => undefined);
+  // D-81: the button stays where the user dragged it on this site (in this frame's site, for a player in a frame).
+  const site = location.hostname;
+  loadButtonPosition(site)
+    .then((position) => {
+      if (position) overlay.position = position;
+    })
+    .catch(() => undefined);
+  overlay.onMoved = (position) => void saveButtonPosition(site, position).catch(() => undefined);
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'local' && MEDIA_BUTTON_KEY in changes) {
       overlay.enabled = changes[MEDIA_BUTTON_KEY].newValue !== false;

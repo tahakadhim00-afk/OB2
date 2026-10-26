@@ -9,6 +9,15 @@ public sealed record MediaInfo(string Title, string? Site, TimeSpan? Duration, I
     /// <summary>D-74: the subtitle tracks OB2 can save, the site's own first; empty when there are none.</summary>
     public IReadOnlyList<SubtitleTrack> Subtitles { get; init; } = [];
 
+    /// <summary>
+    /// D-79: yt-dlp has no extractor for the site and guessed from the page's HTML, or read a
+    /// file or stream address directly.
+    /// </summary>
+    public bool IsGeneric => string.Equals(Site, "Generic", StringComparison.Ordinal);
+
+    /// <summary>D-80: OB2 read a stream's manifest itself; its formats download without yt-dlp.</summary>
+    public bool FromStream { get; init; }
+
     /// <exception cref="MediaException">Not a single video, or not yt-dlp's JSON.</exception>
     public static MediaInfo Parse(string json)
     {
@@ -119,6 +128,9 @@ public sealed record MediaFormat
 
     public string? DynamicRange { get; init; }
 
+    /// <summary>D-80: a track of a stream OB2 reads itself (<see cref="StreamManifest"/>), not a yt-dlp format.</summary>
+    public bool FromStream { get; init; }
+
     public bool HasVideo => VideoCodec != "none";
 
     public bool HasAudio => AudioCodec != "none";
@@ -161,4 +173,10 @@ public sealed class MediaException : Exception
         : base(message, innerException)
     {
     }
+
+    /// <summary>D-79: yt-dlp has no extractor for the site, and the page's HTML named no video it could use.</summary>
+    public bool Unsupported { get; init; }
+
+    /// <summary>D-80: the stream itself rules the download out (copy-protected, or live); asking yt-dlp as well would only take longer.</summary>
+    public bool Conclusive { get; init; }
 }

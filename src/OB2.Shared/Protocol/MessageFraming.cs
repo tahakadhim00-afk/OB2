@@ -111,6 +111,12 @@ public static partial class ProtocolValidator
 {
     public const int MaxUrlLength = 2048;
 
+    /// <summary>D-79: streams one <c>get_media_formats</c> may name.</summary>
+    public const int MaxStreams = 5;
+
+    /// <summary>D-79: the longest tab title a <c>get_media_formats</c> may carry.</summary>
+    public const int MaxTitleLength = 300;
+
     /// <returns>An error reply, or null when the message may be processed.</returns>
     public static ProtocolMessage? Validate(ProtocolMessage message)
     {
@@ -122,7 +128,19 @@ public static partial class ProtocolValidator
 
         if (message.Type == MessageTypes.GetMediaFormats)
         {
-            return ValidateUrl(message, message.PayloadAs<MediaFormatsRequest>()?.Url);
+            var request = message.PayloadAs<MediaFormatsRequest>();
+            if (request?.Streams is { } streams
+                && (streams.Count > MaxStreams || streams.Any(s => s is null || ValidateUrl(message, s.Url) is not null || !IsSafeRequest(s.Referrer, s.Headers, s.Cookies))))
+            {
+                return ProtocolMessage.ErrorReply(message.Id, ProtocolErrors.InvalidMessage, $"At most {MaxStreams} streams, each an http or https address with plain request headers.");
+            }
+
+            if (request?.Title is { Length: > MaxTitleLength } || !IsHeaderValue(request?.UserAgent))
+            {
+                return ProtocolMessage.ErrorReply(message.Id, ProtocolErrors.InvalidMessage, "The page title or user agent is not acceptable.");
+            }
+
+            return ValidateUrl(message, request?.Url);
         }
 
         if (message.Type != MessageTypes.AddDownload)
@@ -136,8 +154,31 @@ public static partial class ProtocolValidator
             return ProtocolMessage.ErrorReply(message.Id, ProtocolErrors.InvalidMessage, "The video format is not one OB2 offers.");
         }
 
+        if (payload is not null && !IsSafeRequest(payload.Referrer, payload.Headers, payload.Cookies, requireReferrerUrl: false))
+        {
+            return ProtocolMessage.ErrorReply(message.Id, ProtocolErrors.InvalidMessage, "The request headers are not plain header names and values.");
+        }
+
         return ValidateUrl(message, payload?.FinalUrl is { Length: > 0 } ? payload.FinalUrl : payload?.Url);
     }
+
+    /// <summary>D-80: the most request headers one download or stream may carry.</summary>
+    public const int MaxHeaders = 50;
+
+    /// <summary>
+    /// D-80: headers go into requests and onto yt-dlp's command line, so they are header names
+    /// (RFC 9110 tokens) and values without line breaks or other control characters.
+    /// </summary>
+    private static bool IsSafeRequest(string? referrer, Dictionary<string, string>? headers, string? cookies, bool requireReferrerUrl = true) =>
+        (referrer is null || (!requireReferrerUrl || Uri.TryCreate(referrer, UriKind.Absolute, out _)) && IsHeaderValue(referrer))
+        && IsHeaderValue(cookies)
+        && (headers is null || (headers.Count <= MaxHeaders && headers.All(h => HeaderName().IsMatch(h.Key) && h.Value is not null && IsHeaderValue(h.Value))));
+
+    private static bool IsHeaderValue(string? value) =>
+        value is null || (value.Length <= 8192 && !value.Any(c => (c < ' ' && c != '\t') || c == '\x7f'));
+
+    [GeneratedRegex(@"^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,100}\z")]
+    private static partial Regex HeaderName();
 
     private static ProtocolMessage? ValidateUrl(ProtocolMessage message, string? url)
     {
@@ -162,7 +203,11 @@ public static partial class ProtocolValidator
     /// </summary>
     public static bool IsMediaChoice(string? format, string? container) =>
         format is not null && container is not null
-        && (SubtitleSpec().IsMatch(format) ? SubtitleContainer().IsMatch(container) : FormatSpec().IsMatch(format) && Container().IsMatch(container));
+        && (SubtitleSpec().IsMatch(format) ? SubtitleContainer().IsMatch(container) : (FormatSpec().IsMatch(format) || StreamSpec().IsMatch(format)) && Container().IsMatch(container));
+
+    /// <summary>D-80: tracks of a stream OB2 reads itself (<c>stream:v1+a0</c>); mirrors <c>StreamSpec</c> in OB2.Core.</summary>
+    [GeneratedRegex(@"^stream:(?:v\d{1,3}(?:\+a\d{1,3})?|a\d{1,3})\z")]
+    private static partial Regex StreamSpec();
 
     /// <summary>One or two yt-dlp format ids (<c>137</c>, <c>137+140</c>, <c>hls-720</c>).</summary>
     [GeneratedRegex(@"^[A-Za-z0-9_][A-Za-z0-9_.=@-]{0,79}(?:\+[A-Za-z0-9_][A-Za-z0-9_.=@-]{0,79})?\z")]

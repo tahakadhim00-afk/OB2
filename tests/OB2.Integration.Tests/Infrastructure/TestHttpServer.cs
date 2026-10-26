@@ -33,6 +33,8 @@ namespace OB2.Integration.Tests.Infrastructure;
 /// <item><c>token=T&amp;uses=K</c> a signed URL: the first K GETs carrying token T succeed, later ones get 403</item>
 /// </list>
 /// <c>/redirect?to=/path</c> answers 302. <c>/status/{code}</c> answers that code.
+/// <c>/static/{path}</c> serves <see cref="StaticFolder"/> (D-80: a stream ffmpeg wrote), demanding
+/// <see cref="StaticHeader"/> if set, as players' servers do.
 /// <c>/sign/{size}/{name}?options</c> answers 302 to <c>/file/{size}/{name}?token=tN&amp;options</c>
 /// with a new token each time, like a CDN handing out signed links; <c>rotateEtag=1</c> also gives
 /// each new link a different ETag (the file behind the link changed).
@@ -90,6 +92,15 @@ public sealed class TestHttpServer : IAsyncDisposable
         server = new TestHttpServer(app, new Uri(address));
         return server;
     }
+
+    /// <summary>D-80: the folder <c>/static/</c> serves.</summary>
+    public string? StaticFolder { get; set; }
+
+    /// <summary>D-80: a header every <c>/static/</c> request must carry, like movie-box.co's <c>X-MB-Token</c>; else 403.</summary>
+    public (string Name, string Value)? StaticHeader { get; set; }
+
+    /// <summary>D-80: how long each <c>/static/</c> piece (not a playlist) waits before its answer, so a test can pause midway.</summary>
+    public TimeSpan StaticDelay { get; set; }
 
     public Uri Url(string pathAndQuery) => new(BaseUri, pathAndQuery);
 
@@ -166,10 +177,47 @@ public sealed class TestHttpServer : IAsyncDisposable
             case "status" when segments.Length >= 2:
                 context.Response.StatusCode = int.Parse(segments[1], CultureInfo.InvariantCulture);
                 break;
+            case "static" when StaticFolder is not null:
+                await ServeStaticAsync(context, string.Join('/', segments.Skip(1)));
+                break;
             default:
                 context.Response.StatusCode = StatusCodes.Status404NotFound;
                 break;
         }
+    }
+
+    private async Task ServeStaticAsync(HttpContext context, string relative)
+    {
+        var response = context.Response;
+        if (StaticHeader is { } required && context.Request.Headers[required.Name].ToString() != required.Value)
+        {
+            response.StatusCode = StatusCodes.Status403Forbidden;
+            return;
+        }
+
+        var root = Path.GetFullPath(StaticFolder!);
+        var path = Path.GetFullPath(Path.Combine(root, Uri.UnescapeDataString(relative)));
+        if (!path.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) || !File.Exists(path))
+        {
+            response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
+        var ext = Path.GetExtension(path);
+        response.ContentType = ext switch
+        {
+            ".m3u8" => "application/vnd.apple.mpegurl",
+            ".mpd" => "application/dash+xml",
+            _ => "application/octet-stream",
+        };
+        if (StaticDelay > TimeSpan.Zero && ext is not (".m3u8" or ".mpd"))
+        {
+            await Task.Delay(StaticDelay, context.RequestAborted);
+        }
+
+        var bytes = await File.ReadAllBytesAsync(path, context.RequestAborted);
+        response.ContentLength = bytes.Length;
+        await response.Body.WriteAsync(bytes, context.RequestAborted);
     }
 
     private async Task ServeFileAsync(HttpContext context, long size)

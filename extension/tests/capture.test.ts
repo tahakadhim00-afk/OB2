@@ -297,6 +297,71 @@ describe("a video page's qualities for the button (D-72)", () => {
   });
 });
 
+describe('a site yt-dlp does not know: the streams its player loaded (D-79)', () => {
+  const page = 'https://movies.example/watch/lupin';
+  const master = 'https://cdn.example/hls/master.m3u8?token=a%2Fb';
+  const option = { format: '720', container: 'mp4', audioOnly: false, quality: '720p' };
+
+  /** D-80: what Chrome sent with movie-box.co's player request for its DASH manifest. */
+  const sent = { Origin: 'https://movie-box.co', Referer: 'https://movie-box.co/', 'User-Agent': 'Chrome/141', 'X-MB-Token': 'Edge-Cache-Cookie=urlprefix=aHR0' };
+
+  it('sends each stream as the browser requested it, with its cookies, the tab title, and keeps the stream OB2 read', async () => {
+    chromeMock.cookies.getAll.mockImplementation(async ({ url }: { url: string }) => (url === master ? [{ name: 'edge', value: '1' }] : []));
+    chromeMock.sendNativeMessage.mockImplementation(replyWith('media_formats', { title: 'Lupin - Movies', url: master, options: [option] }));
+
+    const outcome = await fetchMediaFormats(page, false, [{ url: master, headers: sent }, { url: 'https://cdn.example/hls/720.m3u8', headers: {} }], '  Lupin - Movies ');
+
+    expect(sentMessages()[0].payload).toEqual({
+      url: page,
+      streams: [
+        { url: master, referrer: 'https://movie-box.co/', headers: { Origin: 'https://movie-box.co', 'X-MB-Token': 'Edge-Cache-Cookie=urlprefix=aHR0' }, cookies: 'edge=1' },
+        { url: 'https://cdn.example/hls/720.m3u8' },
+      ],
+      userAgent: navigator.userAgent,
+      title: 'Lupin - Movies',
+    });
+    expect(outcome).toEqual({ action: 'listed', title: 'Lupin - Movies', options: [option], url: master });
+  });
+
+  it('sends no title without streams, and trusts no address it did not send', async () => {
+    chromeMock.sendNativeMessage.mockImplementation(replyWith('media_formats', { title: 'Lupin', url: 'https://elsewhere.example/a.m3u8', options: [option] }));
+
+    const outcome = await fetchMediaFormats(page, false, [], 'Lupin - Movies');
+
+    expect(sentMessages()[0].payload).toEqual({ url: page });
+    expect(outcome).toEqual({ action: 'listed', title: 'Lupin', options: [option] });
+  });
+
+  it('downloads a picked stream quality as the browser requested it', async () => {
+    chromeMock.cookies.getAll.mockResolvedValue([{ name: 'edge', value: '1' }]);
+    chromeMock.sendNativeMessage.mockImplementation(replyWith('ack', { downloadId: 14, status: 'downloading' }));
+
+    await downloadMediaWithOb2({ url: master, page: true, format: 'stream:v2+a0', container: 'mp4', name: 'Lupin - Movies', headers: sent }, page, 'Lupin - Movies');
+
+    expect(sentMessages()[0].payload).toMatchObject({
+      url: master,
+      referrer: 'https://movie-box.co/',
+      userAgent: 'Chrome/141',
+      headers: { Origin: 'https://movie-box.co', 'X-MB-Token': 'Edge-Cache-Cookie=urlprefix=aHR0' },
+      cookies: 'edge=1',
+      mediaPage: true,
+      mediaFormat: 'stream:v2+a0',
+      mediaContainer: 'mp4',
+      filenameHint: 'Lupin - Movies.mp4',
+    });
+  });
+
+  it('a page without the browser headers of a stream goes without cookies, as before', async () => {
+    chromeMock.cookies.getAll.mockResolvedValue([{ name: 'sid', value: 'secret' }]);
+    chromeMock.sendNativeMessage.mockImplementation(replyWith('ack', { downloadId: 15, status: 'downloading' }));
+
+    await downloadMediaWithOb2({ url: page, page: true, format: '720', container: 'mp4', name: 'Lupin' }, page, 'Lupin');
+
+    expect(sentMessages()[0].payload).not.toHaveProperty('cookies');
+    expect(sentMessages()[0].payload).not.toHaveProperty('headers');
+  });
+});
+
 describe('links found on the page (D-70)', () => {
   it('sends the link with the frame as referrer and the page’s own file name', async () => {
     chromeMock.sendNativeMessage.mockImplementation(replyWith('ack', { downloadId: 8, status: 'confirming' }));

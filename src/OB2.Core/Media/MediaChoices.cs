@@ -101,17 +101,20 @@ public static class MediaChoices
         if (video is null)
         {
             ArgumentNullException.ThrowIfNull(audio);
-            return new MediaSelection(audio.Id, audio.Ext, audio.Size);
+            return new MediaSelection(Spec(audio, audio.Id), audio.Ext, audio.Size);
         }
 
         if (video.HasAudio || audio is null)
         {
-            return new MediaSelection(video.Id, video.Ext, video.Size);
+            return new MediaSelection(Spec(video, video.Id), video.Ext, video.Size);
         }
 
         long? size = video.Size is null && audio.Size is null ? null : (video.Size ?? 0) + (audio.Size ?? 0);
-        return new MediaSelection($"{video.Id}+{audio.Id}", MergesInto(video, audio), size);
+        return new MediaSelection(Spec(video, $"{video.Id}+{audio.Id}"), MergesInto(video, audio), size);
     }
+
+    /// <summary>D-80: tracks OB2 read from a stream itself are downloaded by OB2, not yt-dlp.</summary>
+    private static string Spec(MediaFormat format, string ids) => format.FromStream ? StreamSpec.For(ids) : ids;
 
     /// <summary>D-74: a subtitle track saved as <paramref name="format"/> (one of <see cref="SubtitleTrack.Formats"/>).</summary>
     public static MediaSelection Select(SubtitleTrack track, string format)

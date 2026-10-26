@@ -3,7 +3,9 @@
  * @jest-environment-options {"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PL1&t=42"}
  */
 import type { FormatsOutcome } from '../src/capture';
-import { isMediaCandidate, isMediaChoice, isMediaOption, isYouTubeHost, mediaLabel, mediaSubtitleOf, optionLabel, subtitleLabel, youTubeVideoPage } from '../src/media';
+import {
+  isMediaCandidate, isMediaChoice, isMediaOption, isYouTubeHost, mediaLabel, mediaSubtitleOf, optionLabel, subtitleLabel, youTubeVideoPage, type StreamInfo,
+} from '../src/media';
 import { MediaOverlay } from '../src/overlay';
 import { formatBytes } from '../src/format';
 
@@ -70,7 +72,7 @@ const LISTED: FormatsOutcome = {
 
 describe('quality menu on a YouTube watch page (D-72)', () => {
   let send: jest.Mock;
-  let listFormats: jest.Mock<Promise<FormatsOutcome>, [string]>;
+  let listFormats: jest.Mock<Promise<FormatsOutcome>, [string, readonly StreamInfo[]]>;
   let overlay: MediaOverlay;
   let video: HTMLVideoElement;
 
@@ -102,7 +104,7 @@ describe('quality menu on a YouTube watch page (D-72)', () => {
     expect(main().getAttribute('aria-haspopup')).toBe('menu');
 
     main().click();
-    expect(listFormats).toHaveBeenCalledWith(WATCH);
+    expect(listFormats).toHaveBeenCalledWith(WATCH, []); // D-79: yt-dlp always reads YouTube itself
     expect(notes()).toEqual(['Getting the qualities from OB2…']);
     expect(menu().getAttribute('aria-busy')).toBe('true');
     expect(send).not.toHaveBeenCalled();

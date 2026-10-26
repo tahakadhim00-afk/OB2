@@ -105,6 +105,10 @@ public sealed partial class MediaDownloadViewModel : ObservableObject, IDisposab
     [ObservableProperty]
     private string? _errorText;
 
+    /// <summary>What to try after a failure: a newer yt-dlp, or (D-79) the browser's button on a site yt-dlp doesn't know.</summary>
+    [ObservableProperty]
+    private string _failedHint = string.Empty;
+
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(DownloadNowCommand), nameof(DownloadLaterCommand))]
     private bool _isBusy;
@@ -117,6 +121,7 @@ public sealed partial class MediaDownloadViewModel : ObservableObject, IDisposab
         _prefill = prefill;
         _pageUrl = pageUrl;
         PageText = pageUrl.AbsoluteUri;
+        FailedHint = Loc.Get("Media_FailedHint");
         ToolsText = Loc.Format("Media_ToolsBody", Fmt.Size(MediaToolInstaller.ApproximateTotalBytes), installer.Tools.Folder);
         SubtitleFormats = [.. SubtitleTrack.Formats.Select(f => new Choice<string>(f, f.ToUpperInvariant()))];
         Set(() => SelectedSubtitleFormat = SubtitleFormats[0]);
@@ -166,6 +171,9 @@ public sealed partial class MediaDownloadViewModel : ObservableObject, IDisposab
     public bool IsSubtitleChosen => SelectedSubtitle?.Value is not null;
 
     public bool IsSubtitleNameVisible => SubtitleNameText is not null;
+
+    /// <summary>D-80: a stream from the browser's button (it comes with the browser's headers), not a page.</summary>
+    private bool IsStream => _prefill.Headers is { Count: > 0 } || StreamRequest.LooksLikeManifest(_pageUrl);
 
     public void Dispose()
     {
@@ -321,7 +329,10 @@ public sealed partial class MediaDownloadViewModel : ObservableObject, IDisposab
         State = MediaDialogState.Loading;
         try
         {
-            var info = await _inspector.InspectAsync(_pageUrl, _cts.Token);
+            // D-79, D-80: a stream picked on the browser's button is fetched as its player fetched it.
+            var info = IsStream
+                ? await _inspector.InspectStreamAsync(new StreamRequest(_pageUrl, _prefill.Referrer, _prefill.UserAgent, _prefill.Cookies, _prefill.Headers ?? new Dictionary<string, string>()), _cts.Token)
+                : await _inspector.InspectAsync(_pageUrl, Uri.TryCreate(_prefill.Referrer, UriKind.Absolute, out var page) ? page : null, _cts.Token);
             if (info.Formats.Count == 0)
             {
                 throw new MediaException(Loc.Get("Media_NoFormats"));
@@ -335,7 +346,8 @@ public sealed partial class MediaDownloadViewModel : ObservableObject, IDisposab
         }
         catch (MediaException ex)
         {
-            ErrorText = Loc.Format("Media_Failed", ex.Message);
+            ErrorText = ex.Unsupported ? Loc.Get("Media_Unsupported") : Loc.Format("Media_Failed", ex.Message);
+            FailedHint = Loc.Get(ex.Unsupported ? "Media_UnsupportedHint" : "Media_FailedHint");
             State = MediaDialogState.Failed;
         }
     }
@@ -505,6 +517,10 @@ public sealed partial class MediaDownloadViewModel : ObservableObject, IDisposab
                 SaveFolder = folder,
                 StartNow = startNow,
                 Referrer = _prefill.Referrer,
+                // D-80: a stream's pieces are fetched as the browser requested the stream.
+                UserAgent = _prefill.UserAgent,
+                Cookies = _prefill.Cookies,
+                Headers = _prefill.Headers ?? new Dictionary<string, string>(),
                 Source = _prefill.Source,
                 MediaFormat = selection.FormatSpec,
                 MediaContainer = selection.Container,

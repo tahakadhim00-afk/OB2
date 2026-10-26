@@ -66,6 +66,22 @@ export interface AddDownloadPayload {
 
 export interface MediaFormatsRequest {
   url: string;
+  /** D-79: HLS and DASH manifests the page's player loaded, oldest first; OB2 tries them when yt-dlp can't read the page. */
+  streams?: MediaStream[];
+  /** D-79: the tab's title, sent with `streams`: a stream's own name is "master" or "index". */
+  title?: string;
+  /** D-80: the browser's user agent, which the streams were requested with. */
+  userAgent?: string;
+}
+
+/** D-80: one stream, as the browser requested it. Mirrors MediaStreamPayload in the app. */
+export interface MediaStream {
+  url: string;
+  referrer?: string;
+  /** Request headers other than Cookie, Referer and User-Agent. */
+  headers?: Record<string, string>;
+  /** Cookie header value for the stream's address. Sent to the host only; never logged or stored by the extension. */
+  cookies?: string;
 }
 
 /** One quality on the button's menu (D-72). `format` and `container` go back in `add_download`. */
@@ -97,6 +113,8 @@ export interface MediaFormatsPayload {
   options: MediaOption[];
   /** D-74: empty when the video has none; absent from an OB2 that predates subtitles. */
   subtitles?: MediaSubtitle[];
+  /** D-79: the address the options belong to: the page, or one of the request's `streams` as sent. */
+  url?: string;
 }
 
 export interface AckPayload {

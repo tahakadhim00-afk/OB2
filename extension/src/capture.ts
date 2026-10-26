@@ -2,11 +2,11 @@
 // The browser download is paused, not cancelled, while OB2 is asked to take it. It is cancelled
 // only after OB2 acknowledges; on any failure it is resumed, so Chrome finishes it (fail-open).
 
-import { isMediaOption, mediaFileName, mediaSubtitleOf, type MediaCandidate } from './media';
+import { isMediaOption, mediaFileName, mediaSubtitleOf, splitRequestHeaders, type MediaCandidate, type StreamInfo } from './media';
 import { CAPTURE_TIMEOUT_MS, HostError, MEDIA_FORMATS_TIMEOUT_MS, STATUS_TIMEOUT_MS, sendToHost } from './native';
 import {
-  createMessage, ErrorCode, MessageType, type AckPayload, type AddDownloadPayload, type MediaFormatsPayload, type MediaFormatsRequest, type MediaOption, type MediaSubtitle,
-  type StatusPayload,
+  createMessage, ErrorCode, MessageType, type AckPayload, type AddDownloadPayload, type MediaFormatsPayload, type MediaFormatsRequest, type MediaOption, type MediaStream,
+  type MediaSubtitle, type StatusPayload,
 } from './protocol';
 import { decide, knownSize, loadSettings, parseHttpUrl, RULES_MAX_AGE_MS, saveRules, type SkipReason } from './rules';
 import type { FoundLink } from './scan';
@@ -122,10 +122,19 @@ export async function downloadMediaWithOb2(media: MediaCandidate, pageUrl: strin
 export async function downloadVideoPageWithOb2(
   videoPage: string,
   referrer: string | undefined,
-  choice: Pick<MediaCandidate, 'format' | 'container' | 'name' | 'size'> = {},
+  choice: Pick<MediaCandidate, 'format' | 'container' | 'name' | 'size' | 'headers'> = {},
 ): Promise<CaptureOutcome> {
   const payload: AddDownloadPayload = { url: videoPage, source: 'chrome-media', autoStart: false, mediaPage: true, userAgent: navigator.userAgent };
   if (referrer && referrer !== videoPage) payload.referrer = referrer;
+  if (choice.headers) {
+    // D-80: a stream. OB2 fetches it and its pieces as the browser did, cookies included.
+    const sent = splitRequestHeaders(choice.headers);
+    if (sent.referrer) payload.referrer = sent.referrer;
+    if (sent.userAgent) payload.userAgent = sent.userAgent;
+    if (Object.keys(sent.headers).length > 0) payload.headers = sent.headers;
+    const cookies = await cookieHeader(videoPage);
+    if (cookies) payload.cookies = cookies;
+  }
   if (choice.format && choice.container) {
     payload.mediaFormat = choice.format;
     payload.mediaContainer = choice.container;
@@ -143,30 +152,60 @@ export async function downloadVideoPageWithOb2(
 /** Why the button's quality menu has no qualities to show (D-72). */
 export type FormatsFailure = 'unreachable' | 'tools-missing' | 'media-failed' | 'timeout' | 'incognito' | 'failed';
 
-/** `subtitles` (D-74) is absent when the OB2 that answered predates subtitles, and empty when the video has none. */
+/**
+ * `subtitles` (D-74) is absent when the OB2 that answered predates subtitles, and empty when the
+ * video has none. `url` (D-79) is the stream the options belong to, when OB2 read one of those
+ * instead of the page.
+ */
 export type FormatsOutcome =
-  | { action: 'listed'; title: string; options: MediaOption[]; subtitles?: MediaSubtitle[] }
+  | { action: 'listed'; title: string; options: MediaOption[]; subtitles?: MediaSubtitle[]; url?: string }
   | { action: 'failed'; reason: FormatsFailure; message?: string };
+
+/** Mirrors ProtocolValidator.MaxStreams and MaxTitleLength in the app. */
+export const MAX_STREAMS = 5;
+const MAX_TITLE_LENGTH = 300;
 
 /**
  * D-72: the qualities a video page offers, for the button's menu (D-74: and its subtitle tracks).
  * OB2 asks yt-dlp, which takes a few seconds; the host starts OB2 if needed, as for a capture.
- * The reply is checked before use.
+ * D-79: with the streams the page's player loaded, which OB2 reads when yt-dlp doesn't know the
+ * site, and the tab's title to name what it finds there. D-80: each with the request headers the
+ * browser sent for it and the cookies it holds for it. The reply is checked before use.
  */
-export async function fetchMediaFormats(videoPage: string, incognito = false): Promise<FormatsOutcome> {
+export async function fetchMediaFormats(videoPage: string, incognito = false, streams: readonly StreamInfo[] = [], title?: string): Promise<FormatsOutcome> {
   if (incognito) return { action: 'failed', reason: 'incognito' }; // D-61
   try {
-    const request = createMessage<MediaFormatsRequest>(MessageType.GetMediaFormats, { url: videoPage });
-    const reply = await sendToHost<MediaFormatsPayload>(request, MEDIA_FORMATS_TIMEOUT_MS);
+    const payload: MediaFormatsRequest = { url: videoPage };
+    if (streams.length > 0) {
+      payload.streams = await Promise.all(streams.slice(0, MAX_STREAMS).map(mediaStreamOf));
+      payload.userAgent = navigator.userAgent;
+      const name = title?.trim().slice(0, MAX_TITLE_LENGTH);
+      if (name) payload.title = name;
+    }
+    const reply = await sendToHost<MediaFormatsPayload>(createMessage(MessageType.GetMediaFormats, payload), MEDIA_FORMATS_TIMEOUT_MS);
     const options = reply.type === MessageType.MediaFormats && Array.isArray(reply.payload?.options) ? reply.payload.options.filter(isMediaOption) : [];
     if (options.length === 0) return { action: 'failed', reason: 'failed' };
     const outcome: FormatsOutcome = { action: 'listed', title: typeof reply.payload?.title === 'string' ? reply.payload.title : '', options };
     const subtitles = reply.payload?.subtitles;
     if (Array.isArray(subtitles)) outcome.subtitles = subtitles.map(mediaSubtitleOf).filter((s): s is MediaSubtitle => s !== undefined);
+    // Only a stream this request named: anything else would send OB2 somewhere the page never went.
+    const source = reply.payload?.url;
+    if (typeof source === 'string' && source !== videoPage && payload.streams?.some((s) => s.url === source)) outcome.url = source;
     return outcome;
   } catch (error) {
     return { action: 'failed', ...formatsFailure(error) };
   }
+}
+
+/** D-80: a stream as the protocol carries it; the user agent goes once for all of them. */
+async function mediaStreamOf(stream: StreamInfo): Promise<MediaStream> {
+  const sent = splitRequestHeaders(stream.headers);
+  const result: MediaStream = { url: stream.url };
+  if (sent.referrer) result.referrer = sent.referrer;
+  if (Object.keys(sent.headers).length > 0) result.headers = sent.headers;
+  const cookies = await cookieHeader(stream.url);
+  if (cookies) result.cookies = cookies;
+  return result;
 }
 
 function formatsFailure(error: unknown): { reason: FormatsFailure; message?: string } {

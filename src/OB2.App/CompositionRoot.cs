@@ -41,7 +41,11 @@ internal static class CompositionRoot
 
         // D-71: yt-dlp, Deno and ffmpeg for video pages, downloaded into the data root on first use.
         services.AddSingleton(_ => new MediaTools(storage.Paths.ToolsDirectory));
-        services.AddSingleton(sp => new MediaInspector(sp.GetRequiredService<MediaTools>(), sp.GetRequiredService<IClock>()));
+        // D-80: HLS and DASH streams are read by OB2 itself, with yt-dlp as the fallback.
+        services.AddSingleton(sp => new MediaInspector(
+            sp.GetRequiredService<MediaTools>(),
+            sp.GetRequiredService<IClock>(),
+            new StreamManifestReader(OB2.Core.Http.DownloadHttpClient.Create(TimeSpan.FromSeconds(30)), storage.Settings.Downloads.UserAgent)));
         services.AddSingleton(sp => new MediaToolInstaller(sp.GetRequiredService<MediaTools>(), storage.LoggerFactory));
 
         services.AddSingleton(sp => new DownloadEngine(

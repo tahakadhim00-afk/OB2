@@ -125,6 +125,90 @@ describe('button over videos (FR-24)', () => {
   });
 });
 
+describe('moving the button with the pointer (D-81)', () => {
+  // A 640×360 video at (100, 100): the button's corner may go from (108, 108) to (732, 452).
+  const box = { left: 100, top: 100, width: 640, height: 360 };
+  const press = (type: string, x: number, y: number) => mainButton().dispatchEvent(new MouseEvent(type, { clientX: x, clientY: y, button: 0, bubbles: true }));
+  const place = () => ['left', 'top', 'right', 'bottom'].map((side) => host().style.getPropertyValue(side));
+  const wrap = () => shadow().querySelector('.wrap')!;
+
+  it('sits in the top right corner until it is moved', () => {
+    overlay.show(addVideo(doc, { src: 'https://e.com/a.mp4' }, box));
+
+    expect(place()).toEqual(['auto', '108px', '8px', 'auto']);
+  });
+
+  it('follows a drag, keeps the new place, and the release is not a click', async () => {
+    const moved = jest.fn();
+    overlay.onMoved = moved;
+    overlay.show(addVideo(doc, { src: 'https://e.com/a.mp4' }, box));
+
+    press('pointerdown', 720, 120);
+    press('pointermove', 722, 121); // a hand's tremble is not a drag yet
+    expect(place()).toEqual(['auto', '108px', '8px', 'auto']);
+    press('pointermove', 320, 400);
+    press('pointerup', 320, 400);
+    mainButton().click(); // the browser's click after the release
+
+    // From (732, 108) by (-400, +280): the lower left part, so the menu opens upwards and to the right.
+    expect(place()).toEqual(['332px', 'auto', 'auto', '72px']);
+    expect(wrap().classList.contains('left')).toBe(true);
+    expect(wrap().classList.contains('up')).toBe(true);
+    expect(moved).toHaveBeenCalledTimes(1);
+    expect(moved).toHaveBeenCalledWith({ x: 224 / 624, y: 280 / 344 });
+    expect(send).not.toHaveBeenCalled();
+
+    mainButton().click(); // a real click afterwards still downloads
+    await Promise.resolve();
+    expect(send).toHaveBeenCalledWith({ url: 'https://e.com/a.mp4' });
+  });
+
+  it('a press that barely moves is still a click', async () => {
+    const moved = jest.fn();
+    overlay.onMoved = moved;
+    overlay.show(addVideo(doc, { src: 'https://e.com/a.mp4' }, box));
+
+    press('pointerdown', 720, 120);
+    press('pointermove', 723, 122);
+    press('pointerup', 723, 122);
+    mainButton().click();
+    await Promise.resolve();
+
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(moved).not.toHaveBeenCalled();
+  });
+
+  it('stays over the video however far it is dragged', () => {
+    overlay.show(addVideo(doc, { src: 'https://e.com/a.mp4' }, box));
+
+    press('pointerdown', 720, 120);
+    press('pointermove', -500, 2000);
+    press('pointerup', -500, 2000);
+
+    expect(overlay.position).toEqual({ x: 0, y: 1 });
+    expect(place()).toEqual(['108px', 'auto', 'auto', '8px']);
+  });
+
+  it('keeps its place over the next video, in proportion, and closes the menu while it moves', () => {
+    overlay.position = { x: 0, y: 1 };
+    overlay.show(addVideo(doc, { src: 'https://e.com/a.mp4' }, box));
+    expect(place()).toEqual(['108px', 'auto', 'auto', '8px']);
+    overlay.hide();
+
+    const fullscreen = addVideo(doc, { src: 'blob:https://e.com/1' }, { left: 0, top: 0, width: 1280, height: 720 });
+    overlay.addDetected({ url: 'https://cdn.e.com/a.mp4' });
+    overlay.addDetected({ url: 'https://cdn.e.com/b.mp4' });
+    overlay.show(fullscreen);
+    expect(place()).toEqual(['8px', 'auto', 'auto', '8px']);
+
+    mainButton().click();
+    expect(shadow().querySelector<HTMLUListElement>('.menu')!.hidden).toBe(false);
+    press('pointerdown', 20, 700);
+    press('pointermove', 640, 360);
+    expect(shadow().querySelector<HTMLUListElement>('.menu')!.hidden).toBe(true);
+  });
+});
+
 describe('button fallback: addresses in the page code (D-70)', () => {
   it('offers a video address written in a script when nothing else is known', () => {
     doc.body.insertAdjacentHTML('beforeend', '<script>cfg = {"file":"https:\\/\\/cdn.e.com\\/movie.mp4"}</script>');

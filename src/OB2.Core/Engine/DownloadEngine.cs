@@ -171,10 +171,13 @@ public sealed partial class DownloadEngine : IDisposable
                 cookies = _cookies[id] = saved;
             }
 
-            // A video page goes through yt-dlp (D-71); everything else through the segment engine.
-            IDownloadJob job = item.IsMedia
-                ? new MediaJob(id, _repository, _mediaTools, _clock, _loggerFactory.CreateLogger<MediaJob>(), OnJobStatusChanged)
-                : new DownloadJob(id, _repository, _http, _options(), _hostLimiter, GlobalLimiter, _clock, _loggerFactory.CreateLogger<DownloadJob>(), cookies, OnJobStatusChanged);
+            // A video page goes through yt-dlp (D-71), a stream OB2 read itself through its own
+            // stream job (D-80), everything else through the segment engine.
+            IDownloadJob job = !item.IsMedia
+                ? new DownloadJob(id, _repository, _http, _options(), _hostLimiter, GlobalLimiter, _clock, _loggerFactory.CreateLogger<DownloadJob>(), cookies, OnJobStatusChanged)
+                : StreamSpec.IsSpec(item.MediaFormat)
+                    ? new StreamJob(id, _repository, _http, _options(), GlobalLimiter, _mediaTools, _clock, _loggerFactory.CreateLogger<StreamJob>(), cookies, OnJobStatusChanged)
+                    : new MediaJob(id, _repository, _mediaTools, _clock, _loggerFactory.CreateLogger<MediaJob>(), OnJobStatusChanged);
             _jobs[id] = job;
             job.Start();
             // Remove only this job: a later Start for the same id may already have replaced it.

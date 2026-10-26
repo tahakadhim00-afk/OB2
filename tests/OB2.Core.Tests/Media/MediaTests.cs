@@ -308,8 +308,116 @@ public sealed class MediaInspectorTests : IDisposable
         _ytDlp.Calls.Should().Be(2);
     }
 
+    private static readonly Uri Movies = new("https://movies.example/watch/lupin");
+    private static readonly Uri Master = new("https://cdn.example/hls/master.m3u8?token=1");
+    private static readonly Uri Variant = new("https://cdn.example/hls/720/index.m3u8?token=1");
+    private const string Unsupported = "ERROR: Unsupported URL: https://movies.example/watch/lupin";
+
+    /// <summary>A stream as an older extension sent it: only its address, with the page as referrer.</summary>
+    private static StreamRequest S(Uri url) => StreamRequest.Plain(url, Movies.AbsoluteUri);
+    private const string StreamJson = """
+        { "title": "master", "extractor_key": "Generic", "formats": [
+          { "format_id": "720", "ext": "mp4", "vcodec": "avc1.64001f", "acodec": "mp4a.40.2", "height": 720, "protocol": "m3u8_native" } ] }
+        """;
+
+    [Fact]
+    public async Task A_site_yt_dlp_knows_is_read_from_the_page_and_its_streams_are_left_alone()
+    {
+        var (source, info) = await _inspector.InspectPageAsync(Page, [S(Master)], "Clip - YouTube");
+
+        source.Should().Be(Page);
+        info.Title.Should().Be("Clip");
+        _ytDlp.Calls.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task On_a_site_yt_dlp_does_not_know_the_first_stream_it_can_read_wins_named_after_the_tab()
+    {
+        // D-79: the movie-box.co case. The page is a script that loads its stream afterwards.
+        _ytDlp.Answers[Movies.AbsoluteUri] = (1, Unsupported);
+        _ytDlp.Answers[Master.AbsoluteUri] = (1, "ERROR: [generic] master: HTTP Error 403: Forbidden");
+        _ytDlp.Answers[Variant.AbsoluteUri] = (0, StreamJson.ReplaceLineEndings(" "));
+
+        var (source, info) = await _inspector.InspectPageAsync(Movies, [S(Master), S(Variant)], "Lupin - Movies");
+
+        source.Should().Be(Variant);
+        info.Title.Should().Be("Lupin - Movies");
+        info.Formats.Should().ContainSingle().Which.Id.Should().Be("720");
+        _ytDlp.Runs[1].Should().ContainInOrder("--referer", Movies.AbsoluteUri);
+        _ytDlp.Runs[2].Should().ContainInOrder("--referer", Movies.AbsoluteUri);
+
+        // The download (or the Download Video window) that follows finds the same answer.
+        (await _inspector.InspectAsync(Variant, Movies)).Title.Should().Be("Lupin - Movies");
+        _ytDlp.Calls.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task A_guess_from_the_pages_html_gives_way_to_the_stream_that_actually_played()
+    {
+        // The generic extractor finds the trailer named in the page; the player loaded the film.
+        _ytDlp.Answers[Movies.AbsoluteUri] = (0, """{ "title": "Lupin", "extractor_key": "Generic", "format_id": "trailer", "ext": "mp4", "height": 476 }""");
+        _ytDlp.Answers[Master.AbsoluteUri] = (0, StreamJson.ReplaceLineEndings(" "));
+
+        (await _inspector.InspectPageAsync(Movies, [S(Master)], "Lupin - Movies")).Source.Should().Be(Master);
+        (await _inspector.InspectPageAsync(Movies, [], null)).Source.Should().Be(Movies); // no stream: the guess is all there is
+
+        _ytDlp.Answers[Master.AbsoluteUri] = (1, "ERROR: [generic] master: HTTP Error 403: Forbidden");
+        var other = new Uri("https://cdn.example/other.m3u8");
+        _ytDlp.Answers[other.AbsoluteUri] = (1, "ERROR: [generic] other: HTTP Error 404: Not Found");
+        var (source, info) = await _inspector.InspectPageAsync(Movies, [S(other)], "Lupin - Movies");
+        source.Should().Be(Movies);
+        info.Title.Should().Be("Lupin");
+    }
+
+    [Fact]
+    public async Task Without_a_stream_an_unsupported_site_asks_for_the_video_to_be_played()
+    {
+        _ytDlp.Answers[Movies.AbsoluteUri] = (1, Unsupported);
+
+        var failure = await FluentActions.Awaiting(() => _inspector.InspectPageAsync(Movies, [], "Lupin - Movies")).Should().ThrowAsync<MediaException>();
+
+        failure.Which.Unsupported.Should().BeTrue();
+        failure.Which.Message.Should().Contain("does not support this site").And.Contain("Play the video");
+    }
+
+    [Fact]
+    public async Task When_the_streams_fail_too_the_reason_is_the_one_that_helps()
+    {
+        _ytDlp.Answers[Master.AbsoluteUri] = (1, "ERROR: [generic] master: HTTP Error 403: Forbidden");
+
+        // An unsupported site: what went wrong with its stream.
+        _ytDlp.Answers[Movies.AbsoluteUri] = (1, Unsupported);
+        await FluentActions.Awaiting(() => _inspector.InspectPageAsync(Movies, [S(Master)], null)).Should().ThrowAsync<MediaException>()
+            .WithMessage("yt-dlp does not support this site, and OB2 could not read the video's stream either: HTTP Error 403: Forbidden");
+
+        // A site yt-dlp knows: its own reason.
+        _ytDlp.Answers[Movies.AbsoluteUri] = (1, "ERROR: [vimeo] 123: This video is private");
+        await FluentActions.Awaiting(() => _inspector.InspectPageAsync(Movies, [S(Master)], null)).Should().ThrowAsync<MediaException>()
+            .WithMessage("This video is private");
+    }
+
+    [Fact]
+    public async Task At_most_five_streams_are_tried()
+    {
+        _ytDlp.Answers[Movies.AbsoluteUri] = (1, Unsupported);
+        var streams = Enumerable.Range(0, 8).Select(i => S(new Uri($"https://cdn.example/{i}.m3u8"))).ToList();
+        foreach (var stream in streams)
+        {
+            _ytDlp.Answers[stream.Url.AbsoluteUri] = (1, "ERROR: [generic] x: HTTP Error 403: Forbidden");
+        }
+
+        await FluentActions.Awaiting(() => _inspector.InspectPageAsync(Movies, streams, null)).Should().ThrowAsync<MediaException>();
+
+        _ytDlp.Calls.Should().Be(1 + MediaInspector.MaxStreams);
+    }
+
     private sealed class CountingYtDlp : IProcessRunner
     {
+        /// <summary>D-79: what yt-dlp answers per address; addresses not listed get the one-file answer.</summary>
+        public Dictionary<string, (int Code, string Line)> Answers { get; } = new(StringComparer.Ordinal);
+
+        public List<IReadOnlyList<string>> Runs { get; } = [];
+
         public int Calls { get; private set; }
 
         public bool Fail { get; set; }
@@ -317,6 +425,13 @@ public sealed class MediaInspectorTests : IDisposable
         public Task<int> RunAsync(string fileName, IReadOnlyList<string> arguments, Action<string> onOutput, Action<string> onError, CancellationToken cancellationToken)
         {
             Calls++;
+            Runs.Add(arguments);
+            if (Answers.TryGetValue(arguments[^1], out var answer))
+            {
+                (answer.Code == 0 ? onOutput : onError)(answer.Line);
+                return Task.FromResult(answer.Code);
+            }
+
             if (Fail)
             {
                 onError("ERROR: [youtube] dQw4w9WgXcQ: Video unavailable");
@@ -352,6 +467,39 @@ public sealed class YtDlpTests
         YtDlp.ErrorMessage(stderr).Should().Be("Video unavailable. This video is private");
         YtDlp.ErrorMessage(["ERROR: Unsupported URL: https://example.com/"]).Should().Be("Unsupported URL: https://example.com/");
         YtDlp.ErrorMessage(["nothing"]).Should().BeNull();
+        YtDlp.IsUnsupported("Unsupported URL: https://example.com/").Should().BeTrue();
+        YtDlp.IsUnsupported("Video unavailable").Should().BeFalse();
+    }
+
+    [Fact]
+    public void A_stream_is_fetched_with_the_page_that_played_it_as_referer()
+    {
+        // D-79: players' servers often refuse a stream without it; YouTube gets none, as before.
+        var stream = new Uri("https://cdn.example/hls/master.m3u8?token=1");
+        var page = new Uri("https://movies.example/watch/lupin");
+        YtDlp.InfoArguments(Tools, stream, page).Should().ContainInOrder("--referer", page.AbsoluteUri);
+        YtDlp.InfoArguments(Tools, stream).Should().NotContain("--referer");
+
+        var item = new DownloadItem
+        {
+            Url = stream.AbsoluteUri,
+            Referrer = page.AbsoluteUri,
+            FileName = "Lupin.mp4",
+            DestPath = @"C:\Videos\Lupin.mp4",
+            MediaFormat = "720",
+            MediaContainer = "mp4",
+        };
+        YtDlp.DownloadArguments(Tools, item).Should().ContainInOrder("--referer", page.AbsoluteUri);
+        item.MediaFormat = "subs:en";
+        item.MediaContainer = "srt";
+        YtDlp.DownloadArguments(Tools, item).Should().ContainInOrder("--referer", page.AbsoluteUri);
+
+        item.Url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+        item.Referrer = "https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=42";
+        YtDlp.DownloadArguments(Tools, item).Should().NotContain("--referer");
+        item.Url = stream.AbsoluteUri;
+        item.Referrer = "not an address";
+        YtDlp.DownloadArguments(Tools, item).Should().NotContain("--referer");
     }
 
     [Fact]

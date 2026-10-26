@@ -155,13 +155,47 @@ public sealed record AddDownloadPayload
 public sealed record MediaFormatsRequest
 {
     public string? Url { get; init; }
+
+    /// <summary>
+    /// D-79: the HLS and DASH manifests the page's player loaded, oldest first (at most
+    /// <see cref="ProtocolValidator.MaxStreams"/>). Tried when yt-dlp can't read the page itself.
+    /// D-80: each with the request the browser made for it.
+    /// </summary>
+    public IReadOnlyList<MediaStreamPayload>? Streams { get; init; }
+
+    /// <summary>D-79: the tab's title, for a video read from a stream, whose own name is "master" or "index".</summary>
+    public string? Title { get; init; }
+
+    /// <summary>D-80: the browser's user agent, which the streams were requested with.</summary>
+    public string? UserAgent { get; init; }
+}
+
+/// <summary>
+/// D-80: one stream of a <c>get_media_formats</c> request, as the browser requested it. Players'
+/// servers check more than the address: movie-box.co's refuse anything without its token header,
+/// <c>Origin</c> and <c>Referer</c>.
+/// </summary>
+public sealed record MediaStreamPayload
+{
+    public string? Url { get; init; }
+
+    /// <summary>The <c>Referer</c> the browser sent for it.</summary>
+    public string? Referrer { get; init; }
+
+    /// <summary>The other request headers the browser sent (<c>Origin</c>, the player's own); never Cookie, Referer or User-Agent.</summary>
+    public Dictionary<string, string>? Headers { get; init; }
+
+    /// <summary>The Cookie header for the stream's address. Travels over the pipe only; never logged (§8.3).</summary>
+    public string? Cookies { get; init; }
 }
 
 /// <summary>
 /// <c>media_formats</c> reply (D-72): the page's title and the button's menu entries, best first.
 /// D-74: <paramref name="Subtitles"/> lists the tracks OB2 can save, empty when the video has none.
+/// D-79: <paramref name="Url"/> is the address the options belong to, the page or one of the
+/// request's streams exactly as it was sent; <c>add_download</c> sends that one back.
 /// </summary>
-public sealed record MediaFormatsPayload(string Title, double? DurationSeconds, IReadOnlyList<MediaOptionPayload> Options, IReadOnlyList<MediaSubtitlePayload>? Subtitles = null);
+public sealed record MediaFormatsPayload(string Title, double? DurationSeconds, IReadOnlyList<MediaOptionPayload> Options, IReadOnlyList<MediaSubtitlePayload>? Subtitles = null, string? Url = null);
 
 /// <summary>One quality: <paramref name="Format"/> and <paramref name="Container"/> go back in <c>add_download</c>.</summary>
 public sealed record MediaOptionPayload(string Format, string Container, bool AudioOnly, string? Quality, string? Codec, string? Track, long? Size);

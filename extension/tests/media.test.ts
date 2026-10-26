@@ -1,5 +1,8 @@
 import { formatBytes } from '../src/format';
-import { isDownloadableMediaUrl, isMediaCandidate, MEDIA_MIN_BYTES, mediaFileName, mediaFromResponse, mediaLabel } from '../src/media';
+import {
+  isDownloadableMediaUrl, isMediaCandidate, isMediaChoice, isRequestHeaders, isStreamAddress, isStreamInfo, MEDIA_MIN_BYTES, mediaFileName, mediaFromResponse, mediaLabel,
+  requestHeadersOf, splitRequestHeaders, streamFromResponse,
+} from '../src/media';
 
 const response = (url: string, headers: Record<string, string>, statusCode = 200) => ({
   url,
@@ -51,6 +54,97 @@ describe('media detection (FR-24)', () => {
     expect(isMediaCandidate({ url: 'https://e.com/a.mp4', size: 5 })).toBe(true);
     expect(isMediaCandidate({ url: 'javascript:alert(1)' })).toBe(false);
     expect(isMediaCandidate({ url: 'https://e.com/a.mp4', size: '5' })).toBe(false);
+  });
+});
+
+describe('streams a player loads, for yt-dlp (D-79)', () => {
+  it.each([
+    ['an HLS playlist by its type', 'https://cdn.e.com/v/master.m3u8?token=abc', { 'Content-Type': 'application/vnd.apple.mpegurl' }],
+    ['an HLS playlist with an unusual name', 'https://cdn.e.com/play?id=7', { 'Content-Type': 'application/x-mpegURL; charset=utf-8' }],
+    ['a DASH manifest by its type', 'https://cdn.e.com/v/stream', { 'Content-Type': 'application/dash+xml' }],
+    ['a playlist served as text', 'https://cdn.e.com/hls/index.m3u8', { 'Content-Type': 'text/plain' }],
+    ['a manifest served with no useful type', 'https://cdn.e.com/dash/manifest.mpd', { 'Content-Type': 'application/octet-stream' }],
+  ])('keeps %s', (_name, url, headers) => {
+    expect(streamFromResponse(response(url, headers))).toBe(url);
+    expect(mediaFromResponse(response(url, headers))).toBeUndefined(); // never offered as a file
+  });
+
+  it.each([
+    ['a segment', 'https://cdn.e.com/hls/seg-12.ts', { 'Content-Type': 'video/mp2t' }],
+    ['a DASH segment', 'https://cdn.e.com/dash/chunk-3.m4s', { 'Content-Type': 'video/iso.segment' }],
+    ['an error page under the playlist name', 'https://cdn.e.com/hls/index.m3u8', { 'Content-Type': 'text/html' }],
+    ['a video file', 'https://cdn.e.com/a.mp4', { 'Content-Type': 'video/mp4' }],
+    ['an image', 'https://cdn.e.com/thumb.m3u8', { 'Content-Type': 'image/png' }],
+  ])('leaves out %s', (_name, url, headers) => {
+    expect(streamFromResponse(response(url, headers))).toBeUndefined();
+  });
+
+  it('ignores failed replies and addresses OB2 would refuse', () => {
+    expect(streamFromResponse(response('https://e.com/index.m3u8', { 'Content-Type': 'application/vnd.apple.mpegurl' }, 403))).toBeUndefined();
+    expect(streamFromResponse(response(`https://e.com/index.m3u8?t=${'a'.repeat(2048)}`, { 'Content-Type': 'application/vnd.apple.mpegurl' }))).toBeUndefined();
+    expect(isStreamAddress('https://e.com/index.m3u8')).toBe(true);
+    expect(isStreamAddress('blob:https://e.com/1')).toBe(false);
+    expect(isStreamAddress(7)).toBe(false);
+  });
+
+  it('lets a stream travel only as a video page, which goes to yt-dlp and never to Chrome', () => {
+    expect(isMediaCandidate({ url: 'https://e.com/index.m3u8', page: true, format: 'hls-720', container: 'mp4' })).toBe(true);
+    expect(isMediaCandidate({ url: 'https://e.com/index.m3u8' })).toBe(false);
+  });
+});
+
+describe('the request a player made for its stream (D-80)', () => {
+  // As chrome.webRequest.onSendHeaders reports movie-box.co's request for its DASH manifest.
+  const sent = [
+    { name: 'Origin', value: 'https://movie-box.co' },
+    { name: 'Referer', value: 'https://movie-box.co/' },
+    { name: 'User-Agent', value: 'Mozilla/5.0 Chrome/141' },
+    { name: 'X-MB-Token', value: 'Edge-Cache-Cookie=urlprefix=aHR0cHM6Ly9z:Expires=1793012617' },
+    { name: 'Accept', value: '*/*' },
+    { name: 'Cookie', value: 'sid=secret' },
+    { name: 'Authorization', value: 'Bearer secret' },
+    { name: 'Range', value: 'bytes=0-' },
+    { name: 'Accept-Encoding', value: 'gzip, br' },
+    { name: 'X-Broken', value: 'a\r\nHost: elsewhere' },
+  ];
+
+  it('keeps what the server may check, and leaves credentials and per-request headers to OB2', () => {
+    expect(requestHeadersOf(sent)).toEqual({
+      Origin: 'https://movie-box.co',
+      Referer: 'https://movie-box.co/',
+      'User-Agent': 'Mozilla/5.0 Chrome/141',
+      'X-MB-Token': 'Edge-Cache-Cookie=urlprefix=aHR0cHM6Ly9z:Expires=1793012617',
+      Accept: '*/*',
+    });
+    expect(requestHeadersOf(undefined)).toEqual({});
+  });
+
+  it('sends the Referer and User-Agent in fields of their own', () => {
+    expect(splitRequestHeaders(requestHeadersOf(sent))).toEqual({
+      referrer: 'https://movie-box.co/',
+      userAgent: 'Mozilla/5.0 Chrome/141',
+      headers: { Origin: 'https://movie-box.co', 'X-MB-Token': 'Edge-Cache-Cookie=urlprefix=aHR0cHM6Ly9z:Expires=1793012617', Accept: '*/*' },
+    });
+  });
+
+  it('checks headers that come from another context', () => {
+    expect(isRequestHeaders({ Origin: 'https://e.com' })).toBe(true);
+    expect(isRequestHeaders({ 'Bad Name': 'x' })).toBe(false);
+    expect(isRequestHeaders({ X: 'a\nb' })).toBe(false);
+    expect(isRequestHeaders({ X: 1 })).toBe(false);
+    expect(isRequestHeaders(['x'])).toBe(false);
+    expect(isStreamInfo({ url: 'https://e.com/a.mpd', headers: {} })).toBe(true);
+    expect(isStreamInfo({ url: 'https://e.com/a.mpd' })).toBe(false);
+    expect(isMediaCandidate({ url: 'https://e.com/a.mpd', page: true, format: 'stream:v2+a0', container: 'mp4', headers: { Origin: 'https://e.com' } })).toBe(true);
+    expect(isMediaCandidate({ url: 'https://e.com/a.mp4', headers: { Origin: 'https://e.com' } })).toBe(false); // only a stream carries them
+  });
+
+  it('accepts the stream qualities OB2 offers, and nothing that only looks like one', () => {
+    expect(isMediaChoice('stream:v1+a0', 'mp4')).toBe(true);
+    expect(isMediaChoice('stream:a0', 'm4a')).toBe(true);
+    expect(isMediaChoice('stream:v2', 'mp4')).toBe(true);
+    expect(isMediaChoice('stream:a0+v1', 'mp4')).toBe(false);
+    expect(isMediaChoice('stream:v1;rm', 'mp4')).toBe(false);
   });
 });
 

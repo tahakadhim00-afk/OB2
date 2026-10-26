@@ -254,6 +254,8 @@
     <sys:String x:Key="Media_NoFormats">yt-dlp found no video or audio on this page.</sys:String>
     <sys:String x:Key="Media_Failed">yt-dlp could not read this page: {0}</sys:String>
     <sys:String x:Key="Media_FailedHint">If the site changed recently, a newer yt-dlp usually fixes it.</sys:String>
+    <sys:String x:Key="Media_Unsupported">yt-dlp does not support this site.</sys:String>
+    <sys:String x:Key="Media_UnsupportedHint">Play the video in the browser for a moment, then use the Download with OB2 button over it and choose a quality there: OB2 then reads the stream the player loaded. Updating yt-dlp helps only if it has added this site since.</sys:String>
     <sys:String x:Key="Media_Retry">Try again</sys:String>
     <sys:String x:Key="Media_UpdateYtDlp">Update yt-dlp</sys:String>
     <sys:String x:Key="Media_ToolsHeading">One-time setup for video sites</sys:String>

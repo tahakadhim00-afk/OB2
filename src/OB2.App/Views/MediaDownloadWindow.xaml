@@ -39,7 +39,7 @@
         </StackPanel>
 
         <StackPanel Margin="0,4,0,0" Visibility="{Binding IsFailed, Converter={StaticResource BoolToVisibility}}">
-            <TextBlock Style="{StaticResource Hint}" Text="{StaticResource Media_FailedHint}" Margin="0,8,0,8" />
+            <TextBlock Style="{StaticResource Hint}" Text="{Binding FailedHint}" TextWrapping="Wrap" Margin="0,8,0,8" />
             <StackPanel Orientation="Horizontal">
                 <Button Content="{StaticResource Media_UpdateYtDlp}" Command="{Binding UpdateYtDlpCommand}" Padding="12,4" IsDefault="True" />
                 <Button Content="{StaticResource Media_Retry}" Command="{Binding RetryCommand}" Padding="12,4" Margin="8,0,0,0" />

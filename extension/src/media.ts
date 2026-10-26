@@ -1,7 +1,8 @@
 // Media detection (FR-24, decision D-69): the video and audio files a page loads, offered by the
 // button that floats over videos and by the video/audio context menu. OB2 downloads single files,
 // so streaming manifests and their segments (HLS, DASH) are left out, as are URLs that return
-// only one byte range of a file.
+// only one byte range of a file. D-79: the manifests are kept apart, for yt-dlp to read when it
+// doesn't know the site.
 
 import type { MediaOption, MediaSubtitle } from './protocol';
 import { parseHttpUrl } from './rules';
@@ -13,7 +14,8 @@ export interface MediaCandidate {
   size?: number;
   /**
    * D-71: `url` is a video page, not a file. OB2 asks yt-dlp what it offers and lets the user
-   * pick quality and audio (YouTube, and players that stream in pieces).
+   * pick quality and audio (YouTube, and players that stream in pieces). D-79: or the stream
+   * such a player loaded, when yt-dlp read that instead of the page.
    */
   page?: boolean;
   /**
@@ -23,9 +25,21 @@ export interface MediaCandidate {
   format?: string;
   container?: string;
   name?: string;
+  /** D-80: with a stream (`page`), the request headers the browser sent for it. */
+  headers?: RequestHeaders;
+}
+
+/** D-80: request headers by name, as the browser sent them. */
+export type RequestHeaders = Record<string, string>;
+
+/** D-80: a stream the frame's player loaded, with the request headers the browser sent for it. */
+export interface StreamInfo {
+  url: string;
+  headers: RequestHeaders;
 }
 
 const FORMAT_SPEC = /^[A-Za-z0-9_][A-Za-z0-9_.=@-]{0,79}(?:\+[A-Za-z0-9_][A-Za-z0-9_.=@-]{0,79})?$/;
+const STREAM_SPEC = /^stream:(?:v\d{1,3}(?:\+a\d{1,3})?|a\d{1,3})$/;
 const CONTAINER = /^[a-z0-9]{1,5}$/;
 const SUBTITLE_SPEC = /^(?:auto-)?subs:[A-Za-z0-9][A-Za-z0-9_-]{0,34}$/;
 const SUBTITLE_CONTAINER = /^(?:srt|ass|vtt)$/;
@@ -33,10 +47,67 @@ const SUBTITLE_CONTAINER = /^(?:srt|ass|vtt)$/;
 /**
  * D-72: a format and container OB2 may have offered; mirrors ProtocolValidator.IsMediaChoice in
  * the app. D-74: subtitle tracks (`subs:en`, `auto-subs:en-orig`) go only with srt, ass or vtt.
+ * D-80: tracks of a stream OB2 reads itself are `stream:v1+a0`.
  */
 export function isMediaChoice(format: unknown, container: unknown): boolean {
   if (typeof format !== 'string' || typeof container !== 'string') return false;
-  return SUBTITLE_SPEC.test(format) ? SUBTITLE_CONTAINER.test(container) : FORMAT_SPEC.test(format) && CONTAINER.test(container);
+  return SUBTITLE_SPEC.test(format) ? SUBTITLE_CONTAINER.test(container) : (FORMAT_SPEC.test(format) || STREAM_SPEC.test(format)) && CONTAINER.test(container);
+}
+
+/** Mirrors ProtocolValidator.MaxHeaders and its header checks in the app. */
+const MAX_HEADERS = 50;
+const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,100}$/;
+/** No line breaks or other control characters but tab: the value goes into a request as it is. */
+const HEADER_VALUE = /^[^\x00-\x08\x0a-\x1f\x7f]{0,8192}$/;
+/**
+ * Headers OB2 sets itself for each request (Range per piece, the connection, compression), and
+ * credentials it keeps apart: cookies are read from the browser's store when they are needed,
+ * and Authorization is never kept (§11.1).
+ */
+const UNKEPT_HEADERS = new Set([
+  'accept-encoding', 'authorization', 'connection', 'content-length', 'content-type', 'cookie', 'expect', 'host', 'if-modified-since',
+  'if-none-match', 'if-range', 'keep-alive', 'proxy-authorization', 'proxy-connection', 'range', 'te', 'transfer-encoding', 'upgrade',
+]);
+
+/**
+ * D-80: what the browser sent for a stream, as OB2 should send it again. Players' servers check
+ * more than the address: movie-box.co's refused anything without the token header its player
+ * adds, its Origin and its Referer.
+ */
+export function requestHeadersOf(list: ReadonlyArray<{ name: string; value?: string }> | undefined): RequestHeaders {
+  const headers: RequestHeaders = {};
+  let count = 0;
+  for (const { name, value } of list ?? []) {
+    if (count >= MAX_HEADERS || value === undefined || UNKEPT_HEADERS.has(name.toLowerCase())) continue;
+    if (!HEADER_NAME.test(name) || !HEADER_VALUE.test(value)) continue;
+    headers[name] = value;
+    count++;
+  }
+  return headers;
+}
+
+/** Messages from other contexts are checked before use. */
+export function isRequestHeaders(value: unknown): value is RequestHeaders {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const entries = Object.entries(value);
+  return entries.length <= MAX_HEADERS && entries.every(([name, v]) => HEADER_NAME.test(name) && typeof v === 'string' && HEADER_VALUE.test(v));
+}
+
+export function isStreamInfo(value: unknown): value is StreamInfo {
+  const s = value as StreamInfo | undefined;
+  return !!s && isStreamAddress(s.url) && isRequestHeaders(s.headers);
+}
+
+/** D-80: the Referer and User-Agent travel in fields of their own; the rest as headers. */
+export function splitRequestHeaders(headers: RequestHeaders): { referrer?: string; userAgent?: string; headers: RequestHeaders } {
+  const result: { referrer?: string; userAgent?: string; headers: RequestHeaders } = { headers: {} };
+  for (const [name, value] of Object.entries(headers)) {
+    const lower = name.toLowerCase();
+    if (lower === 'referer') result.referrer = value;
+    else if (lower === 'user-agent') result.userAgent = value;
+    else result.headers[name] = value;
+  }
+  return result;
 }
 
 /** D-74: one subtitle track of a `media_formats` reply, with only the containers OB2 may have offered. */
@@ -117,7 +188,12 @@ const STREAM_MIMES = new Set([
   'application/dash+xml', 'application/vnd.apple.mpegurl', 'application/x-mpegurl', 'audio/mpegurl',
   'audio/x-mpegurl', 'audio/iso.segment', 'video/iso.segment', 'video/mp2t', 'video/vnd.mpeg.dash.mpd',
 ]);
+const MANIFEST_MIMES = new Set([
+  'application/dash+xml', 'application/vnd.apple.mpegurl', 'application/x-mpegurl', 'audio/mpegurl', 'audio/x-mpegurl', 'video/vnd.mpeg.dash.mpd',
+]);
 const GENERIC_MIMES = new Set(['', 'application/octet-stream', 'binary/octet-stream', 'application/binary']);
+/** Mirrors ProtocolValidator.MaxUrlLength in the app. */
+const MAX_URL_LENGTH = 2048;
 /** Query parameters that make a URL return one chunk of a file (YouTube `range`, Facebook `bytestart`). */
 const CHUNK_PARAMS = ['range', 'bytestart', 'byteend'];
 
@@ -168,6 +244,29 @@ export function mediaFromResponse(details: ResponseFacts): MediaCandidate | unde
   return candidate;
 }
 
+/**
+ * D-79: an HLS or DASH manifest a player loaded (`master.m3u8`, `manifest.mpd`), by its type or
+ * by its extension when the server doesn't say. yt-dlp reads one like a page; its segments are
+ * no use on their own.
+ */
+export function streamFromResponse(details: ResponseFacts): string | undefined {
+  if (details.statusCode !== 200) return undefined;
+  const url = parseHttpUrl(details.url);
+  if (!url || url.href.length > MAX_URL_LENGTH) return undefined;
+  const type = details.responseHeaders?.find((h) => h.name.toLowerCase() === 'content-type')?.value;
+  const mime = (type ?? '').toLowerCase().split(';')[0].trim();
+  if (MANIFEST_MIMES.has(mime)) return url.href;
+  const ext = urlExtension(url);
+  // An error page or a segment under a manifest's name is not one.
+  const other = mime === 'text/html' || /^(?:video|audio|image)\//.test(mime);
+  return ext && STREAM_MANIFEST_EXTENSIONS.has(ext) && !other ? url.href : undefined;
+}
+
+/** D-79: a stream the frame reported, checked before it goes to OB2. */
+export function isStreamAddress(value: unknown): value is string {
+  return typeof value === 'string' && value.length <= MAX_URL_LENGTH && !!parseHttpUrl(value);
+}
+
 /** A source address OB2 can download as one file: http(s), not a streaming manifest or segment. */
 export function isDownloadableMediaUrl(value: string | undefined): boolean {
   const url = parseHttpUrl(value);
@@ -182,11 +281,13 @@ export function isMediaCandidate(value: unknown): value is MediaCandidate {
   return (
     !!m &&
     typeof m.url === 'string' &&
-    isDownloadableMediaUrl(m.url) &&
+    // D-79: a video page may be a stream, which goes to yt-dlp, never to Chrome.
+    (m.page === true ? isStreamAddress(m.url) : isDownloadableMediaUrl(m.url)) &&
     (m.mime === undefined || typeof m.mime === 'string') &&
     (m.size === undefined || (typeof m.size === 'number' && m.size > 0)) &&
     (m.page === undefined || typeof m.page === 'boolean') &&
     (m.format === undefined ? m.container === undefined : m.page === true && isMediaChoice(m.format, m.container)) &&
+    (m.headers === undefined || (m.page === true && isRequestHeaders(m.headers))) &&
     (m.name === undefined || (typeof m.name === 'string' && m.name.length <= 300))
   );
 }

@@ -176,6 +176,41 @@ public sealed class MessageFramingTests
         ProtocolValidator.Validate(Ask(null))!.PayloadAs<ErrorPayload>()!.Code.Should().Be(ProtocolErrors.InvalidUrl);
     }
 
+    [Fact]
+    public void The_streams_a_player_loaded_are_a_few_web_addresses()
+    {
+        // D-79: each one becomes a request and maybe a yt-dlp run, so they are checked like the page.
+        static ProtocolMessage Ask(MediaStreamPayload[] streams, string? title = null) => ProtocolMessage.Create(
+            MessageTypes.GetMediaFormats,
+            new MediaFormatsRequest { Url = "https://movies.example/watch/1", Streams = streams, Title = title });
+        static MediaStreamPayload S(string url, Dictionary<string, string>? headers = null, string? referrer = null) => new() { Url = url, Headers = headers, Referrer = referrer };
+        static string? Code(ProtocolMessage m) => ProtocolValidator.Validate(m)?.PayloadAs<ErrorPayload>()!.Code;
+
+        Code(Ask([S("https://cdn.example/master.m3u8"), S("https://cdn.example/manifest.mpd")], "Lupin - Movies")).Should().BeNull();
+        Code(Ask([.. Enumerable.Range(0, ProtocolValidator.MaxStreams + 1).Select(i => S($"https://cdn.example/{i}.m3u8"))])).Should().Be(ProtocolErrors.InvalidMessage);
+        Code(Ask([S("file:///C:/Windows/win.ini")])).Should().Be(ProtocolErrors.InvalidMessage);
+        Code(Ask([null!])).Should().Be(ProtocolErrors.InvalidMessage);
+        Code(Ask([S("https://cdn.example/master.m3u8")], new string('a', ProtocolValidator.MaxTitleLength + 1))).Should().Be(ProtocolErrors.InvalidMessage);
+
+        // D-80: the browser's headers go into requests and onto yt-dlp's command line.
+        var token = new Dictionary<string, string> { ["X-MB-Token"] = "Edge-Cache-Cookie=urlprefix=aHR0cHM6Ly9z:Expires=1793012617", ["Origin"] = "https://movie-box.co" };
+        Code(Ask([S("https://cdn.example/index_web.mpd", token, "https://movie-box.co/")])).Should().BeNull();
+        Code(Ask([S("https://cdn.example/a.mpd", new() { ["X-Evil"] = "a\r\nHost: elsewhere" })])).Should().Be(ProtocolErrors.InvalidMessage);
+        Code(Ask([S("https://cdn.example/a.mpd", new() { ["Bad Name"] = "x" })])).Should().Be(ProtocolErrors.InvalidMessage);
+        Code(Ask([S("https://cdn.example/a.mpd", referrer: "not an address")])).Should().Be(ProtocolErrors.InvalidMessage);
+    }
+
+    [Fact]
+    public void A_download_carries_plain_headers_only()
+    {
+        static ProtocolMessage Add(Dictionary<string, string> headers, string? cookies = null) =>
+            ProtocolMessage.Create(MessageTypes.AddDownload, new AddDownloadPayload { Url = "https://cdn.example/a.mpd", Headers = headers, Cookies = cookies, Source = "chrome-media" });
+
+        ProtocolValidator.Validate(Add(new() { ["Accept-Language"] = "en-US,en;q=0.9", ["Origin"] = "https://movie-box.co" })).Should().BeNull();
+        ProtocolValidator.Validate(Add(new() { ["X-A"] = "1\n2" }))!.PayloadAs<ErrorPayload>()!.Code.Should().Be(ProtocolErrors.InvalidMessage);
+        ProtocolValidator.Validate(Add([], "a=1\r\nX: y"))!.PayloadAs<ErrorPayload>()!.Code.Should().Be(ProtocolErrors.InvalidMessage);
+    }
+
     [Theory]
     [InlineData("137+140", "mp4", true, true)]
     [InlineData("hls-720", "mp4", true, true)]

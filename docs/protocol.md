@@ -37,7 +37,7 @@ Both links use Chrome's Native Messaging framing: a 32-bit **little-endian** len
 | Request | Sent by | Reply | Notes |
 |---------|---------|-------|-------|
 | `add_download` | extension, second `OB2.exe` | `ack` or `error` | Payload below. The **host** starts OB2 if it isn't running. |
-| `get_media_formats` | extension (a click on the video button, D-72) | `media_formats` or `error` | `{ url }` of a video page. The app asks yt-dlp; up to 90 s. The host starts OB2 if it isn't running. |
+| `get_media_formats` | extension (a click on the video button, D-72) | `media_formats` or `error` | `{ url, streams?, title?, userAgent? }`: a video page, and (D-79) up to 5 HLS/DASH manifests its player loaded, oldest first, each as the browser requested it (D-80), with the tab's title. The app asks yt-dlp and reads streams itself; up to 90 s. The host starts OB2 if it isn't running. |
 | `ping` | extension | `pong` `{ appRunning, hostVersion }` | Answered by the host itself; never starts OB2. |
 | `get_status` | extension (popup, rule refresh) | `status` or `error` | Never starts OB2: `APP_NOT_RUNNING` instead. |
 | `pause_all` | extension popup | `ack` `{ status: "paused" }` | Same as Stop All in the window. |
@@ -63,10 +63,23 @@ Exactly as in PRD §8.3:
 | `source` | string | `chrome-downloads`, `chrome-context-menu`, `chrome-media` (the button over a video or the video/audio context menu, D-69), `chrome-page` (a link picked from the popup's "Find downloads" list, D-70), or `cli`. |
 | `autoStart` | bool | `true` skips the confirmation dialog for this request. |
 | `mediaPage` | bool | `true`: `url` is a video page (YouTube or another site yt-dlp supports), not a file. The app opens the Download Video window to choose quality and audio, and replies `"confirming"`. YouTube watch/Shorts/embed addresses are treated this way even without the flag (D-71). |
-| `mediaFormat` | string | Only with `mediaPage`: the quality picked on the video button, a `format` from `media_formats` (`137+140`). With confirmation off the app adds the download at once and replies with its id; with confirmation on, the Download Video window opens with this quality selected (D-72). One or two plain format ids, else `INVALID_MESSAGE`. Or a subtitle track's `format` (`subs:en`, `auto-subs:en-orig`, D-74): `subs:` or `auto-subs:` and a language key of letters, digits, `_` and `-`. |
+| `mediaFormat` | string | Only with `mediaPage`: the quality picked on the video button, a `format` from `media_formats` (`137+140`). With confirmation off the app adds the download at once and replies with its id; with confirmation on, the Download Video window opens with this quality selected (D-72). One or two plain format ids, else `INVALID_MESSAGE`. Or a subtitle track's `format` (`subs:en`, `auto-subs:en-orig`, D-74): `subs:` or `auto-subs:` and a language key of letters, digits, `_` and `-`. Or (D-80) tracks of a stream OB2 reads itself: `stream:v1+a0` (picture and sound), `stream:v2` (a picture with its own sound) or `stream:a0` (sound alone); OB2 downloads these without yt-dlp. |
 | `mediaContainer` | string | Required with `mediaFormat`: the finished file's extension (`mp4`), from the same option; `srt`, `ass` or `vtt` for subtitles. `filenameHint` then carries the video's title with that extension; the app adds the language to a subtitle's name (`Title.en.srt`). |
 
-Validation, done by both the host and the app (`ProtocolValidator`): the URL must be present, at most 2048 characters, absolute, and `http`/`https` (otherwise `INVALID_URL` or `UNSUPPORTED_SCHEME`).
+Validation, done by both the host and the app (`ProtocolValidator`): the URL must be present, at most 2048 characters, absolute, and `http`/`https` (otherwise `INVALID_URL` or `UNSUPPORTED_SCHEME`). D-80: `headers` holds at most 50 entries, each name an RFC 9110 token and each value (like `referrer` and `cookies`) at most 8192 characters with no line break or other control character but tab (otherwise `INVALID_MESSAGE`), because headers go into requests and onto yt-dlp's command line.
+
+`url` may also be a stream from a `media_formats` reply's `url` (D-79), with `mediaPage`. D-80: the extension then sends the request the browser made for it: `referrer` and `userAgent` as Chrome sent them, the other headers it sent (`Origin`, the player's own tokens) in `headers`, and the browser's cookies for the stream in `cookies`. Every piece of the stream is fetched with them.
+
+### `get_media_formats` payload (D-72, D-79, D-80)
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `url` | string, required | The video page. Validated like `add_download`'s. |
+| `streams` | object[] | At most 5 HLS (`.m3u8`) or DASH (`.mpd`) manifests the page's player loaded, oldest first (otherwise `INVALID_MESSAGE`). Sent only after the click. Never on YouTube. Each is `{ url, referrer?, headers?, cookies? }` (D-80): an `http`/`https` address of at most 2048 characters, the `Referer` Chrome sent for it, the other request headers Chrome sent (never Cookie, Authorization, Range or the connection's own; checked like `add_download`'s), and the Cookie header for its address, which is never logged. |
+| `title` | string | The tab's title, at most 300 characters; sent only with `streams`. Names a video read from a stream, whose own name is `master` or `index`. |
+| `userAgent` | string | D-80: the browser's user agent, sent with `streams`. |
+
+The app asks yt-dlp for the page first. When yt-dlp fails, or only guessed from the page's HTML (its generic extractor), it tries the streams in order, and the first with formats wins. D-80: OB2 reads each stream itself first, with the browser's request; its options are then `stream:` formats, which OB2 downloads without yt-dlp. When OB2 cannot read one, yt-dlp tries it with the same headers (not the cookies). A copy-protected or live stream ends the search at once. If none works, the page's own guess (if any) is the answer; otherwise the error is the page's, or, for a site yt-dlp does not support, the stream's.
 
 ### `ack` for `add_download`
 
@@ -107,6 +120,8 @@ Validation, done by both the host and the app (`ProtocolValidator`): the URL mus
 ```
 
 Every picture quality, best first, each with the site's default sound track, then sound alone, one per language. `track` is present only when the video has sound in several languages; `size` is yt-dlp's estimate. The app keeps the answer for 10 minutes, so the `add_download` that follows does not run yt-dlp again.
+
+`url` (D-79) is the address the options belong to: the page, or one of the request's `streams` exactly as it was sent. The extension sends that address back in `add_download`, and uses only a stream it sent. Absent from an app older than D-79.
 
 `subtitles` (D-74) lists the tracks OB2 can save: the site's own, then the auto-generated ones (`automatic: true`) in languages the site has none in. YouTube's machine translations are left out. It is an empty list when the video has none, and absent from an app older than D-74. Each track goes back in `add_download` as `mediaFormat` = `format` and `mediaContainer` = one of `containers`.
 

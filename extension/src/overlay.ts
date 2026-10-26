@@ -5,11 +5,16 @@
 // CSS and scripts can't restyle or read it, and it is built without innerHTML (Trusted Types).
 // D-72: on a video page (YouTube) a click lists the qualities OB2 reads with yt-dlp, and each
 // entry downloads that quality. D-74: then the video's subtitle tracks, each with a button per
-// format (SRT, ASS, VTT) that downloads it as a file of its own.
+// format (SRT, ASS, VTT) that downloads it as a file of its own. D-79: the click also names the
+// HLS and DASH manifests this page's player loaded, which OB2 reads when yt-dlp doesn't know the
+// site; the entries then download that stream. D-81: the button can be dragged anywhere over the
+// video; the place is kept per site (the content script saves it).
 
 import type { FormatsFailure, FormatsOutcome } from './capture';
 import { formatBytes } from './format';
-import { isDownloadableMediaUrl, isYouTubeHost, mediaLabel, optionLabel, subtitleLabel, youTubeVideoPage, type MediaCandidate } from './media';
+import {
+  isDownloadableMediaUrl, isYouTubeHost, mediaLabel, optionLabel, subtitleLabel, youTubeVideoPage, type MediaCandidate, type RequestHeaders, type StreamInfo,
+} from './media';
 import type { MediaSubtitle } from './protocol';
 import { scanPage } from './scan';
 
@@ -26,6 +31,26 @@ const MAX_DETECTED = 30;
 const SCAN_REUSE_MS = 5000;
 /** A video page's qualities are asked for again after this long (D-72). */
 const FORMATS_REUSE_MS = 5 * 60_000;
+/** D-79: manifests kept per frame, and the most one request names (the app takes no more). */
+const MAX_STREAMS = 20;
+const STREAMS_ASKED = 5;
+/** D-79: an encrypted player (Netflix and the like). Nothing can download what it plays. */
+const PROTECTED_TEXT = 'This video is copy-protected (DRM), so OB2 cannot download it.';
+/** D-81: a press that moves further than this is a drag, not a click. */
+const DRAG_THRESHOLD = 5;
+
+/**
+ * D-81: where the button sits over the video, as fractions of the room it can move in: 0 is the
+ * left (top) edge, 1 the right (bottom) one. Fractions, not pixels, so the place holds when the
+ * video grows to fullscreen or shrinks back.
+ */
+export interface ButtonPosition {
+  x: number;
+  y: number;
+}
+
+/** The top right corner, where the button sits until it is moved. */
+export const DEFAULT_POSITION: ButtonPosition = { x: 1, y: 0 };
 
 const RESULT_TEXT: Record<SendResult, string> = {
   sent: 'Sent to OB2',
@@ -47,8 +72,13 @@ const FORMATS_TEXT: Record<FormatsFailure, string> = {
 const CSS = `
 :host { all: initial; }
 .wrap { font: 13px/1.3 "Segoe UI", system-ui, sans-serif; display: flex; flex-direction: column; align-items: flex-end; }
+.wrap.left { align-items: flex-start; }
+.wrap.up { flex-direction: column-reverse; }
+.wrap.up .menu { margin: 0 0 4px; }
 .main { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 0; border-radius: 4px;
-  background: #1a73e8; color: #fff; font: inherit; cursor: pointer; box-shadow: 0 1px 4px rgba(0, 0, 0, .45); }
+  background: #1a73e8; color: #fff; font: inherit; cursor: pointer; box-shadow: 0 1px 4px rgba(0, 0, 0, .45);
+  touch-action: none; user-select: none; }
+.main.dragging { cursor: grabbing; }
 .main:hover { background: #1765cc; }
 .main:focus-visible { outline: 2px solid #fff; outline-offset: -4px; }
 .main:disabled { cursor: default; background: #3c4043; }
@@ -88,14 +118,35 @@ function candidatesFor(media: HTMLMediaElement, detected: readonly MediaCandidat
 
 interface Ui {
   host: HTMLElement;
+  wrap: HTMLDivElement;
   main: HTMLButtonElement;
   label: HTMLSpanElement;
   menu: HTMLUListElement;
 }
 
+/** D-81: a press on the button, until it is known to be a click or a drag. */
+interface Drag {
+  pointerId?: number;
+  startX: number;
+  startY: number;
+  /** The button's top left corner when the press began. */
+  left: number;
+  top: number;
+  moving: boolean;
+}
+
 export class MediaOverlay {
   enabled = true;
+  /** D-81: where the button sits over the video; the content script sets the one saved for this site. */
+  position: ButtonPosition = DEFAULT_POSITION;
+  /** D-81: told the new place after the user dragged the button, to keep it for this site. */
+  onMoved?: (position: ButtonPosition) => void;
+  private drag?: Drag;
+  /** D-81: the click a browser sends when a drag ends is not a click on the button. */
+  private dragEnded = false;
   private readonly detected: MediaCandidate[] = [];
+  /** D-79: manifests in the order the player loaded them, each with the page it was on. D-80: and the headers the browser sent. */
+  private readonly streams: Array<StreamInfo & { page: string }> = [];
   private ui?: Ui;
   private target?: HTMLVideoElement;
   private candidates: MediaCandidate[] = [];
@@ -117,7 +168,7 @@ export class MediaOverlay {
     private readonly doc: Document,
     private readonly send: (media: MediaCandidate) => Promise<SendResult>,
     private readonly shadowMode: ShadowRootMode = 'closed',
-    private readonly listFormats?: (pageUrl: string) => Promise<FormatsOutcome>,
+    private readonly listFormats?: (pageUrl: string, streams: readonly StreamInfo[]) => Promise<FormatsOutcome>,
   ) {}
 
   attach(): void {
@@ -147,6 +198,28 @@ export class MediaOverlay {
   /** What the background saw this frame load, oldest first. */
   detectedMedia(): readonly MediaCandidate[] {
     return this.detected;
+  }
+
+  /** D-79: an HLS or DASH manifest the background saw this frame load. D-80: with the headers the browser sent for it. */
+  addStream(url: string, headers: RequestHeaders = {}): void {
+    const known = this.streams.find((s) => s.url === url);
+    if (known) {
+      known.headers = headers; // a playlist loaded again carries the player's latest token
+      return;
+    }
+    this.streams.push({ url, headers, page: withoutHash(this.doc.URL) });
+    if (this.streams.length > MAX_STREAMS) this.streams.shift();
+  }
+
+  /**
+   * D-79: the manifests loaded on the page now shown, oldest first: a player loads the master
+   * playlist (every quality) before the one quality it plays. One that played on another page of
+   * a single-page site belongs to another video. None on YouTube, which yt-dlp always reads.
+   */
+  streamsForPage(): StreamInfo[] {
+    const page = withoutHash(this.doc.URL);
+    if (isYouTubeHost(page)) return [];
+    return this.streams.filter((s) => s.page === page).slice(0, STREAMS_ASKED).map(({ url, headers }) => ({ url, headers }));
   }
 
   /** For "Download media with OB2" on an element whose src Chrome can't hand over (blob:). */
@@ -194,6 +267,7 @@ export class MediaOverlay {
     this.cancelHide();
     this.target = undefined;
     this.menuPage = undefined;
+    this.drag = undefined;
     if (this.ui) {
       setDisplay(this.ui.host, false);
       this.ui.menu.hidden = true;
@@ -271,8 +345,101 @@ export class MediaOverlay {
       this.hide();
       return;
     }
-    this.ui.host.style.setProperty('top', `${Math.max(rect.top, 0) + INSET}px`, 'important');
-    this.ui.host.style.setProperty('right', `${Math.max(view.clientWidth - rect.right, 0) + INSET}px`, 'important');
+
+    // D-81: the button keeps its corner of the screen fixed and the menu grows away from it, so
+    // near the bottom the menu opens upwards and near the left edge it opens to the right.
+    const room = this.room(rect);
+    const { width, height } = this.ui.main.getBoundingClientRect();
+    const left = room.left + this.position.x * room.width;
+    const top = room.top + this.position.y * room.height;
+    const fromRight = this.position.x >= 0.5;
+    const fromBottom = this.position.y > 0.5;
+    const style = this.ui.host.style;
+    style.setProperty('left', fromRight ? 'auto' : `${left}px`, 'important');
+    style.setProperty('right', fromRight ? `${room.viewWidth - left - width}px` : 'auto', 'important');
+    style.setProperty('top', fromBottom ? 'auto' : `${top}px`, 'important');
+    style.setProperty('bottom', fromBottom ? `${room.viewHeight - top - height}px` : 'auto', 'important');
+    this.ui.wrap.classList.toggle('left', !fromRight);
+    this.ui.wrap.classList.toggle('up', fromBottom);
+  }
+
+  /**
+   * D-81: where the button's top left corner may go: the part of the video on screen, less the
+   * inset and the button itself. Without a layout (no viewport size) the video's edges stand in.
+   */
+  private room(rect: DOMRect): { left: number; top: number; width: number; height: number; viewWidth: number; viewHeight: number } {
+    const view = this.doc.documentElement;
+    const viewWidth = view.clientWidth > 0 ? view.clientWidth : rect.right;
+    const viewHeight = view.clientHeight > 0 ? view.clientHeight : rect.bottom;
+    const { width, height } = this.ui!.main.getBoundingClientRect();
+    const left = Math.max(rect.left, 0) + INSET;
+    const top = Math.max(rect.top, 0) + INSET;
+    return {
+      left,
+      top,
+      width: Math.max(0, Math.min(rect.right, viewWidth) - INSET - width - left),
+      height: Math.max(0, Math.min(rect.bottom, viewHeight) - INSET - height - top),
+      viewWidth,
+      viewHeight,
+    };
+  }
+
+  /** D-81: a press on the button may become a drag; only a release without moving is a click. */
+  private onDragStart(event: PointerEvent): void {
+    this.dragEnded = false;
+    if (event.button !== 0 || !this.target || !this.ui) return;
+    const room = this.room(this.target.getBoundingClientRect());
+    this.drag = {
+      pointerId: typeof event.pointerId === 'number' ? event.pointerId : undefined,
+      startX: event.clientX,
+      startY: event.clientY,
+      left: room.left + this.position.x * room.width,
+      top: room.top + this.position.y * room.height,
+      moving: false,
+    };
+    if (this.drag.pointerId !== undefined) {
+      try {
+        this.ui.main.setPointerCapture(this.drag.pointerId); // keep the moves coming however fast the pointer goes
+      } catch {
+        // The pointer is already gone.
+      }
+    }
+  }
+
+  private onDragMove(event: PointerEvent): void {
+    const drag = this.drag;
+    if (!drag || !this.target || !this.ui) return;
+    const dx = event.clientX - drag.startX;
+    const dy = event.clientY - drag.startY;
+    if (!drag.moving) {
+      if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+      drag.moving = true;
+      this.ui.menu.hidden = true;
+      this.menuPage = undefined;
+      this.ui.main.classList.add('dragging');
+      this.cancelHide();
+    }
+
+    const room = this.room(this.target.getBoundingClientRect());
+    const fraction = (offset: number, span: number, fallback: number) => (span > 0 ? Math.min(1, Math.max(0, offset / span)) : fallback);
+    this.position = {
+      x: fraction(drag.left + dx - room.left, room.width, this.position.x),
+      y: fraction(drag.top + dy - room.top, room.height, this.position.y),
+    };
+    this.reposition();
+  }
+
+  private onDragEnd(): void {
+    const drag = this.drag;
+    if (!drag) return;
+    this.drag = undefined;
+    if (drag.pointerId !== undefined && this.ui?.main.hasPointerCapture?.(drag.pointerId)) {
+      this.ui.main.releasePointerCapture(drag.pointerId);
+    }
+    if (!drag.moving) return;
+    this.ui?.main.classList.remove('dragging');
+    this.dragEnded = true;
+    this.onMoved?.(this.position);
   }
 
   /** In fullscreen only the fullscreen element's subtree is drawn, so the button moves into it. */
@@ -294,6 +461,10 @@ export class MediaOverlay {
   }
 
   private onMainClick(): void {
+    if (this.dragEnded) {
+      this.dragEnded = false; // the release of a drag
+      return;
+    }
     if (this.busy) return;
     if (this.candidates.length === 1 && !this.choosesQuality(this.candidates[0])) {
       void this.sendMedia(this.candidates[0]);
@@ -326,24 +497,42 @@ export class MediaOverlay {
    */
   private async openQualityMenu(page: MediaCandidate): Promise<void> {
     const ui = this.ui!;
+    const streams = this.streamsForPage();
+    // D-79: an encrypted player with no manifest to try (Netflix fetches its own) can only fail.
+    const encrypted = this.isEncrypted() && !youTubeVideoPage(page.url);
+    if (encrypted && streams.length === 0) {
+      this.menuPage = undefined;
+      this.fillMenu([this.menuNote(PROTECTED_TEXT)]);
+      return;
+    }
+
     this.menuPage = page.url;
     this.fillMenu([this.menuNote('Getting the qualities from OB2…')]);
     ui.menu.setAttribute('aria-busy', 'true');
-    const outcome = await this.formatsOf(page.url);
+    const outcome = await this.formatsOf(page.url, streams);
     if (ui.menu.hidden || this.menuPage !== page.url) return; // closed, or another video, meanwhile
 
     const whole = { url: page.url, page: true } satisfies MediaCandidate;
     if (outcome.action === 'listed') {
+      // D-79: what OB2 listed is what it downloads, the page or the stream its player loaded.
+      // D-80: a stream goes with the headers the browser sent for it.
+      const stream = streams.find((s) => s.url === outcome.url);
+      const source: MediaCandidate = stream ? { url: stream.url, page: true, headers: stream.headers } : { url: page.url, page: true };
       const name = outcome.title.trim().slice(0, 200) || undefined;
       const items = outcome.options.map((option) => {
         const label = optionLabel(option, formatBytes);
-        const choice: MediaCandidate = { ...whole, format: option.format, container: option.container, name };
+        const choice: MediaCandidate = { ...source, format: option.format, container: option.container, name };
         if (option.size && option.size > 0) choice.size = option.size;
         return this.menuItem(label, label, () => void this.sendMedia(choice));
       });
-      const more = this.menuItem('More choices in OB2… (audio track, folder)', page.url, () => void this.sendMedia(whole));
+      const more = this.menuItem('More choices in OB2… (audio track, folder)', source.url, () => void this.sendMedia(source));
       more.querySelector('button')!.classList.add('more');
-      this.fillMenu([...items, ...this.subtitleItems(outcome.subtitles, whole, name), more]);
+      this.fillMenu([...items, ...this.subtitleItems(outcome.subtitles, source, name), more]);
+      return;
+    }
+
+    if (encrypted && outcome.reason === 'media-failed') {
+      this.fillMenu([this.menuNote(PROTECTED_TEXT)]);
       return;
     }
 
@@ -354,6 +543,11 @@ export class MediaOverlay {
       items.push(this.menuItem('Open in OB2…', page.url, () => void this.sendMedia(whole)));
     }
     this.fillMenu(items);
+  }
+
+  /** D-79: the video plays through Encrypted Media Extensions, i.e. under DRM. */
+  private isEncrypted(): boolean {
+    return !!this.target?.mediaKeys;
   }
 
   /**
@@ -392,19 +586,23 @@ export class MediaOverlay {
     return li;
   }
 
-  /** The page's qualities, asked once and kept for a while; a failure is asked again next time. */
-  private formatsOf(pageUrl: string): Promise<FormatsOutcome> {
+  /**
+   * The page's qualities, asked once and kept for a while; a failure is asked again next time.
+   * D-79: a stream the player loaded since is a new question.
+   */
+  private formatsOf(pageUrl: string, streams: readonly StreamInfo[]): Promise<FormatsOutcome> {
     const now = Date.now();
-    for (const [url, kept] of this.formats) {
-      if (now - kept.at >= FORMATS_REUSE_MS) this.formats.delete(url);
+    for (const [key, kept] of this.formats) {
+      if (now - kept.at >= FORMATS_REUSE_MS) this.formats.delete(key);
     }
-    const kept = this.formats.get(pageUrl);
+    const key = [pageUrl, ...streams.map((s) => s.url)].join('\n');
+    const kept = this.formats.get(key);
     if (kept) return kept.outcome;
 
-    const outcome = this.listFormats!(pageUrl).catch((): FormatsOutcome => ({ action: 'failed', reason: 'failed' }));
-    this.formats.set(pageUrl, { at: now, outcome });
+    const outcome = this.listFormats!(pageUrl, streams).catch((): FormatsOutcome => ({ action: 'failed', reason: 'failed' }));
+    this.formats.set(key, { at: now, outcome });
     void outcome.then((o) => {
-      if (o.action !== 'listed' && this.formats.get(pageUrl)?.outcome === outcome) this.formats.delete(pageUrl);
+      if (o.action !== 'listed' && this.formats.get(key)?.outcome === outcome) this.formats.delete(key);
     });
     return outcome;
   }
@@ -507,18 +705,29 @@ export class MediaOverlay {
     const main = doc.createElement('button');
     main.type = 'button';
     main.className = 'main';
+    main.title = 'Drag to move this button';
     main.append(downloadIcon(doc));
     const label = doc.createElement('span');
     main.append(label);
     main.addEventListener('click', () => this.onMainClick());
+    main.addEventListener('pointerdown', (e) => this.onDragStart(e));
+    main.addEventListener('pointermove', (e) => this.onDragMove(e));
+    main.addEventListener('pointerup', () => this.onDragEnd());
+    main.addEventListener('pointercancel', () => this.onDragEnd());
     const menu = doc.createElement('ul');
     menu.className = 'menu';
     menu.setAttribute('role', 'menu');
     menu.hidden = true;
     wrap.append(main, menu);
     root.append(wrap);
-    return { host, main, label, menu };
+    return { host, wrap, main, label, menu };
   }
+}
+
+/** A single-page site changes the address per video; the part after `#` is not another page. */
+function withoutHash(url: string): string {
+  const hash = url.indexOf('#');
+  return hash < 0 ? url : url.slice(0, hash);
 }
 
 function isLargeEnough(rect: DOMRect): boolean {

@@ -152,6 +152,10 @@ public sealed partial class BrowserBridge : IIpcHandler
                 FileName = name,
                 StartNow = true,
                 Referrer = payload.Referrer,
+                // D-80: a stream is fetched, piece by piece, as the browser requested it.
+                UserAgent = payload.UserAgent,
+                Cookies = payload.Cookies,
+                Headers = payload.Headers ?? new Dictionary<string, string>(),
                 Source = source,
                 MediaFormat = payload.MediaFormat,
                 MediaContainer = container,
@@ -161,26 +165,42 @@ public sealed partial class BrowserBridge : IIpcHandler
         return ProtocolMessage.Create(MessageTypes.Ack, new AckPayload(item.Id, item.Status.ToDbString()), id);
     }
 
-    /// <summary>D-72: what a video page offers, for the quality menu on the browser's video button.</summary>
+    /// <summary>
+    /// D-72: what a video page offers, for the quality menu on the browser's video button. D-79:
+    /// or a stream its player loaded, when yt-dlp doesn't know the site.
+    /// </summary>
     private async Task<ProtocolMessage> MediaFormatsAsync(ProtocolMessage request, CancellationToken cancellationToken)
     {
-        var url = new Uri(request.PayloadAs<MediaFormatsRequest>()!.Url!);
+        var payload = request.PayloadAs<MediaFormatsRequest>()!;
+        var url = new Uri(payload.Url!);
         var page = VideoSites.YouTubeVideo(url) ?? url;
-        LogFormatsRequested(request.Id, Core.Logging.LogRedactor.Url(page.AbsoluteUri));
+        // The validator checked each one; the reply names the one used exactly as it was sent.
+        // D-80: each is fetched as the browser requested it.
+        var streams = (payload.Streams ?? [])
+            .Select(s => (Sent: s.Url!, Request: new StreamRequest(new Uri(s.Url!), s.Referrer ?? page.AbsoluteUri, payload.UserAgent, s.Cookies, s.Headers ?? [])))
+            .ToList();
+        LogFormatsRequested(request.Id, Core.Logging.LogRedactor.Url(page.AbsoluteUri), streams.Count);
         if (!_inspector.Tools.IsInstalled)
         {
             return ProtocolMessage.ErrorReply(request.Id, ProtocolErrors.MediaToolsMissing, "yt-dlp, ffmpeg and Deno are not installed yet.");
         }
 
+        Uri source;
         MediaInfo info;
         try
         {
-            info = await _inspector.InspectAsync(page, cancellationToken);
+            (source, info) = await _inspector.InspectPageAsync(page, [.. streams.Select(s => s.Request)], payload.Title?.Trim(), cancellationToken);
         }
         catch (MediaException ex)
         {
             LogFormatsFailed(request.Id); // yt-dlp's reason may quote an address; the browser shows it
             return ProtocolMessage.ErrorReply(request.Id, ProtocolErrors.MediaFailed, ex.Message);
+        }
+
+        var sent = streams.FirstOrDefault(s => s.Request.Url == source).Sent;
+        if (sent is not null)
+        {
+            LogReadStream(request.Id, Core.Logging.LogRedactor.Url(source.AbsoluteUri));
         }
 
         // Only what add_download will take back.
@@ -194,7 +214,7 @@ public sealed partial class BrowserBridge : IIpcHandler
             .ToList();
         return options.Count == 0
             ? ProtocolMessage.ErrorReply(request.Id, ProtocolErrors.MediaFailed, "The page has no video or audio that OB2 can download.")
-            : ProtocolMessage.Create(MessageTypes.MediaFormats, new MediaFormatsPayload(info.Title, info.Duration?.TotalSeconds, options, subtitles), request.Id);
+            : ProtocolMessage.Create(MessageTypes.MediaFormats, new MediaFormatsPayload(info.Title, info.Duration?.TotalSeconds, options, subtitles, sent ?? page.AbsoluteUri), request.Id);
     }
 
     private StatusPayload BuildStatus()
@@ -219,9 +239,12 @@ public sealed partial class BrowserBridge : IIpcHandler
     [LoggerMessage(Level = LogLevel.Information, Message = "Request {Id}: {Source} capture of {Url} (cookies: {HasCookies})")]
     private partial void LogCaptured(string id, DownloadSource source, string url, bool hasCookies);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Request {Id}: video qualities for {Url}")]
-    private partial void LogFormatsRequested(string id, string url);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Request {Id}: video qualities for {Url} ({Streams} stream(s) from its player)")]
+    private partial void LogFormatsRequested(string id, string url, int streams);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Request {Id}: yt-dlp could not list the page")]
     private partial void LogFormatsFailed(string id);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Request {Id}: listed the player's stream {Url} instead of the page")]
+    private partial void LogReadStream(string id, string url);
 }
