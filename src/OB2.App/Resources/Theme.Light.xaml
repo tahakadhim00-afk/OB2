@@ -42,6 +42,10 @@
     <SolidColorBrush x:Key="ProgressBrush" Color="#1B8A3A" />
     <SolidColorBrush x:Key="ProgressTrackBrush" Color="#E6E6E6" />
 
+    <!-- The update bar (D-85): a calm tint of the accent, below the toolbar. -->
+    <SolidColorBrush x:Key="InfoBarBrush" Color="#EAF3FB" />
+    <SolidColorBrush x:Key="InfoBarBorderBrush" Color="#B4D3EE" />
+
     <!-- The wordmark: dark artwork, for a light background. A string rather than a
          BitmapImage, so the Image's own type converter resolves it against the app
          assembly; ThemeManager hands it to the Image when the theme is applied. -->

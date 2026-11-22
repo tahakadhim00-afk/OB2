@@ -61,4 +61,10 @@ public interface IDialogService
     void OpenFolder(string path);
 
     void CopyText(string text);
+
+    /// <summary>D-85: downloads are running; true if the user agrees to pause them for the update's restart.</summary>
+    bool ConfirmUpdate(int runningDownloads);
+
+    /// <summary>Opens a web page in the default browser.</summary>
+    void OpenUrl(Uri url);
 }

@@ -13,6 +13,12 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
+  <!-- D-85: -p:Ob2UpdateTest=true builds a copy for end-to-end updater tests (fake feed and key
+       from the environment, see UpdateTesting). Never set for a release. -->
+  <PropertyGroup Condition="'$(Ob2UpdateTest)' == 'true'">
+    <DefineConstants>$(DefineConstants);UPDATE_TEST</DefineConstants>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\OB2.Core\OB2.Core.csproj" />
     <ProjectReference Include="..\OB2.Shared\OB2.Shared.csproj" />

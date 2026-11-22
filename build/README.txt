@@ -26,11 +26,21 @@ Chrome / Edge integration (optional)
    browser download it instead. If OB2 cannot be reached, the browser downloads normally.
 Moving this folder later is fine: OB2 re-registers itself on the next launch.
 
+Updates
+-------
+Click "Updates" in the toolbar to ask GitHub whether a new version is out; OB2 never
+checks on its own. A new version shows a bar at the top of the window.
+"Update now" downloads it, checks that it is signed by OB2's developer, replaces
+OB2.exe, host.exe and the chrome-extension folder, and restarts OB2. Running downloads are
+paused and continue after the restart; settings, history and video tools are kept. If the
+extension changed, reload it in chrome://extensions (Edge: edge://extensions) afterwards.
+
 Antivirus / SmartScreen
 -----------------------
 OB2.exe and host.exe are not code-signed. Windows SmartScreen may show "Windows protected
 your PC" the first time: choose "More info" > "Run anyway". Some antivirus products flag
 unsigned single-file programs; compare the files with SHA256SUMS.txt from the release.
+(Updates installed from inside OB2 are checked against the developer's signature.)
 
 Uninstall
 ---------

@@ -207,6 +207,36 @@ public sealed class DialogService : IDialogService
         }
     }
 
+    public bool ConfirmUpdate(int runningDownloads)
+    {
+        var window = ConfirmWindow.ForUpdate(runningDownloads);
+        window.Owner = Owner;
+        if (window.Owner is null)
+        {
+            window.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        }
+
+        return window.ShowDialog() == true;
+    }
+
+    public void OpenUrl(Uri url)
+    {
+        ArgumentNullException.ThrowIfNull(url);
+        if (url.Scheme is not ("https" or "http"))
+        {
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo(url.AbsoluteUri) { UseShellExecute = true })?.Dispose();
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            // No browser registered; the address is in the release notes link anyway.
+        }
+    }
+
     public void CopyText(string text)
     {
         try

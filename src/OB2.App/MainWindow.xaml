@@ -70,6 +70,11 @@
                             ToolTip="{StaticResource Orphans_Explain}" AutomationProperties.Name="{StaticResource Orphans_Title}">
                         <StackPanel><TextBlock Style="{StaticResource Glyph}" Text="&#xE7B8;" /><TextBlock Style="{StaticResource ToolbarLabel}" Text="{StaticResource Tb_Orphans}" /></StackPanel>
                     </Button>
+                    <!-- D-85: asks GitHub for a newer version; the only way OB2 ever does. Greyed out while a check or update runs. -->
+                    <Button Style="{StaticResource ToolbarButton}" Command="{Binding Updates.CheckNowCommand}"
+                            ToolTip="{StaticResource Tb_Updates_Tip}" AutomationProperties.Name="{StaticResource Update_Check}">
+                        <StackPanel><TextBlock Style="{StaticResource Glyph}" Text="&#xE895;" /><TextBlock Style="{StaticResource ToolbarLabel}" Text="{StaticResource Tb_Updates}" /></StackPanel>
+                    </Button>
                 </ToolBar>
             </ToolBarTray>
             <Grid Grid.Column="1" Margin="8,0,12,0" VerticalAlignment="Center" Width="240">
@@ -83,6 +88,39 @@
                 </TextBlock>
             </Grid>
         </Grid>
+
+        <!-- D-85: a newer OB2 on GitHub, its download, or the outcome of an update. -->
+        <Border DockPanel.Dock="Top" Style="{StaticResource UpdateBar}" DataContext="{Binding Updates}"
+                Visibility="{Binding IsBarVisible, Converter={StaticResource BoolToVisibility}}"
+                AutomationProperties.Name="{StaticResource Update_BarName}">
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Style="{StaticResource ToolbarButton}" MinWidth="0" Padding="6" Margin="6,0,0,0" VerticalAlignment="Center"
+                        Command="{Binding CloseCommand}" Visibility="{Binding ShowClose, Converter={StaticResource BoolToVisibility}}"
+                        ToolTip="{StaticResource Common_Close}" AutomationProperties.Name="{StaticResource Common_Close}">
+                    <TextBlock Style="{StaticResource Glyph}" FontSize="10" Text="&#xE711;" />
+                </Button>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0">
+                    <Button Style="{StaticResource BarPrimaryButton}" Content="{StaticResource Update_UpdateNow}" Command="{Binding UpdateNowCommand}"
+                            Visibility="{Binding ShowUpdateNow, Converter={StaticResource BoolToVisibility}}" />
+                    <Button Style="{StaticResource BarPrimaryButton}" Content="{StaticResource Update_Retry}" Command="{Binding UpdateNowCommand}"
+                            Visibility="{Binding ShowRetry, Converter={StaticResource BoolToVisibility}}" />
+                    <Button Style="{StaticResource BarButton}" Content="{StaticResource Update_DownloadPage}" Command="{Binding OpenPageCommand}"
+                            Visibility="{Binding ShowDownloadPage, Converter={StaticResource BoolToVisibility}}" />
+                    <Button Style="{StaticResource BarButton}" Content="{StaticResource Update_WhatsNew}" Command="{Binding OpenPageCommand}"
+                            Visibility="{Binding ShowWhatsNew, Converter={StaticResource BoolToVisibility}}" />
+                    <Button Style="{StaticResource BarButton}" Content="{StaticResource Common_Cancel}" Command="{Binding CancelCommand}"
+                            Visibility="{Binding ShowCancel, Converter={StaticResource BoolToVisibility}}" />
+                </StackPanel>
+                <TextBlock Style="{StaticResource Glyph}" FontSize="16" Text="&#xE896;" Foreground="{DynamicResource AccentBrush}"
+                           VerticalAlignment="Center" Margin="0,0,10,0" />
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="{Binding Message}" TextWrapping="Wrap" />
+                    <ProgressBar Height="4" Margin="0,5,0,0" Maximum="100" Value="{Binding Progress, Mode=OneWay}"
+                                 IsIndeterminate="{Binding IsProgressUnknown, Mode=OneWay}"
+                                 Visibility="{Binding ShowProgress, Converter={StaticResource BoolToVisibility}}" />
+                </StackPanel>
+            </DockPanel>
+        </Border>
 
         <StatusBar DockPanel.Dock="Bottom">
             <StatusBarItem><TextBlock Text="{Binding TotalSpeedText}" /></StatusBarItem>

@@ -80,6 +80,12 @@ internal static class CompositionRoot
             explicitDataRoot));
         services.AddSingleton<TrayService>();
         services.AddSingleton<CompletionActionService>();
+
+        // D-85: new versions come from the repository's GitHub releases, and are installed only
+        // with the developer's signature (D-84).
+        services.AddSingleton(_ => new OB2.Core.Updates.UpdateChecker(OB2.Core.Http.DownloadHttpClient.Create(TimeSpan.FromSeconds(30)), UpdateTesting.Feed));
+        services.AddSingleton(_ => new OB2.Core.Updates.UpdateDownloader(storage.Paths.UpdatesDirectory, UpdateTesting.Keys, storage.LoggerFactory));
+        services.AddSingleton<UpdateService>();
         services.AddSingleton<MainViewModel>();
         services.AddSingleton<MainWindow>();
 

@@ -11,6 +11,7 @@ using OB2.Core.Engine;
 using OB2.Core.Organization;
 using OB2.Core.Services;
 using OB2.Core.Settings;
+using OB2.Core.Updates;
 using OB2.Shared.Ipc;
 using OB2.Shared.Protocol;
 using OB2.Storage;
@@ -39,19 +40,29 @@ public partial class App : Application
     {
         base.OnStartup(e);
         Arguments = StartupArguments.Parse(e.Args);
+        if (Arguments.AfterUpdatePid is { } previous)
+        {
+            // D-85: the version this one replaces holds the data folder until it has exited.
+            await WaitForExitAsync(previous);
+        }
 
+        AppPaths? paths = null;
         try
         {
-            var paths = Arguments.DataRoot is { } root ? AppPaths.ForRoot(root) : AppPaths.Resolve(AppPathEnvironment.Current);
+            paths = Arguments.DataRoot is { } root ? AppPaths.ForRoot(root) : AppPaths.Resolve(AppPathEnvironment.Current);
             _storage = await StorageBootstrapper.InitializeAsync(paths);
         }
         catch (Exception ex)
         {
-            MessageBox.Show(
-                Format("Startup_FailedMessage", ex.Message),
-                Text("Startup_FailedTitle"),
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
+            if (!OfferToGoBack(paths, ex, releaseDataFolder: () => { }))
+            {
+                MessageBox.Show(
+                    Format("Startup_FailedMessage", ex.Message),
+                    Text("Startup_FailedTitle"),
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+
             Shutdown(1);
             return;
         }
@@ -90,17 +101,108 @@ public partial class App : Application
             StartServices();
             StartBrowserBridge(settings.Ipc.PipeName);
             SyncStartWithWindows(settings);
+            StartUpdates();
         }
         catch (Exception ex)
         {
             // _logger may not exist yet, so the dialog is the one guaranteed report.
             _logger?.LogCritical(ex, "Startup failed");
-            MessageBox.Show(
-                Format("Startup_FailedMessage", ex.Message),
-                Text("Startup_FailedTitle"),
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
+            if (!OfferToGoBack(paths, ex, releaseDataFolder: () => CloseQuietly("storage", () =>
+            {
+                _storage?.Dispose();
+                _storage = null;
+            })))
+            {
+                MessageBox.Show(
+                    Format("Startup_FailedMessage", ex.Message),
+                    Text("Startup_FailedTitle"),
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+
             Shutdown(1);
+        }
+    }
+
+    /// <summary>D-85: hooks up the update bar and finishes an update this start is the result of. Never checks on its own.</summary>
+    private void StartUpdates()
+    {
+        if (!_storage!.InstanceLock.IsFirstInstance)
+        {
+            return;
+        }
+
+        var updates = _services!.GetRequiredService<UpdateService>();
+        updates.IsWindowVisible = () => _window?.IsVisible == true;
+        updates.RequestExit = ExitApplication;
+        updates.DataRootArgument = Arguments.DataRoot;
+        updates.Start();
+    }
+
+    private static async Task WaitForExitAsync(int processId)
+    {
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById(processId);
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+            await process.WaitForExitAsync(timeout.Token);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or OperationCanceledException)
+        {
+            // Already gone, or still closing after a minute: carry on either way.
+        }
+    }
+
+    /// <summary>
+    /// D-85: the version an update just installed failed to start. While the previous version's
+    /// files are still there, offer to go back: put them back and start that version.
+    /// </summary>
+    /// <param name="releaseDataFolder">Gives up this process's hold on the data folder, so the previous version can take it.</param>
+    private bool OfferToGoBack(AppPaths? paths, Exception error, Action releaseDataFolder)
+    {
+        var folder = AppContext.BaseDirectory;
+        if (paths is null
+            || InstallRecord.Load(Path.Combine(paths.UpdatesDirectory, "installed.json")) is not { } record
+            || record.To != ReleaseVersion.Text(ReleaseVersion.OfApp(AppInfo.Version))
+            || !File.Exists(Path.Combine(folder, UpdateInstaller.AppExe + UpdateInstaller.OldSuffix)))
+        {
+            return false;
+        }
+
+        var answer = MessageBox.Show(
+            Format("Update_GoBackMessage", record.To, error.Message, record.From),
+            Text("Update_GoBackTitle"),
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Error);
+        if (answer != MessageBoxResult.Yes)
+        {
+            return false;
+        }
+
+        try
+        {
+            UpdateInstaller.Undo(folder, record);
+            releaseDataFolder();
+            var start = new System.Diagnostics.ProcessStartInfo(Path.Combine(folder, UpdateInstaller.AppExe)) { UseShellExecute = false, WorkingDirectory = folder };
+            if (Arguments.Minimized)
+            {
+                start.ArgumentList.Add("--minimized");
+            }
+
+            if (Arguments.DataRoot is { } data)
+            {
+                start.ArgumentList.Add("--data");
+                start.ArgumentList.Add(data);
+            }
+
+            System.Diagnostics.Process.Start(start)?.Dispose();
+            _logger?.LogWarning("Update to {To} undone after it failed to start; back to {From}", record.To, record.From);
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
+        {
+            MessageBox.Show(Format("Update_GoBackFailed", ex.Message), Text("Update_GoBackTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
+            return true; // reported already
         }
     }
 
@@ -526,21 +628,31 @@ public partial class App : Application
     }
 }
 
-/// <summary>GUI command line (§8.5): <c>ob2.exe ["https://…"] [--data dir] [--minimized] [--from-host]</c>.</summary>
-internal sealed record StartupArguments(string? Url, string? DataRoot, bool Minimized, bool FromHost)
+/// <summary>
+/// GUI command line (§8.5): <c>ob2.exe ["https://…"] [--data dir] [--minimized] [--from-host]</c>.
+/// D-85: <c>--after-update &lt;pid&gt;</c> is how an update starts the new version: it waits for
+/// that process (the previous version) to exit before it takes the data folder.
+/// </summary>
+internal sealed record StartupArguments(string? Url, string? DataRoot, bool Minimized, bool FromHost, int? AfterUpdatePid = null)
 {
+    public const string AfterUpdateOption = "--after-update";
+
     public static StartupArguments Empty { get; } = new(null, null, false, false);
 
     public static StartupArguments Parse(IReadOnlyList<string> args)
     {
         string? url = null, data = null;
         bool minimized = false, fromHost = false;
+        int? afterUpdate = null;
         for (var i = 0; i < args.Count; i++)
         {
             switch (args[i].ToLowerInvariant())
             {
                 case "--data" when i + 1 < args.Count:
                     data = args[++i];
+                    break;
+                case AfterUpdateOption when i + 1 < args.Count:
+                    afterUpdate = int.TryParse(args[++i], NumberStyles.None, CultureInfo.InvariantCulture, out var pid) && pid > 0 ? pid : null;
                     break;
                 case "--minimized":
                     minimized = true;
@@ -559,6 +671,6 @@ internal sealed record StartupArguments(string? Url, string? DataRoot, bool Mini
             }
         }
 
-        return new StartupArguments(url, data, minimized, fromHost);
+        return new StartupArguments(url, data, minimized, fromHost, afterUpdate);
     }
 }

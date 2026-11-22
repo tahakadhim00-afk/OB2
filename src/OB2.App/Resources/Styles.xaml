@@ -784,6 +784,33 @@
         </Style.Triggers>
     </Style>
 
+    <!-- ==== The update bar (D-85) ==== -->
+
+    <Style x:Key="UpdateBar" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource InfoBarBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource InfoBarBorderBrush}" />
+        <Setter Property="BorderThickness" Value="0,1" />
+        <Setter Property="Padding" Value="12,6,6,6" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource TextBrush}" />
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding Source={x:Static SystemParameters.HighContrast}}" Value="True">
+                <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.WindowBrushKey}}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}" />
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+
+    <Style x:Key="BarButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="Padding" Value="10,2" />
+        <Setter Property="Margin" Value="6,0,0,0" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <Style x:Key="BarPrimaryButton" TargetType="Button" BasedOn="{StaticResource BarButton}">
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
     <Style x:Key="ErrorText" TargetType="TextBlock">
         <Setter Property="Foreground" Value="{DynamicResource ErrorBrush}" />
         <Setter Property="TextWrapping" Value="Wrap" />

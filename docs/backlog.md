@@ -44,3 +44,5 @@ Items noticed during a phase but outside its scope (PRD §0). Each one names the
 | Item | Raised in | Target |
 |------|-----------|--------|
 | Authenticode-sign OB2.exe and host.exe, so SmartScreen and antivirus stop warning on a fresh download. The release signature (D-84) covers only what the in-app updater installs. | D-84 | Any |
+| Publish the extension to the Chrome Web Store (and Edge Add-ons), so it updates itself instead of asking for a reload in chrome://extensions after an update (D-85). | D-85 | v1.3 |
+| Going back after a failed start (D-85) cannot help once the new version has migrated the database: the previous version refuses a schema it does not know (D-8). Keep a copy of `ob2.db` before migrating, and restore it when going back. | D-85 | v1.3 |

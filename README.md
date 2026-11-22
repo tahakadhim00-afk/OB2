@@ -80,6 +80,7 @@ OB2 uses well-known open-source libraries for plumbing; see [Tech stack](#tech-s
 - A three-pane window (categories, download list, details) shows progress for each connection.
 - Tray icon, Windows notifications, drag-and-drop links, and start with Windows (on by default; Options > General turns it off).
 - Light and dark appearance, switched in Options > General.
+- **Updates from inside the app.** **Updates** in the toolbar asks this repository's GitHub releases for a newer version (OB2 never checks on its own) and shows a bar when one is out. **Update now** downloads it, checks the developer's signature, swaps the program files, and restarts, continuing any running downloads. Settings, history and video tools are kept.
 - A headless command line for scripts: `OB2.exe get <url>`.
 
 ---

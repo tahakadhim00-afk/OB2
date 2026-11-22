@@ -42,6 +42,10 @@
     <SolidColorBrush x:Key="ProgressBrush" Color="#4BC26B" />
     <SolidColorBrush x:Key="ProgressTrackBrush" Color="#3A3A3C" />
 
+    <!-- The update bar (D-85). -->
+    <SolidColorBrush x:Key="InfoBarBrush" Color="#1C2B38" />
+    <SolidColorBrush x:Key="InfoBarBorderBrush" Color="#2D5F8A" />
+
     <!-- The wordmark: white artwork, for a dark background. See Theme.Light.xaml. -->
     <sys:String x:Key="LogoPath">Resources/logo-dark.png</sys:String>
 

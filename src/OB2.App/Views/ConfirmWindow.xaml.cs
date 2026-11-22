@@ -32,6 +32,15 @@ public partial class ConfirmWindow : Window
         return window;
     }
 
+    /// <summary>D-85: running downloads are paused for the update's restart and continue afterwards.</summary>
+    public static ConfirmWindow ForUpdate(int runningDownloads)
+    {
+        var window = new ConfirmWindow { Title = Loc.Get("Update_ConfirmTitle") };
+        window.MessageText.Text = Loc.Format("Update_ConfirmMessage", runningDownloads);
+        window.ConfirmButton.Content = Loc.Get("Update_UpdateNow");
+        return window;
+    }
+
     /// <summary>FR-17: a cancellable countdown before sleep, shutdown, or closing.</summary>
     public static ConfirmWindow ForCountdown(string action, int seconds)
     {

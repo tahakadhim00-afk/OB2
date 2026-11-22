@@ -1,6 +1,5 @@
 using System.IO.Compression;
 using System.Security.Cryptography;
-using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using OB2.Core.Downloads;
 using OB2.Core.Engine;
@@ -18,7 +17,7 @@ public sealed record ToolDownloadProgress(string Tool, long Received, long? Tota
 /// stopped download continues where it was, even after a restart. Every file is checked against
 /// the SHA-256 its release publishes before it replaces anything.
 /// </summary>
-public sealed partial class MediaToolInstaller : IDisposable
+public sealed class MediaToolInstaller : IDisposable
 {
     public const string YtDlpRelease = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/";
     public const string DenoRelease = "https://github.com/denoland/deno/releases/latest/download/";
@@ -136,22 +135,7 @@ public sealed partial class MediaToolInstaller : IDisposable
     /// The SHA-256 for <paramref name="fileName"/> in a checksum file: the hash on the line naming
     /// the file (<c>sha256sum</c> style), or the only hash in the file (one file per checksum).
     /// </summary>
-    public static string? FindSha256(string checksums, string fileName)
-    {
-        ArgumentNullException.ThrowIfNull(checksums);
-        ArgumentNullException.ThrowIfNull(fileName);
-        foreach (var line in checksums.Split('\n'))
-        {
-            var match = Sha256().Match(line);
-            if (match.Success && Regex.IsMatch(line, @"(^|[\s*/])" + Regex.Escape(fileName) + @"\s*$", RegexOptions.IgnoreCase))
-            {
-                return match.Value.ToLowerInvariant();
-            }
-        }
-
-        var all = Sha256().Matches(checksums);
-        return all.Count == 1 ? all[0].Value.ToLowerInvariant() : null;
-    }
+    public static string? FindSha256(string checksums, string fileName) => Integrity.Sha256Sums.Find(checksums, fileName);
 
     private DownloadEngine Engine
     {
@@ -244,7 +228,4 @@ public sealed partial class MediaToolInstaller : IDisposable
             File.Move(temp, target, overwrite: true);
         }
     }
-
-    [GeneratedRegex("\\b[0-9a-fA-F]{64}\\b")]
-    private static partial Regex Sha256();
 }

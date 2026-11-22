@@ -25,6 +25,8 @@
     <sys:String x:Key="Tb_StartQueue">Start Queue</sys:String>
     <sys:String x:Key="Tb_StopQueue">Stop Queue</sys:String>
     <sys:String x:Key="Tb_Orphans">Orphans</sys:String>
+    <sys:String x:Key="Tb_Updates">Updates</sys:String>
+    <sys:String x:Key="Tb_Updates_Tip">Check GitHub for a newer version of OB2</sys:String>
     <sys:String x:Key="Tb_Add_Tip">Add a download by address (Ctrl+N)</sys:String>
     <sys:String x:Key="Tb_Resume_Tip">Start or resume the selected downloads (Space)</sys:String>
     <sys:String x:Key="Tb_Stop_Tip">Pause the selected downloads (Space)</sys:String>
@@ -281,4 +283,30 @@
     <sys:String x:Key="Startup_FailedMessage">OB2 could not prepare its data folder or database.&#x0a;&#x0a;{0}</sys:String>
     <sys:String x:Key="Error_UnexpectedTitle">Something went wrong</sys:String>
     <sys:String x:Key="Error_UnexpectedMessage">OB2 hit an unexpected error and recovered. Details were written to the log file.&#x0a;&#x0a;{0}</sys:String>
+
+    <!-- D-85: updates from GitHub. -->
+    <sys:String x:Key="Update_Check">Check for updates</sys:String>
+    <sys:String x:Key="Update_BarName">Update</sys:String>
+    <sys:String x:Key="Update_Checking">Checking for a new version of OB2…</sys:String>
+    <sys:String x:Key="Update_UpToDate">OB2 {0} is the latest version.</sys:String>
+    <sys:String x:Key="Update_Available">OB2 {0} is available. You have {1}.</sys:String>
+    <sys:String x:Key="Update_Downloading">Downloading OB2 {0}… {1}</sys:String>
+    <sys:String x:Key="Update_Installing">Installing OB2 {0}. OB2 will restart in a moment.</sys:String>
+    <sys:String x:Key="Update_Updated">OB2 was updated to {0}.</sys:String>
+    <sys:String x:Key="Update_ReloadExtension">To finish, reload the OB2 extension in chrome://extensions (Edge: edge://extensions).</sys:String>
+    <sys:String x:Key="Update_UpdateNow">Update now</sys:String>
+    <sys:String x:Key="Update_WhatsNew">What's new</sys:String>
+    <sys:String x:Key="Update_DownloadPage">Download page</sys:String>
+    <sys:String x:Key="Update_Retry">Try again</sys:String>
+    <sys:String x:Key="Update_ConfirmTitle">Update OB2</sys:String>
+    <sys:String x:Key="Update_ConfirmMessage">{0} download(s) are running. OB2 will pause them, install the update, restart, and continue them.</sys:String>
+    <sys:String x:Key="Update_RestartFailed">OB2 could not start its new version, so the update was undone: {0}</sys:String>
+    <sys:String x:Key="Update_NotOb2Exe">This copy's program is not named OB2.exe, so download the update from its page.</sys:String>
+    <sys:String x:Key="Update_SourceBuild">This copy was built from source code; update it with git.</sys:String>
+    <sys:String x:Key="Update_ReadOnly">OB2's folder is read-only, so download the update from its page.</sys:String>
+    <sys:String x:Key="Update_NoKey">This copy cannot check an update's signature, so download it from its page.</sys:String>
+    <sys:String x:Key="Update_NoFiles">This release has no files OB2 can install itself, so download it from its page.</sys:String>
+    <sys:String x:Key="Update_GoBackTitle">OB2 could not start</sys:String>
+    <sys:String x:Key="Update_GoBackMessage">OB2 {0} was just installed but could not start:&#x0a;&#x0a;{1}&#x0a;&#x0a;Go back to OB2 {2}?</sys:String>
+    <sys:String x:Key="Update_GoBackFailed">OB2 could not go back to the previous version: {0}</sys:String>
 </ResourceDictionary>

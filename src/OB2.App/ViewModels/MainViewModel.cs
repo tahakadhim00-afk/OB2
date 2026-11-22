@@ -51,11 +51,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private bool _isListEmpty = true;
 
-    public MainViewModel(DownloadService service, AppSettings settings, IDialogService dialogs)
+    public MainViewModel(DownloadService service, AppSettings settings, IDialogService dialogs, UpdateService updates)
     {
         _service = service;
         _settings = settings;
         _dialogs = dialogs;
+        Updates = updates;
         _dispatcher = Dispatcher.CurrentDispatcher;
 
         DownloadsView = CollectionViewSource.GetDefaultView(Downloads);
@@ -96,6 +97,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _timer.Start();
         Refresh();
     }
+
+    /// <summary>D-85: the update bar and the toolbar's "Updates".</summary>
+    public UpdateService Updates { get; }
 
     public ObservableCollection<DownloadRowViewModel> Downloads { get; } = [];
 

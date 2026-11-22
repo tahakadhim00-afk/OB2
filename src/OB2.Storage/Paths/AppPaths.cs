@@ -52,6 +52,9 @@ public sealed record AppPaths(string Root, bool IsPortable)
     /// <summary>yt-dlp, Deno and ffmpeg for video pages, downloaded on first use (D-71).</summary>
     public string ToolsDirectory => Path.Combine(Root, "tools");
 
+    /// <summary>D-85: an update being downloaded or unpacked, and the record of the last install.</summary>
+    public string UpdatesDirectory => Path.Combine(Root, "updates");
+
     public static AppPaths Resolve(AppPathEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(environment);
