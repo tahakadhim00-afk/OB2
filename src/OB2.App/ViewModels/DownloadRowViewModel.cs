@@ -70,6 +70,13 @@ public sealed partial class DownloadRowViewModel : ObservableObject
     [ObservableProperty]
     private int _activeConnections;
 
+    // Observable, unlike the rest of Item, because the list's live filter watches them (queue and category views).
+    [ObservableProperty]
+    private long? _categoryId;
+
+    [ObservableProperty]
+    private long? _queueId;
+
     public DownloadRowViewModel(DownloadItem item, string categoryName, string queueName)
     {
         Id = item.Id;
@@ -80,10 +87,6 @@ public sealed partial class DownloadRowViewModel : ObservableObject
     public long Id { get; }
 
     public DownloadItem Item { get; private set; }
-
-    public long? CategoryId => Item.CategoryId;
-
-    public long? QueueId => Item.QueueId;
 
     public long QueuePosition => Item.QueuePosition;
 
@@ -103,6 +106,8 @@ public sealed partial class DownloadRowViewModel : ObservableObject
         SizeText = Fmt.Size(item.TotalBytes);
         DateAdded = item.CreatedAt.LocalDateTime;
         SaveFolder = item.SaveFolder;
+        CategoryId = item.CategoryId;
+        QueueId = item.QueueId;
         CategoryName = categoryName;
         QueueName = queueName;
         Url = item.FinalUrl ?? item.Url;

@@ -62,6 +62,25 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         DownloadsView.Filter = o => o is DownloadRowViewModel row && Matches(row);
         DownloadsView.SortDescriptions.Add(new SortDescription(nameof(DownloadRowViewModel.DateAdded), ListSortDirection.Descending));
 
+        // The view checks Filter only when a row is added or on a full Refresh. Live filtering
+        // checks a row again when one of the properties Matches reads changes, so a download
+        // that finishes leaves "Unfinished", one moved to another queue leaves this queue's
+        // view, and a row renamed by its probe joins or leaves the search results.
+        var live = (ICollectionViewLiveShaping)DownloadsView;
+        foreach (var property in new[]
+                 {
+                     nameof(DownloadRowViewModel.Status), nameof(DownloadRowViewModel.QueueId), nameof(DownloadRowViewModel.CategoryId),
+                     nameof(DownloadRowViewModel.FileName), nameof(DownloadRowViewModel.Url),
+                 })
+        {
+            live.LiveFilteringProperties.Add(property);
+        }
+
+        live.IsLiveFiltering = true;
+        // Live filtering applies its changes later, on the dispatcher, so the empty-list hint
+        // follows the view's own change events rather than the calls that cause them.
+        DownloadsView.CollectionChanged += (_, _) => UpdateEmpty();
+
         ReloadNames();
         BuildNav();
         foreach (var item in _service.List())
@@ -228,15 +247,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 ? new SortDescription(nameof(DownloadRowViewModel.QueuePosition), ListSortDirection.Ascending)
                 : new SortDescription(nameof(DownloadRowViewModel.DateAdded), ListSortDirection.Descending));
         }
-
-        UpdateEmpty();
     }
 
-    partial void OnSearchTextChanged(string value)
-    {
-        DownloadsView.Refresh();
-        UpdateEmpty();
-    }
+    partial void OnSearchTextChanged(string value) => DownloadsView.Refresh();
 
     partial void OnSelectedRowChanged(DownloadRowViewModel? value)
     {
@@ -366,8 +379,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         {
             NotifyCommands();
         }
-
-        UpdateEmpty();
     }
 
     private void Remove(long id)
@@ -380,8 +391,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 SelectedRow = null;
             }
         }
-
-        UpdateEmpty();
     }
 
     private void UpdateEmpty() => IsListEmpty = DownloadsView.IsEmpty;
