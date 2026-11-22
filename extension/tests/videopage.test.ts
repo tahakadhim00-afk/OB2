@@ -45,6 +45,30 @@ describe('a streaming player on another site (D-71)', () => {
   });
 });
 
+describe('closing the button on a single-page site (D-82)', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '';
+    document.querySelectorAll('ob2-media-button').forEach((b) => b.remove()); // the button sits on <html>
+    history.replaceState(null, '', PAGE);
+  });
+
+  afterEach(() => document.querySelector('ob2-media-button')?.remove());
+
+  it('stays closed when only the part after # changes, and comes back on the next video page', () => {
+    const overlay = new MediaOverlay(document, jest.fn(), 'open');
+    const video = addVideo('https://cdn.news.example/a.mp4');
+    overlay.show(video);
+
+    (document.querySelector('ob2-media-button')!.shadowRoot!.querySelector('.close') as HTMLButtonElement).click();
+
+    expect(overlay.show(video)).toBe(false);
+    history.pushState(null, '', '/world/launch-video#comments');
+    expect(overlay.show(video)).toBe(false);
+    history.pushState(null, '', '/world/next-video');
+    expect(overlay.show(video)).toBe(true);
+  });
+});
+
 describe('a site yt-dlp does not know (D-79)', () => {
   const MASTER = 'https://cdn.news.example/hls/master.m3u8?token=1';
   const VARIANT = 'https://cdn.news.example/hls/720/index.m3u8?token=1';

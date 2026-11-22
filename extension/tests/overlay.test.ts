@@ -209,6 +209,77 @@ describe('moving the button with the pointer (D-81)', () => {
   });
 });
 
+describe('closing the button (D-82)', () => {
+  const closeButton = () => shadow().querySelector('.close') as HTMLButtonElement;
+  const move = (x: number, y: number) => doc.dispatchEvent(new MouseEvent('pointermove', { clientX: x, clientY: y, bubbles: true }));
+  const pressClose = (type: string, x: number, y: number) => closeButton().dispatchEvent(new MouseEvent(type, { clientX: x, clientY: y, button: 0, bubbles: true }));
+
+  it('has a × beside the main button, named for screen readers', () => {
+    overlay.show(addVideo(doc, { src: 'https://e.com/a.mp4' }));
+
+    expect(closeButton().previousElementSibling).toBe(mainButton());
+    expect(closeButton().getAttribute('aria-label')).toBe('Close the OB2 button');
+  });
+
+  it('hides it, and neither the pointer, playback nor a new file brings it back on this page', () => {
+    const pageClick = jest.fn();
+    doc.addEventListener('click', pageClick);
+    const video = addVideo(doc, { src: 'https://e.com/a.mp4' });
+    move(300, 200);
+    jest.advanceTimersToNextFrame();
+    expect(isShown()).toBe(true);
+
+    closeButton().click();
+
+    expect(isShown()).toBe(false);
+    expect(send).not.toHaveBeenCalled();
+    expect(pageClick).not.toHaveBeenCalled(); // the player must not take it as a click on the video
+    move(310, 210);
+    jest.advanceTimersToNextFrame();
+    video.dispatchEvent(new Event('play'));
+    overlay.addDetected({ url: 'https://cdn.e.com/b.mp4' });
+    expect(isShown()).toBe(false);
+    expect(overlay.show(addVideo(doc, { src: 'https://e.com/other.mp4' }))).toBe(false); // nor over another video
+  });
+
+  it('closes an open menu with the button', () => {
+    overlay.addDetected({ url: 'https://cdn.e.com/a.mp4' });
+    overlay.addDetected({ url: 'https://cdn.e.com/b.mp4' });
+    overlay.show(addVideo(doc, { src: 'blob:https://e.com/1' }));
+    mainButton().click();
+    expect(shadow().querySelector<HTMLUListElement>('.menu')!.hidden).toBe(false);
+
+    closeButton().click();
+
+    expect(shadow().querySelector<HTMLUListElement>('.menu')!.hidden).toBe(true);
+    expect(isShown()).toBe(false);
+  });
+
+  it('is not a handle for dragging the button', () => {
+    const moved = jest.fn();
+    overlay.onMoved = moved;
+    overlay.show(addVideo(doc, { src: 'https://e.com/a.mp4' }));
+
+    pressClose('pointerdown', 720, 120);
+    pressClose('pointermove', 300, 300);
+    pressClose('pointerup', 300, 300);
+
+    expect(overlay.position).toEqual({ x: 1, y: 0 });
+    expect(moved).not.toHaveBeenCalled();
+  });
+
+  it('comes back after a reload, which starts a new overlay', () => {
+    overlay.show(addVideo(doc, { src: 'https://e.com/a.mp4' }));
+    closeButton().click();
+
+    const reloaded = document.implementation.createHTMLDocument('page');
+    const fresh = new MediaOverlay(reloaded, send, 'open');
+    fresh.attach();
+
+    expect(fresh.show(addVideo(reloaded, { src: 'https://e.com/a.mp4' }))).toBe(true);
+  });
+});
+
 describe('button fallback: addresses in the page code (D-70)', () => {
   it('offers a video address written in a script when nothing else is known', () => {
     doc.body.insertAdjacentHTML('beforeend', '<script>cfg = {"file":"https:\\/\\/cdn.e.com\\/movie.mp4"}</script>');

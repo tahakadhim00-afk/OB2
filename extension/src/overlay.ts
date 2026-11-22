@@ -8,7 +8,8 @@
 // format (SRT, ASS, VTT) that downloads it as a file of its own. D-79: the click also names the
 // HLS and DASH manifests this page's player loaded, which OB2 reads when yt-dlp doesn't know the
 // site; the entries then download that stream. D-81: the button can be dragged anywhere over the
-// video; the place is kept per site (the content script saves it).
+// video; the place is kept per site (the content script saves it). D-82: its × closes it on this
+// page until the page is reloaded (or a single-page site opens another page).
 
 import type { FormatsFailure, FormatsOutcome } from './capture';
 import { formatBytes } from './format';
@@ -75,14 +76,20 @@ const CSS = `
 .wrap.left { align-items: flex-start; }
 .wrap.up { flex-direction: column-reverse; }
 .wrap.up .menu { margin: 0 0 4px; }
-.main { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 0; border-radius: 4px;
-  background: #1a73e8; color: #fff; font: inherit; cursor: pointer; box-shadow: 0 1px 4px rgba(0, 0, 0, .45);
-  touch-action: none; user-select: none; }
+.bar { display: inline-flex; border-radius: 4px; box-shadow: 0 1px 4px rgba(0, 0, 0, .45); }
+.main { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 0; border-radius: 4px 0 0 4px;
+  background: #1a73e8; color: #fff; font: inherit; cursor: pointer; touch-action: none; user-select: none; }
 .main.dragging { cursor: grabbing; }
 .main:hover { background: #1765cc; }
 .main:focus-visible { outline: 2px solid #fff; outline-offset: -4px; }
 .main:disabled { cursor: default; background: #3c4043; }
 .main svg { width: 16px; height: 16px; flex: none; }
+.close { display: inline-flex; align-items: center; justify-content: center; width: 26px; padding: 0; border: 0;
+  border-left: 1px solid rgba(255, 255, 255, .35); border-radius: 0 4px 4px 0; background: #1a73e8; color: #fff; cursor: pointer; }
+.close:hover { background: #1765cc; }
+.close:focus-visible { outline: 2px solid #fff; outline-offset: -4px; }
+.main:disabled + .close { background: #3c4043; }
+.close svg { width: 14px; height: 14px; flex: none; }
 .menu { list-style: none; margin: 4px 0 0; padding: 4px 0; min-width: 220px; max-width: 360px; max-height: 320px; overflow: auto;
   background: #fff; color: #202124; border-radius: 4px; box-shadow: 0 2px 8px rgba(0, 0, 0, .35); }
 .menu[hidden] { display: none; }
@@ -119,7 +126,10 @@ function candidatesFor(media: HTMLMediaElement, detected: readonly MediaCandidat
 interface Ui {
   host: HTMLElement;
   wrap: HTMLDivElement;
+  /** The main button and its ×, side by side: what is placed over the video. */
+  bar: HTMLDivElement;
   main: HTMLButtonElement;
+  close: HTMLButtonElement;
   label: HTMLSpanElement;
   menu: HTMLUListElement;
 }
@@ -159,6 +169,8 @@ export class MediaOverlay {
   private readonly formats = new Map<string, { at: number; outcome: Promise<FormatsOutcome> }>();
   /** The video page whose qualities the open menu shows (or is waiting for). */
   private menuPage?: string;
+  /** D-82: the page (address without `#…`) whose button the user closed. */
+  private closedOn?: string;
 
   /**
    * `shadowMode` is open only in tests, which need to reach the button. Without `listFormats`
@@ -248,7 +260,7 @@ export class MediaOverlay {
 
   /** Shows the button over this video. False when it isn't big enough or there is nothing to offer. */
   show(video: HTMLVideoElement): boolean {
-    if (!this.enabled || !isLargeEnough(video.getBoundingClientRect())) return false;
+    if (!this.enabled || this.isClosed() || !isLargeEnough(video.getBoundingClientRect())) return false;
     const candidates = this.offersFor(video);
     if (candidates.length === 0) return false;
     const ui = (this.ui ??= this.build());
@@ -272,6 +284,20 @@ export class MediaOverlay {
       setDisplay(this.ui.host, false);
       this.ui.menu.hidden = true;
     }
+  }
+
+  /**
+   * D-82: the ×. The button stays away from every video on this page, on hover and on play, until
+   * the page is reloaded, which starts a new overlay. A single-page site that opens another page
+   * (the next YouTube video) shows it again. The right-click "Download media with OB2" still works.
+   */
+  close(): void {
+    this.closedOn = withoutHash(this.doc.URL);
+    this.hide();
+  }
+
+  private isClosed(): boolean {
+    return this.closedOn !== undefined && this.closedOn === withoutHash(this.doc.URL);
   }
 
   get visibleFor(): HTMLVideoElement | undefined {
@@ -349,7 +375,7 @@ export class MediaOverlay {
     // D-81: the button keeps its corner of the screen fixed and the menu grows away from it, so
     // near the bottom the menu opens upwards and near the left edge it opens to the right.
     const room = this.room(rect);
-    const { width, height } = this.ui.main.getBoundingClientRect();
+    const { width, height } = this.ui.bar.getBoundingClientRect();
     const left = room.left + this.position.x * room.width;
     const top = room.top + this.position.y * room.height;
     const fromRight = this.position.x >= 0.5;
@@ -371,7 +397,7 @@ export class MediaOverlay {
     const view = this.doc.documentElement;
     const viewWidth = view.clientWidth > 0 ? view.clientWidth : rect.right;
     const viewHeight = view.clientHeight > 0 ? view.clientHeight : rect.bottom;
-    const { width, height } = this.ui!.main.getBoundingClientRect();
+    const { width, height } = this.ui!.bar.getBoundingClientRect();
     const left = Math.max(rect.left, 0) + INSET;
     const top = Math.max(rect.top, 0) + INSET;
     return {
@@ -714,13 +740,24 @@ export class MediaOverlay {
     main.addEventListener('pointermove', (e) => this.onDragMove(e));
     main.addEventListener('pointerup', () => this.onDragEnd());
     main.addEventListener('pointercancel', () => this.onDragEnd());
+    // D-82: a button of its own, so pressing it never starts a drag of the main one.
+    const close = doc.createElement('button');
+    close.type = 'button';
+    close.className = 'close';
+    close.title = 'Close (it comes back when the page is reloaded)';
+    close.setAttribute('aria-label', 'Close the OB2 button');
+    close.append(strokeIcon(doc, 'M6 6l12 12M18 6 6 18', 2.5));
+    close.addEventListener('click', () => this.close());
+    const bar = doc.createElement('div');
+    bar.className = 'bar';
+    bar.append(main, close);
     const menu = doc.createElement('ul');
     menu.className = 'menu';
     menu.setAttribute('role', 'menu');
     menu.hidden = true;
-    wrap.append(main, menu);
+    wrap.append(bar, menu);
     root.append(wrap);
-    return { host, wrap, main, label, menu };
+    return { host, wrap, bar, main, close, label, menu };
   }
 }
 
@@ -746,15 +783,20 @@ function mediaInPath(event: Event): HTMLMediaElement | undefined {
 }
 
 function downloadIcon(doc: Document): SVGSVGElement {
+  return strokeIcon(doc, 'M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19.5h14');
+}
+
+/** A 24×24 line icon drawn in the button's text colour. */
+function strokeIcon(doc: Document, d: string, strokeWidth = 2): SVGSVGElement {
   const ns = 'http://www.w3.org/2000/svg';
   const svg = doc.createElementNS(ns, 'svg');
   svg.setAttribute('viewBox', '0 0 24 24');
   svg.setAttribute('aria-hidden', 'true');
   const path = doc.createElementNS(ns, 'path');
-  path.setAttribute('d', 'M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19.5h14');
+  path.setAttribute('d', d);
   path.setAttribute('fill', 'none');
   path.setAttribute('stroke', 'currentColor');
-  path.setAttribute('stroke-width', '2');
+  path.setAttribute('stroke-width', String(strokeWidth));
   path.setAttribute('stroke-linecap', 'round');
   path.setAttribute('stroke-linejoin', 'round');
   svg.append(path);
