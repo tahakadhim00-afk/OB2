@@ -2,6 +2,11 @@
 bin/
 obj/
 publish/
+# build/publish.ps1 output (D-84): the release folder, zip, checksums and signature.
+/release/
+# Copies of publish/OB2-portable kept aside while rebuilding it: they hold the downloads database and the video tools.
+/publish-backup-*/
+/publish-staging-*/
 TestResults/
 *.user
 .vs/

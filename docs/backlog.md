@@ -38,3 +38,9 @@ Items noticed during a phase but outside its scope (PRD §0). Each one names the
 | Item | Shipped as |
 |------|-----------|
 | A dark theme (open question 2): Light or Dark in Options > General, every colour from one palette, high contrast still the system's. | Dark theme (D-77) |
+
+## Raised in v1.2 (updates)
+
+| Item | Raised in | Target |
+|------|-----------|--------|
+| Authenticode-sign OB2.exe and host.exe, so SmartScreen and antivirus stop warning on a fresh download. The release signature (D-84) covers only what the in-app updater installs. | D-84 | Any |

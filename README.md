@@ -130,9 +130,23 @@ npm run build        # output: extension/dist
 
 ### Make a portable release
 ```powershell
-powershell -ExecutionPolicy Bypass -File build/publish.ps1 -Version 1.1.0 -IncludeHost
+powershell -ExecutionPolicy Bypass -File build/publish.ps1          # build only
+powershell -ExecutionPolicy Bypass -File build/publish.ps1 -Sign    # build and sign
 ```
-This produces `publish/OB2-portable/`, containing `OB2.exe`, `host.exe`, `chrome-extension/`, `portable.flag`, and `README.txt`. It also writes `publish/OB2-portable.zip` and `publish/SHA256SUMS.txt`. Leave out `-IncludeHost` to build the app alone.
+This produces `release/OB2-portable/` (`OB2.exe`, `host.exe`, `chrome-extension/`, `portable.flag`, `README.txt`, `LICENSE.txt`), `release/OB2-portable.zip`, `release/SHA256SUMS.txt` and, with `-Sign`, `release/SHA256SUMS.txt.sig`. It never touches `publish/`, so a copy you run from there keeps its settings and history. The version comes from `Directory.Build.props`.
+
+### Publish a version (in-app updates)
+Copies of OB2 update from this repository's latest GitHub release, and only if it is signed with the developer's key ([decisions D-84, D-85](docs/decisions.md)).
+
+1. Once: make the key, then put the public key it prints into `src/OB2.Core/Updates/ReleaseKey.cs`. Keep the key file and its password somewhere safe: without them no future update can be signed.
+   ```powershell
+   dotnet run --project build/OB2.ReleaseSigner -- keygen --out "$env:USERPROFILE\OB2-signing\ob2-release-key.pem"
+   ```
+2. For each version: raise the version in `Directory.Build.props`, `src/OB2.App/app.manifest` (`assemblyIdentity`, four parts), `extension/manifest.json`, `extension/package.json` and both places in `extension/package-lock.json`, commit and push, write the notes, then:
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File build/publish.ps1 -GitHub -Notes notes.md
+   ```
+   This builds, asks for the key's password, signs, and creates release `v<version>` with the zip, checksums and signature. Add `-Prerelease` to try it first: OB2 offers only the latest full release.
 
 ### Connect the browser
 1. In OB2, open **Options › Browser** and click **Register**. One registration covers both Chrome and Edge.
@@ -200,7 +214,7 @@ tests/
   OB2.Core.Tests/         Unit tests for the engine and core logic
   OB2.Storage.Tests/      Database, settings, and path tests
   OB2.Integration.Tests/  End-to-end downloads, IPC, CLI, and registry tests
-build/            publish.ps1, the release README, and clean-machine test files
+build/            publish.ps1, OB2.ReleaseSigner (release key and signing), the release README, clean-machine test files
 docs/             Protocol, design decisions, backlog, and release reports
 ```
 
