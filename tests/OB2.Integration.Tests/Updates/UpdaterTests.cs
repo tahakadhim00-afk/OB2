@@ -110,15 +110,17 @@ public sealed class UpdaterTests : IAsyncLifetime
     [Fact]
     public async Task A_release_whose_OB2_exe_is_another_version_is_refused()
     {
-        // The real OB2.exe this build made says 1.1.0; a release tagged 9.9.9 must not install it,
-        // or the updated copy would offer the same update for ever.
+        // The real OB2.exe this build made carries the app's version; a release tagged 9.9.9 must not
+        // install it, or the updated copy would offer the same update for ever. Read from the exe, so
+        // the test holds at every version.
+        var built = ReleaseVersion.OfApp(System.Diagnostics.FileVersionInfo.GetVersionInfo(Ob2Process.ExePath).ProductVersion!);
         Publish("9.9.9", signedBy: _developer, appExe: Ob2Process.ExePath);
         var release = (await Checker().CheckAsync(new Version(1, 1, 0)))!;
         using var downloader = Downloader();
 
         var act = () => downloader.DownloadAsync(release, null);
 
-        await act.Should().ThrowAsync<UpdateException>().WithMessage("*is version 1.1.0, not 9.9.9*");
+        await act.Should().ThrowAsync<UpdateException>().WithMessage($"*is version {ReleaseVersion.Text(built)}, not 9.9.9*");
     }
 
     [Fact]
