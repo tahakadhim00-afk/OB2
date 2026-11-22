@@ -153,11 +153,21 @@
                             <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
                             <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
                             <Setter Property="Padding" Value="2,3" />
+                            <!-- Without it UI Automation names each item by its view model's class name, which a screen reader reads out. -->
+                            <Setter Property="AutomationProperties.Name" Value="{Binding Display}" />
                         </Style>
                     </TreeView.ItemContainerStyle>
                     <TreeView.ItemTemplate>
                         <HierarchicalDataTemplate ItemsSource="{Binding Children}">
-                            <TextBlock Text="{Binding Display}" />
+                            <!-- D-86: an icon before each name, in a fixed slot so the names line up. Its colour is
+                                 the item's own (bound, since the app-wide TextBlock style would otherwise win), so a
+                                 selected item's icon turns with its text, and high contrast still applies. -->
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding Icon}" FontFamily="{StaticResource IconFont}" FontSize="14" Width="16"
+                                           TextAlignment="Center" VerticalAlignment="Center" Margin="0,0,7,0"
+                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=TreeViewItem}}" />
+                                <TextBlock Text="{Binding Display}" VerticalAlignment="Center" />
+                            </StackPanel>
                         </HierarchicalDataTemplate>
                     </TreeView.ItemTemplate>
                 </TreeView>

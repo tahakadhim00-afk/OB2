@@ -240,16 +240,20 @@ public sealed partial class NavNodeViewModel : ObservableObject
     [ObservableProperty]
     private bool _isSelected;
 
-    public NavNodeViewModel(NavKind kind, string name, long? id = null, Func<DownloadRowViewModel, bool>? filter = null)
+    public NavNodeViewModel(NavKind kind, string name, string icon, long? id = null, Func<DownloadRowViewModel, bool>? filter = null)
     {
         Kind = kind;
         Name = name;
+        Icon = icon;
         Id = id;
         Filter = filter;
         Display = name;
     }
 
     public NavKind Kind { get; }
+
+    /// <summary>A glyph of the icon font (D-86, <see cref="NavIcons"/>).</summary>
+    public string Icon { get; }
 
     public string Name { get; set; }
 

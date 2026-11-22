@@ -421,24 +421,25 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     {
         var selected = SelectedNode is { } s ? (s.Kind, s.Id) : (NavKind.All, (long?)null);
         Nav.Clear();
-        Nav.Add(new NavNodeViewModel(NavKind.All, Loc.Get("Nav_All"), filter: _ => true));
-        Nav.Add(new NavNodeViewModel(NavKind.Unfinished, Loc.Get("Nav_Unfinished"), filter: r => r.Status != DownloadStatus.Completed));
-        Nav.Add(new NavNodeViewModel(NavKind.Finished, Loc.Get("Nav_Finished"), filter: r => r.Status == DownloadStatus.Completed));
+        Nav.Add(new NavNodeViewModel(NavKind.All, Loc.Get("Nav_All"), NavIcons.All, filter: _ => true));
+        Nav.Add(new NavNodeViewModel(NavKind.Unfinished, Loc.Get("Nav_Unfinished"), NavIcons.Unfinished, filter: r => r.Status != DownloadStatus.Completed));
+        Nav.Add(new NavNodeViewModel(NavKind.Finished, Loc.Get("Nav_Finished"), NavIcons.Finished, filter: r => r.Status == DownloadStatus.Completed));
 
-        var queues = new NavNodeViewModel(NavKind.QueuesGroup, Loc.Get("Nav_Queues"));
+        var queues = new NavNodeViewModel(NavKind.QueuesGroup, Loc.Get("Nav_Queues"), NavIcons.Queues);
         foreach (var queue in _service.QueueList)
         {
             var id = queue.Id;
-            queues.Children.Add(new NavNodeViewModel(NavKind.Queue, queue.Name, id, r => r.QueueId == id));
+            queues.Children.Add(new NavNodeViewModel(NavKind.Queue, queue.Name, NavIcons.Queue, id, r => r.QueueId == id));
         }
 
         Nav.Add(queues);
 
-        var categories = new NavNodeViewModel(NavKind.CategoriesGroup, Loc.Get("Nav_Categories"));
+        // Rebuilt after Options closes, so a category's icon follows its extensions as soon as they are saved.
+        var categories = new NavNodeViewModel(NavKind.CategoriesGroup, Loc.Get("Nav_Categories"), NavIcons.Categories);
         foreach (var category in _service.Categories)
         {
             var id = category.Id;
-            categories.Children.Add(new NavNodeViewModel(NavKind.Category, category.Name, id, r => r.CategoryId == id));
+            categories.Children.Add(new NavNodeViewModel(NavKind.Category, category.Name, NavIcons.ForCategory(CategoryKinds.Of(category.Extensions)), id, r => r.CategoryId == id));
         }
 
         Nav.Add(categories);
