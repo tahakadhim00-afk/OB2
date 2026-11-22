@@ -6,6 +6,8 @@
     <RootNamespace>OB2.Shared</RootNamespace>
     <!-- host.exe is published trimmed (D-68): the trim analyzer turns any reflection here into a build error. -->
     <IsTrimmable>true</IsTrimmable>
+    <!-- LibraryImport's generated marshalling (ForegroundHandoff, D-83) uses pointers. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
 </Project>

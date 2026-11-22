@@ -126,6 +126,23 @@ public sealed class PipeTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task The_client_finds_the_app_at_the_other_end_to_hand_it_the_foreground()
+    {
+        await using var pipe = await Connect();
+
+        ForegroundHandoff.ServerProcessId(pipe).Should().Be(Environment.ProcessId, "D-83: the right goes to the process serving the pipe");
+    }
+
+    [Theory]
+    [InlineData(MessageTypes.AddDownload, true)]
+    [InlineData(MessageTypes.Activate, true)]
+    [InlineData(MessageTypes.GetStatus, false)]
+    [InlineData(MessageTypes.GetMediaFormats, false)]
+    [InlineData(MessageTypes.Ping, false)]
+    public void Only_requests_that_may_open_a_window_hand_over_the_foreground(string type, bool handsOver) =>
+        MessageTypes.MayOpenWindow(type).Should().Be(handsOver);
+
+    [Fact]
     public async Task Disposed_server_stops_listening()
     {
         await _server.DisposeAsync();

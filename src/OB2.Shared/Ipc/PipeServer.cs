@@ -130,6 +130,10 @@ public static class PipeClient
     {
         await using var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
         await pipe.ConnectAsync(connectTimeout, cancellationToken).ConfigureAwait(false);
+        if (MessageTypes.MayOpenWindow(request.Type))
+        {
+            ForegroundHandoff.AllowServer(pipe); // before the request, so the right is there when the window opens
+        }
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(replyTimeout);

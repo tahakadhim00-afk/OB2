@@ -96,8 +96,14 @@ public sealed class DialogService : IDialogService
         else
         {
             window.WindowStartupLocation = WindowStartupLocation.CenterScreen;
-            window.Topmost = prefill.Source == DownloadSource.Chrome;
         }
+
+        // D-83: a capture's window opens above the browser the user clicked in. host.exe hands the
+        // app the right to come to the front, so the window normally opens active; where Windows
+        // still refuses and only flashes the taskbar button, it is on top all the same. This used
+        // to apply only while the main window was hidden, but the bridge shows the main window
+        // first, so for a capture it never did.
+        window.Topmost = prefill.Source == DownloadSource.Chrome;
     }
 
     public bool? ConfirmDelete(int count, bool anyCompleted)

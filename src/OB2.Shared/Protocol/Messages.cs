@@ -29,6 +29,13 @@ public static class MessageTypes
     /// seconds, and longer on a slow line (D-72); everything else is answered at once.
     /// </summary>
     public static TimeSpan ReplyTime(string? type) => type == GetMediaFormats ? TimeSpan.FromSeconds(90) : TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// D-83: requests the app may answer with a window (the Add or Download Video window for a
+    /// capture, the main window for a second OB2.exe), so the sender lets it come to the front.
+    /// The popup's status and the video button's quality list never do.
+    /// </summary>
+    public static bool MayOpenWindow(string? type) => type is AddDownload or Activate;
 }
 
 /// <summary>Error codes (PRD §8.3) plus <see cref="InvalidMessage"/> (decision D-50).</summary>
