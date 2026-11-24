@@ -16,7 +16,12 @@ public sealed class ExpiredLinkTests : IAsyncLifetime
     public async Task InitializeAsync()
     {
         _server = await TestHttpServer.StartAsync();
-        _fx = new EngineFixture();
+        // These tests count the requests to the signing address exactly, and a link here allows
+        // only two downloads. With D-90's splitting, a connection that finishes first may split
+        // the other's segment, and that new request needs one more link, depending on which
+        // connection was faster (it failed 1 run in 4). Refreshing is what they test, so they run
+        // on fixed segments; splitting itself is covered by SplitAndTuneTests.
+        _fx = new EngineFixture(EngineFixture.FastOptions with { SplitSegments = false, AutoConnections = false });
     }
 
     public async Task DisposeAsync()
