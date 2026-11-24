@@ -50,6 +50,7 @@ OB2 uses well-known open-source libraries for plumbing; see [Tech stack](#tech-s
 
 ### Downloading
 - **1–32 connections per file**, with a per-server connection cap. If a server refuses range requests, OB2 falls back to one connection.
+- **Every connection busy to the end.** A connection that finishes its part takes over half of the biggest part still downloading, so one slow connection never holds up the rest, and a resumed download gets all its connections back. OB2 also adds connections while that makes the download faster, and gives them back when the line is full or the server pushes back.
 - **Resume anywhere.** Progress is checkpointed, so pausing, closing the app, a crash, or a reboot doesn't lose finished parts.
 - **Automatic retries** with exponential backoff and jitter. `Retry-After` is honoured.
 - **Expired links are refreshed.** If a signed URL stops working mid-download, OB2 asks the original link for a fresh address and continues.

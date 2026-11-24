@@ -17,15 +17,23 @@ internal sealed class SegmentWorker
     private readonly EngineOptions _options;
     private readonly SafeFileHandle _file;
     private readonly IReadOnlyList<TokenBucket> _limiters;
-    private readonly Action _onBytes;
+    private readonly Action<int> _onBytes;
+    private readonly object _splitLock;
 
-    public SegmentWorker(HttpClient http, EngineOptions options, SafeFileHandle file, IReadOnlyList<TokenBucket> limiters, Action onBytes)
+    /// <param name="onBytes">Called with each block of bytes written.</param>
+    /// <param name="splitLock">
+    /// D-90: the job's lock for splitting segments. Under it the worker clamps what it writes to
+    /// the segment's current end and reserves those bytes, so a split never takes bytes being
+    /// written and two connections never write or count the same byte.
+    /// </param>
+    public SegmentWorker(HttpClient http, EngineOptions options, SafeFileHandle file, IReadOnlyList<TokenBucket> limiters, Action<int> onBytes, object splitLock)
     {
         _http = http;
         _options = options;
         _file = file;
         _limiters = limiters;
         _onBytes = onBytes;
+        _splitLock = splitLock;
     }
 
     /// <summary>Downloads the rest of <paramref name="segment"/>. Returns bytes received in this attempt.</summary>
@@ -78,14 +86,52 @@ internal sealed class SegmentWorker
                     throw new IOException($"The connection closed after {received:N0} bytes, {segment.Length - segment.Downloaded:N0} short of the segment end.");
                 }
 
-                await WriteAsync(buffer.AsMemory(0, read), segment.Position, cancellationToken).ConfigureAwait(false);
-                segment.AddDownloaded(read);
-                received += read;
-                _onBytes();
+                // D-90: the end may have moved back since the read was asked for (another
+                // connection took over the rest); only bytes up to it are this segment's.
+                int mine;
+                lock (_splitLock)
+                {
+                    mine = segment.IsOpenEnded ? read : (int)Math.Clamp(segment.Length!.Value - segment.Downloaded, 0, read);
+                    segment.Reserved = mine;
+                }
+
+                var written = false;
+                try
+                {
+                    if (mine > 0)
+                    {
+                        await WriteAsync(buffer.AsMemory(0, mine), segment.Position, cancellationToken).ConfigureAwait(false);
+                    }
+
+                    written = true;
+                }
+                finally
+                {
+                    // Counted only once written, so a checkpoint never claims bytes not on disk
+                    // (D-22), and in the same step as the reservation ends, so a split never sees
+                    // them as neither counted nor reserved.
+                    lock (_splitLock)
+                    {
+                        if (written)
+                        {
+                            segment.AddDownloaded(mine);
+                        }
+
+                        segment.Reserved = 0;
+                    }
+                }
+
+                received += mine;
+                _onBytes(mine);
 
                 foreach (var limiter in _limiters)
                 {
                     await limiter.WaitAsync(read, cancellationToken).ConfigureAwait(false);
+                }
+
+                if (mine < read)
+                {
+                    break; // the rest of the response belongs to the segment split off this one
                 }
             }
 

@@ -7,7 +7,6 @@ Items noticed during a phase but outside its scope (PRD §0). Each one names the
 | Log retention by age (7 days) relies on Serilog's `retainedFileTimeLimit`; only rolling by size is covered by a test. | Phase 1 | Any |
 | Manual HTTP/SOCKS5 proxy (FR-10, P1). The engine uses the system proxy. No phase lists it in scope. | Phase 2 | v1.0 |
 | Set the file timestamp from `Last-Modified` (FR-12, P2). The value is already stored. | Phase 2 | v1.3 |
-| Dynamic segment splitting: when a connection finishes early, split the largest remaining segment so no connection sits idle. | Phase 3 | v1.3 |
 | Detect HDD vs SSD and limit segments on rotating disks (§16.1). | Phase 3 | v1.3 |
 | FlaUI automation for the main flows (§14.1 UI row, P1). Phase 4 UI checks were manual plus UI Automation scripts. | Phase 4 | v1.0 |
 | Remember column order/width and window size between runs. | Phase 4 | v1.3 |
@@ -38,6 +37,19 @@ Items noticed during a phase but outside its scope (PRD §0). Each one names the
 | Item | Shipped as |
 |------|-----------|
 | A dark theme (open question 2): Light or Dark in Options > General, every colour from one palette, high contrast still the system's. | Dark theme (D-77) |
+
+## Done in v1.2
+
+| Item | Shipped as |
+|------|-----------|
+| Dynamic segment splitting: when a connection finishes early, split the largest remaining segment so no connection sits idle (Phase 3). | Every connection busy to the end, and connections added while they help (D-90) |
+
+## Raised in v1.2 (speed, D-90)
+
+| Item | Raised in | Target |
+|------|-----------|--------|
+| Servers that limit how often one visitor may ask (proof.ovh.net answered 429 with `Retry-After: 10` to a second request 2 s after the first): OB2 waits as asked and cuts to one connection, but fails the download once one part has been refused 5 times in a row, after about 2 minutes. When down to one connection, ask for all the remaining parts in one request, and let a `Retry-After` wait not use up a retry. | D-90 | v1.3 |
+| Hetzner's speed-test servers (fsn1/nbg1-speed.hetzner.com) close the connection on any .NET `HttpClient` request, also over plain HTTP and with a browser's user agent, while curl downloads the same file; GitHub and the others tried work. Find what they reject (header order, HTTP/1.1 details) in case other servers do the same. | D-90 | v1.3 |
 
 ## Raised in v1.2 (updates)
 

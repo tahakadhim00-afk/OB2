@@ -5,7 +5,7 @@ namespace OB2.Core.Engine;
 /// <summary>Tunables for the download engine. Defaults follow the PRD.</summary>
 public sealed record EngineOptions
 {
-    /// <summary>Connections per download (FR-3). Phase 2 always uses one.</summary>
+    /// <summary>Connections per download (FR-3); with <see cref="AutoConnections"/>, the number it starts with.</summary>
     public int Connections { get; init; } = 8;
 
     /// <summary>Retries per segment before the download fails (FR-6).</summary>
@@ -40,6 +40,15 @@ public sealed record EngineOptions
     /// <summary>§11.1: keep cookies of unfinished downloads across restarts, encrypted (D-67).</summary>
     public bool RememberAuth { get; init; }
 
+    /// <summary>D-90: a connection with nothing left takes over half of the biggest unfinished segment.</summary>
+    public bool SplitSegments { get; init; } = true;
+
+    /// <summary>D-90: connections are added while that makes downloads faster, up to the per-server limit.</summary>
+    public bool AutoConnections { get; init; } = true;
+
+    /// <summary>D-90: how long each speed measurement behind <see cref="AutoConnections"/> lasts.</summary>
+    public TimeSpan TuneInterval { get; init; } = TimeSpan.FromSeconds(3);
+
     public static EngineOptions FromSettings(AppSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
@@ -53,6 +62,7 @@ public sealed record EngineOptions
             UserAgent = d.UserAgent,
             MaxConnectionsPerHost = d.MaxConnectionsPerHost,
             RememberAuth = d.RememberAuth,
+            AutoConnections = d.AutoConnections,
         };
     }
 }

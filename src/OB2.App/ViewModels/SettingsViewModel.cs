@@ -44,6 +44,10 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private int _maxPerHost;
 
+    /// <summary>D-90: add connections while that makes a download faster.</summary>
+    [ObservableProperty]
+    private bool _autoConnections;
+
     [ObservableProperty]
     private int _retries;
 
@@ -152,6 +156,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         _autoResume = settings.Downloads.AutoResumeOnStartup;
         _connections = settings.Downloads.Connections;
         _maxPerHost = settings.Downloads.MaxConnectionsPerHost;
+        _autoConnections = settings.Downloads.AutoConnections;
         _retries = settings.Downloads.MaxRetries;
         _connectTimeout = settings.Downloads.ConnectTimeoutSeconds;
         _readTimeout = settings.Downloads.ReadIdleTimeoutSeconds;
@@ -252,6 +257,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         d.AutoResumeOnStartup = AutoResume;
         d.Connections = Connections;
         d.MaxConnectionsPerHost = MaxPerHost;
+        d.AutoConnections = AutoConnections;
         d.MaxRetries = Retries;
         d.ConnectTimeoutSeconds = ConnectTimeout;
         d.ReadIdleTimeoutSeconds = ReadTimeout;

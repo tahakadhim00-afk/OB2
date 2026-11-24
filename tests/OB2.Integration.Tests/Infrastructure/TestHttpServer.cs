@@ -22,6 +22,8 @@ namespace OB2.Integration.Tests.Infrastructure;
 /// <item><c>norange=1</c> ignore Range, no Accept-Ranges</item>
 /// <item><c>nolength=1</c> no Content-Length (chunked), no ranges</item>
 /// <item><c>bps=N</c> throttle each response to N bytes/s</item>
+/// <item><c>slowFirst=N</c> the response that starts at byte 0 runs at N bytes/s instead (one slow connection, D-90)</item>
+/// <item><c>totalBps=N</c> all responses of this path share N bytes/s, like a full line (D-90)</item>
 /// <item><c>dropAfter=N&amp;drops=K</c> abort the first K responses after N bytes</item>
 /// <item><c>fail=CODE&amp;failCount=K</c> answer CODE to the first K GETs</item>
 /// <item><c>stallAfter=N&amp;stalls=K</c> stop sending (but keep the socket) after N bytes, K times</item>
@@ -67,6 +69,12 @@ public sealed class TestHttpServer : IAsyncDisposable
 
     /// <summary>Body bytes actually written, so a test can catch bandwidth the client discards.</summary>
     public long BytesSent => Interlocked.Read(ref _bytesSent);
+
+    /// <summary>D-90: starts counting <see cref="MaxConcurrentResponses"/> afresh, for a test's second phase.</summary>
+    public void ResetConcurrency() => Volatile.Write(ref _maxConcurrentResponses, Volatile.Read(ref _activeResponses));
+
+    private readonly object _shareLock = new();
+    private DateTime _shareNext = DateTime.MinValue;
 
     private int _activeResponses;
     private int _maxConcurrentResponses;
@@ -327,7 +335,8 @@ public sealed class TestHttpServer : IAsyncDisposable
             return;
         }
 
-        var bps = Int(query, "bps", 0);
+        var bps = from == 0 && !IsRangeProbeRequest(request) && query.ContainsKey("slowFirst") ? Int(query, "slowFirst", 0) : Int(query, "bps", 0);
+        var totalBps = Int(query, "totalBps", 0);
         var dropApplies = query.ContainsKey("dropAfter") && from >= Int(query, "dropFrom", 0);
         var dropAfter = dropApplies && Increment(key + "#drop") <= Int(query, "drops", int.MaxValue)
             ? Int(query, "dropAfter", 0)
@@ -362,7 +371,8 @@ public sealed class TestHttpServer : IAsyncDisposable
 
         try
         {
-            await WriteBodyAsync(context, from, to, bps, dropAfter, stallAfter, Int(query, "variant", 0), n => Interlocked.Add(ref _bytesSent, n));
+            await WriteBodyAsync(context, from, to, bps, dropAfter, stallAfter, Int(query, "variant", 0), n => Interlocked.Add(ref _bytesSent, n),
+                totalBps > 0 ? (n, ct) => ShareAsync(n, totalBps, ct) : null);
         }
         finally
         {
@@ -373,9 +383,38 @@ public sealed class TestHttpServer : IAsyncDisposable
         }
     }
 
-    private static async Task WriteBodyAsync(HttpContext context, long from, long to, int bps, long dropAfter, long stallAfter, int variant, Action<int> wrote)
+    private static bool IsRangeProbeRequest(HttpRequest request) => request.Headers.Range.ToString() == "bytes=0-0";
+
+    /// <summary>D-90: one line's worth of bandwidth shared by every response: each chunk waits its turn.</summary>
+    private async Task ShareAsync(int bytes, int totalBps, CancellationToken ct)
+    {
+        TimeSpan wait;
+        lock (_shareLock)
+        {
+            var now = DateTime.UtcNow;
+            if (_shareNext < now)
+            {
+                _shareNext = now;
+            }
+
+            wait = _shareNext - now;
+            _shareNext += TimeSpan.FromSeconds((double)bytes / totalBps);
+        }
+
+        if (wait > TimeSpan.Zero)
+        {
+            await Task.Delay(wait, ct);
+        }
+    }
+
+    private static async Task WriteBodyAsync(HttpContext context, long from, long to, int bps, long dropAfter, long stallAfter, int variant, Action<int> wrote,
+        Func<int, CancellationToken, Task>? share = null)
     {
         var chunk = bps > 0 ? Math.Clamp(bps / 10, 1024, 64 * 1024) : 64 * 1024;
+        if (share is not null)
+        {
+            chunk = Math.Min(chunk, 16 * 1024); // small turns, so the shared rate is fair between responses
+        }
         var buffer = new byte[chunk];
         long sent = 0;
         var started = DateTime.UtcNow;
@@ -396,6 +435,11 @@ public sealed class TestHttpServer : IAsyncDisposable
 
             if (n > 0)
             {
+                if (share is not null)
+                {
+                    await share(n, ct);
+                }
+
                 Fill(buffer.AsSpan(0, n), offset, variant);
                 await context.Response.Body.WriteAsync(buffer.AsMemory(0, n), ct);
                 await context.Response.Body.FlushAsync(ct);

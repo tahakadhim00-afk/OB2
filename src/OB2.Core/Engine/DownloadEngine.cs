@@ -25,6 +25,9 @@ public sealed partial class DownloadEngine : IDisposable
     private readonly ConcurrentDictionary<long, IDownloadJob> _jobs = new();
     private readonly HostConnectionLimiter _hostLimiter;
 
+    /// <summary>D-90: every byte all downloads receive, so tuning one download sees what it does to all of them.</summary>
+    private readonly ByteCounter _received = new();
+
     // Cookies live in memory for the life of the process (§11.1); with "remember auth" on they
     // are also kept encrypted in the cookie store until the download finishes (D-67).
     private readonly ConcurrentDictionary<long, string> _cookies = new();
@@ -182,7 +185,7 @@ public sealed partial class DownloadEngine : IDisposable
             // A video page goes through yt-dlp (D-71), a stream OB2 read itself through its own
             // stream job (D-80), everything else through the segment engine.
             IDownloadJob job = !item.IsMedia
-                ? new DownloadJob(id, _repository, _http, _options(), _hostLimiter, GlobalLimiter, _clock, _loggerFactory.CreateLogger<DownloadJob>(), cookies, OnJobStatusChanged)
+                ? new DownloadJob(id, _repository, _http, _options(), _hostLimiter, GlobalLimiter, _received, _clock, _loggerFactory.CreateLogger<DownloadJob>(), cookies, OnJobStatusChanged)
                 : StreamSpec.IsSpec(item.MediaFormat)
                     ? new StreamJob(id, _repository, _http, _options(), GlobalLimiter, _mediaTools, _clock, _loggerFactory.CreateLogger<StreamJob>(), cookies, OnJobStatusChanged)
                     : new MediaJob(id, _repository, _mediaTools, _clock, _loggerFactory.CreateLogger<MediaJob>(), OnJobStatusChanged);

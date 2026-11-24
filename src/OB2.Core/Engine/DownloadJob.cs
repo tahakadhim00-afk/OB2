@@ -30,9 +30,19 @@ internal sealed partial class DownloadJob : IDownloadJob, IDisposable
     private readonly object _statusLock = new();
     private readonly HostConnectionLimiter _hostLimiter;
     private readonly RetryPolicy _retry;
+    private readonly ByteCounter _received;
+
+    /// <summary>
+    /// D-90: taken to split a segment and by each connection to reserve and count what it writes
+    /// (never held across I/O). Splitting also holds <see cref="_checkpointLock"/> first, so a
+    /// checkpoint records segments either before a split or after it, never in between.
+    /// </summary>
+    private readonly object _splitLock = new();
     private TokenBucket[] _limiters;
 
     private DownloadItem _item = null!;
+
+    /// <summary>Replaced, never changed in place, when a segment is split off (D-90), so readers can enumerate it freely.</summary>
     private List<Segment> _segments = [];
     private FileStream? _file;
     private long _lastCheckpointBytes;
@@ -40,6 +50,13 @@ internal sealed partial class DownloadJob : IDownloadJob, IDisposable
     private int _activeConnections;
     private int _connectionLimit = 1;
     private int _throttleErrors;
+
+    /// <summary>D-90: ranges and a known size, so idle connections may take over half of a segment.</summary>
+    private bool _canSplit;
+    private ConnectionTuner? _tuner;
+
+    /// <summary>D-90: starts workers up to the connection limit in the pass running now; null between passes.</summary>
+    private Action? _startWorkers;
 
     /// <summary>The address segments download from; replaced when an expired signed URL is refreshed.</summary>
     private Uri _url = null!;
@@ -55,6 +72,7 @@ internal sealed partial class DownloadJob : IDownloadJob, IDisposable
         EngineOptions options,
         HostConnectionLimiter hostLimiter,
         TokenBucket globalLimiter,
+        ByteCounter received,
         IClock clock,
         ILogger logger,
         string? cookies,
@@ -65,6 +83,7 @@ internal sealed partial class DownloadJob : IDownloadJob, IDisposable
         _http = http;
         _options = options;
         _hostLimiter = hostLimiter;
+        _received = received;
         _limiters = [globalLimiter];
         _retry = new RetryPolicy(options.MaxRetries, options.RetryBaseDelay, options.RetryMaxDelay);
         _clock = clock;
@@ -99,7 +118,8 @@ internal sealed partial class DownloadJob : IDownloadJob, IDisposable
 
     public DownloadProgress Snapshot()
     {
-        var segments = _segments.Select(s => s.Snapshot()).ToList();
+        // In file order: a segment split off another (D-90) is listed where its bytes go.
+        var segments = _segments.OrderBy(s => s.Start).Select(s => s.Snapshot()).ToList();
         var item = _item;
         return new DownloadProgress(
             _id,
@@ -212,10 +232,18 @@ internal sealed partial class DownloadJob : IDownloadJob, IDisposable
             }
 
             _repository.SaveSegments(_id, _segments);
+
+            // The connections this file can use (fewer for a small one); a resume keeps it, even
+            // when splits have since made more segments than that (D-90).
+            _item.Connections = Math.Max(1, _segments.Count);
         }
 
-        _item.Connections = Math.Max(1, _segments.Count);
-        _connectionLimit = Math.Max(1, _segments.Count(s => !s.IsComplete));
+        // D-90: with ranges and a known size, idle connections split segments, so a resume runs
+        // on all its connections again rather than one per unfinished segment.
+        _canSplit = _options.SplitSegments && _item.SupportsRanges && _item.TotalBytes is not null && _segments.All(s => !s.IsOpenEnded);
+        _connectionLimit = _canSplit
+            ? PlannedConnections()
+            : Math.Max(1, _segments.Count(s => !s.IsComplete));
         if (_item.SpeedLimitBps is > 0)
         {
             // FR-9: a per-download limit applies on top of the global one.
@@ -259,33 +287,97 @@ internal sealed partial class DownloadJob : IDownloadJob, IDisposable
     {
         Volatile.Write(ref _url, new Uri(_item.FinalUrl ?? _item.Url));
         var context = RequestContext.For(_item, _options.UserAgent, _cookies);
-        var worker = new SegmentWorker(_http, _options, _file!.SafeFileHandle, _limiters, OnBytes);
+        var worker = new SegmentWorker(_http, _options, _file!.SafeFileHandle, _limiters, OnBytes, _splitLock);
+        _tuner = _canSplit && _options.AutoConnections
+            ? new ConnectionTuner(Volatile.Read(ref _connectionLimit), Math.Min(Settings.DownloadSettings.MaxConnections, _options.MaxConnectionsPerHost))
+            : null;
 
-        using var stopCheckpoints = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        var checkpoints = CheckpointLoopAsync(stopCheckpoints.Token);
+        using var stopLoops = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var checkpoints = CheckpointLoopAsync(stopLoops.Token);
+        var tuning = TuneLoopAsync(stopLoops.Token);
         try
         {
             // A worker shed by the adaptive limit re-queues its segment; another pass picks it up.
             while (_segments.Any(s => !s.IsComplete))
             {
-                var pending = new ConcurrentQueue<Segment>(_segments.Where(s => !s.IsComplete));
-                Volatile.Write(ref _connectionLimit, Math.Min(Math.Max(1, _connectionLimit), pending.Count));
+                // A pause that lands before this pass starts its workers must end the job here:
+                // no worker would be started to notice it, and the pass would begin again for ever.
+                ct.ThrowIfCancellationRequested();
+                var pending = new ConcurrentQueue<Segment>(_segments.Where(s => !s.IsComplete).OrderBy(s => s.Start));
+                if (!_canSplit)
+                {
+                    // Without splitting, a worker without a segment of its own would only wait.
+                    Volatile.Write(ref _connectionLimit, Math.Min(Math.Max(1, _connectionLimit), pending.Count));
+                }
+
                 using var failFast = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                var workers = Enumerable.Range(0, _connectionLimit)
-                    .Select(i => WorkerLoopAsync(i, pending, worker, context, failFast))
-                    .ToArray();
-                await Task.WhenAll(workers).ConfigureAwait(false);
+                var workers = new List<Task>();
+                var closed = false;
+                void StartWorkers()
+                {
+                    lock (workers)
+                    {
+                        while (!closed && workers.Count < Volatile.Read(ref _connectionLimit) && !failFast.IsCancellationRequested)
+                        {
+                            workers.Add(WorkerLoopAsync(workers.Count, pending, worker, context, failFast));
+                        }
+                    }
+                }
+
+                Volatile.Write(ref _startWorkers, StartWorkers);
+                try
+                {
+                    StartWorkers();
+
+                    // The tuner may add workers while these run; the pass ends only once no
+                    // worker it started is still running, and then it takes no new ones.
+                    while (true)
+                    {
+                        Task[] running;
+                        lock (workers)
+                        {
+                            running = [.. workers];
+                        }
+
+                        await Task.WhenAll(running).ConfigureAwait(false);
+                        lock (workers)
+                        {
+                            if (workers.Count == running.Length)
+                            {
+                                closed = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                finally
+                {
+                    Volatile.Write(ref _startWorkers, null);
+                    Task[] all;
+                    lock (workers)
+                    {
+                        closed = true;
+                        all = [.. workers];
+                    }
+
+                    // After a failure the others are being cancelled (failFast); none may still be
+                    // writing when the file closes. Their errors are not this one's to report.
+                    await Task.WhenAll(all).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+                }
             }
         }
         finally
         {
-            await stopCheckpoints.CancelAsync().ConfigureAwait(false);
-            try
+            await stopLoops.CancelAsync().ConfigureAwait(false);
+            foreach (var loop in new[] { checkpoints, tuning })
             {
-                await checkpoints.ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
+                try
+                {
+                    await loop.ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                }
             }
         }
     }
@@ -293,11 +385,21 @@ internal sealed partial class DownloadJob : IDownloadJob, IDisposable
     private async Task WorkerLoopAsync(int index, ConcurrentQueue<Segment> pending, SegmentWorker worker, RequestContext context, CancellationTokenSource failFast)
     {
         var ct = failFast.Token;
+        using var slot = new HostSlot(_hostLimiter);
         try
         {
-            while (index < Volatile.Read(ref _connectionLimit) && pending.TryDequeue(out var segment))
+            while (index < Volatile.Read(ref _connectionLimit))
             {
-                if (!await RunSegmentWithRetriesAsync(index, segment, worker, context, ct).ConfigureAwait(false))
+                // A connection to the server first (§16.1, shared by all downloads), so a piece
+                // split off below never waits for one while its donor could have fetched it.
+                await slot.EnsureAsync(Volatile.Read(ref _url), ct).ConfigureAwait(false);
+                var segment = pending.TryDequeue(out var queued) ? queued : TrySplit();
+                if (segment is null)
+                {
+                    return; // nothing left that is worth a connection of its own
+                }
+
+                if (!await RunSegmentWithRetriesAsync(index, segment, worker, context, slot, ct).ConfigureAwait(false))
                 {
                     pending.Enqueue(segment);
                     return;
@@ -312,23 +414,128 @@ internal sealed partial class DownloadJob : IDownloadJob, IDisposable
         }
     }
 
+    /// <summary>
+    /// D-90: a new segment made of the second half of the one with the most bytes left, for a
+    /// connection with nothing to do; null when nothing is worth splitting. Atomic with respect
+    /// to checkpoints, so a crash at any moment resumes with segments that cover the file.
+    /// </summary>
+    private Segment? TrySplit()
+    {
+        if (!_canSplit)
+        {
+            return null;
+        }
+
+        lock (_checkpointLock)
+        {
+            if (_file is null)
+            {
+                return null; // pausing or closing
+            }
+
+            Segment? piece;
+            long donorEnd;
+            lock (_splitLock)
+            {
+                var segments = _segments;
+                piece = SegmentSplitter.TrySplit(segments, MinPieceBytes, segments.Max(s => s.Index) + 1);
+                if (piece is null)
+                {
+                    return null;
+                }
+
+                donorEnd = piece.Start - 1;
+                _segments = [.. segments, piece];
+            }
+
+            LogSplit(_id, piece.Index, piece.Start, piece.End, donorEnd);
+            return piece;
+        }
+    }
+
+    /// <summary>
+    /// D-90: the smallest piece split off, and the least a donor keeps: twice the smallest planned
+    /// segment (1 MB by default). Smaller pieces would cost a new connection for too few bytes.
+    /// </summary>
+    private long MinPieceBytes => Math.Max(2 * _options.MinSegmentBytes, 2L * _options.BufferSize);
+
+    /// <summary>
+    /// D-90: every <see cref="EngineOptions.TuneInterval"/>, measures how fast all downloads
+    /// receive and lets <see cref="ConnectionTuner"/> decide whether this one gets more
+    /// connections, keeps them, or goes back to what it had.
+    /// </summary>
+    private async Task TuneLoopAsync(CancellationToken ct)
+    {
+        if (_tuner is not { } tuner || tuner.Settled)
+        {
+            return;
+        }
+
+        using var timer = new PeriodicTimer(_options.TuneInterval);
+        var lastBytes = _received.Total;
+        var lastTicks = Stopwatch.GetTimestamp();
+        while (!tuner.Settled && await timer.WaitForNextTickAsync(ct).ConfigureAwait(false))
+        {
+            var bytes = _received.Total;
+            var seconds = Stopwatch.GetElapsedTime(lastTicks).TotalSeconds;
+            var speed = seconds > 0 ? (bytes - lastBytes) / seconds : 0;
+            lastBytes = bytes;
+            lastTicks = Stopwatch.GetTimestamp();
+
+            var before = Volatile.Read(ref _connectionLimit);
+            var after = tuner.Next(speed, CanGrow(before));
+            if (after == before || (after > before && tuner.Settled))
+            {
+                continue; // nothing to do, or the server pushed back meanwhile: never add then
+            }
+
+            // Only from the number this decision was based on: if throttling cut the connections
+            // since (NoteThrottle), that cut stands and tuning is over.
+            if (Interlocked.CompareExchange(ref _connectionLimit, after, before) != before)
+            {
+                return;
+            }
+
+            LogConnectionsTuned(_id, before, after, speed / (1024 * 1024));
+            if (after > before)
+            {
+                Volatile.Read(ref _startWorkers)?.Invoke();
+            }
+        }
+    }
+
+    /// <summary>D-90: whether more connections could do anything for this download now.</summary>
+    private bool CanGrow(int limit)
+    {
+        if (_limiters.Any(l => l.IsLimited))
+        {
+            return false; // a speed limit decides the speed, not the connections
+        }
+
+        // Enough left for every new connection to get a few pieces of its own.
+        var left = _segments.Sum(s => Math.Max(0, SegmentSplitter.Left(s)));
+        if (left < (limit + ConnectionTuner.StepFrom(limit)) * MinPieceBytes * 4)
+        {
+            return false;
+        }
+
+        return _hostLimiter.Available(Volatile.Read(ref _url)) > 0;
+    }
+
     /// <returns>True when the segment finished; false when this worker was shed by the adaptive limit.</returns>
-    private async Task<bool> RunSegmentWithRetriesAsync(int index, Segment segment, SegmentWorker worker, RequestContext context, CancellationToken ct)
+    private async Task<bool> RunSegmentWithRetriesAsync(int index, Segment segment, SegmentWorker worker, RequestContext context, HostSlot slot, CancellationToken ct)
     {
         while (true)
         {
             ct.ThrowIfCancellationRequested();
             var url = Volatile.Read(ref _url);
+            await slot.EnsureAsync(url, ct).ConfigureAwait(false);
             var before = segment.Downloaded;
             segment.Status = SegmentStatus.Active;
             Interlocked.Increment(ref _activeConnections);
             try
             {
-                using (await _hostLimiter.AcquireAsync(url, ct).ConfigureAwait(false))
-                {
-                    await worker.RunAsync(url, context, segment, _item.SupportsRanges, ct).ConfigureAwait(false);
-                }
-
+                await worker.RunAsync(url, context, segment, _item.SupportsRanges, ct).ConfigureAwait(false);
                 segment.RetryCount = 0;
                 return true;
             }
@@ -369,6 +576,7 @@ internal sealed partial class DownloadJob : IDownloadJob, IDisposable
                 EnterRetrying();
                 var delay = _retry.DelayFor(segment.RetryCount, ex);
                 LogRetry(_id, segment.Index, segment.RetryCount, _retry.MaxRetries, delay.TotalMilliseconds, ex.Message);
+                slot.Release(); // other downloads from this server may use it while this one waits
                 await Task.Delay(delay, ct).ConfigureAwait(false);
             }
             catch (Exception) when (!ct.IsCancellationRequested)
@@ -390,6 +598,7 @@ internal sealed partial class DownloadJob : IDownloadJob, IDisposable
     /// <summary>§16.1: after repeated throttling errors, halve this download's connections (minimum one).</summary>
     private void NoteThrottle()
     {
+        _tuner?.Throttled(); // D-90: a server that pushes back never gets more connections
         if (Interlocked.Increment(ref _throttleErrors) < 3)
         {
             return;
@@ -484,6 +693,8 @@ internal sealed partial class DownloadJob : IDownloadJob, IDisposable
             _item.SupportsRanges = false;
             _item.Connections = 1;
             _connectionLimit = 1;
+            _canSplit = false;
+            _tuner?.Throttled();
             _segments = SegmentPlanner.Plan(_item.TotalBytes, supportsRanges: false, 1, _options.MinSegmentBytes);
             _file!.SetLength(0);
             if (_item.TotalBytes is { } total)
@@ -500,8 +711,9 @@ internal sealed partial class DownloadJob : IDownloadJob, IDisposable
         SetStatus(DownloadStatus.Downloading);
     }
 
-    private void OnBytes()
+    private void OnBytes(int bytes)
     {
+        _received.Add(bytes);
         if (_item.Status == DownloadStatus.Retrying)
         {
             lock (_statusLock)
@@ -821,6 +1033,45 @@ internal sealed partial class DownloadJob : IDownloadJob, IDisposable
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Download {Id}: server is throttling; connections reduced from {From} to {To}")]
     private partial void LogConnectionsReduced(long id, int from, int to);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Download {Id}: segment {Index} ({Start}-{End}) split off; the donor now ends at {DonorEnd}")]
+    private partial void LogSplit(long id, int index, long start, long end, long donorEnd);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Download {Id}: connections {From} -> {To} at {MegabytesPerSecond:0.0} MB/s")]
+    private partial void LogConnectionsTuned(long id, int from, int to, double megabytesPerSecond);
+
+    /// <summary>
+    /// D-90: one worker's place in the per-server limit (§16.1). Held from one segment to the next,
+    /// so a split piece never waits for a connection; given up while waiting to retry, and taken
+    /// again for another server when a refreshed link points elsewhere.
+    /// </summary>
+    private sealed class HostSlot(HostConnectionLimiter limiter) : IDisposable
+    {
+        private IDisposable? _held;
+        private string? _host;
+
+        public async Task EnsureAsync(Uri url, CancellationToken cancellationToken)
+        {
+            var host = HostConnectionLimiter.KeyOf(url);
+            if (_held is not null && _host == host)
+            {
+                return;
+            }
+
+            Release();
+            _held = await limiter.AcquireAsync(url, cancellationToken).ConfigureAwait(false);
+            _host = host;
+        }
+
+        public void Release()
+        {
+            _held?.Dispose();
+            _held = null;
+            _host = null;
+        }
+
+        public void Dispose() => Release();
+    }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Download {Id} started: {Url}, {Total} bytes, {Segments} segment(s), resume={Resume}")]
     private partial void LogStarted(long id, string url, long? total, int segments, bool resume);

@@ -95,6 +95,65 @@ public sealed class CliTests : IAsyncLifetime
         ReadDownload().Status.Should().Be(DownloadStatus.Completed);
     }
 
+    [Fact]
+    public async Task Killed_process_after_splits_resumes_without_corruption()
+    {
+        // D-90: kill OB2.exe once a checkpoint has saved segments split off others, then run
+        // again. 2 connections at 2 MB/s, except the first part's at 50 KB/s: the fast one
+        // finishes its half in about 8 s and then takes over halves of the slow one.
+        const long size = 32 * 1024 * 1024;
+        var url = _server.FileUrl(size, "split.bin", "bps=2000000&slowFirst=50000").AbsoluteUri;
+
+        using (var process = Ob2Process.Start("get", url, "--out", Out, "--data", Data, "--connections", "2"))
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(60);
+            while (ReadSegmentsQuietly().Count < 3)
+            {
+                process.HasExited.Should().BeFalse("the download must still be running when a split is saved");
+                DateTime.UtcNow.Should().BeBefore(deadline);
+                await Task.Delay(100);
+            }
+
+            process.Kill(entireProcessTree: true);
+            await process.WaitForExitAsync();
+        }
+
+        var saved = ReadSegmentsQuietly().OrderBy(s => s.Start).ToList();
+        saved.Should().HaveCountGreaterThanOrEqualTo(3);
+        saved[0].Start.Should().Be(0);
+        saved[^1].End.Should().Be(size - 1);
+        for (var i = 1; i < saved.Count; i++)
+        {
+            saved[i].Start.Should().Be(saved[i - 1].End + 1, "the saved segments cover the file once");
+        }
+
+        ReadDownload().DownloadedBytes.Should().Be(saved.Sum(s => s.Downloaded));
+
+        var (exit, output) = await Ob2Process.RunAsync(Timeout, "get", url, "--out", Out, "--data", Data, "--connections", "2");
+
+        exit.Should().Be(0, output);
+        output.Should().Contain("Resuming");
+        EngineFixture.Sha256OfFile(Path.Combine(Out, "split.bin")).Should().Be(TestHttpServer.Sha256Of(size));
+    }
+
+    private IReadOnlyList<Segment> ReadSegmentsQuietly()
+    {
+        try
+        {
+            if (!File.Exists(Path.Combine(Data, "data", "ob2.db")))
+            {
+                return [];
+            }
+
+            var repository = new SqliteDownloadRepository(new SqliteConnectionFactory(Path.Combine(Data, "data", "ob2.db")));
+            return repository.List() is [var item] ? repository.GetSegments(item.Id) : [];
+        }
+        catch (Exception ex) when (ex is SqliteException or InvalidOperationException)
+        {
+            return []; // the database is still being created by the child process
+        }
+    }
+
     private DownloadItem ReadDownload()
     {
         var repository = new SqliteDownloadRepository(new SqliteConnectionFactory(Path.Combine(Data, "data", "ob2.db")));

@@ -107,18 +107,38 @@ public sealed class Segment
     public const long OpenEnded = -1;
 
     private long _downloaded;
+    private long _end;
+    private long _reserved;
 
     public int Index { get; init; }
 
     public long Start { get; init; }
 
-    /// <summary>Inclusive end offset, or <see cref="OpenEnded"/>.</summary>
-    public long End { get; set; }
+    /// <summary>
+    /// Inclusive end offset, or <see cref="OpenEnded"/>. D-90: moves back while the segment
+    /// downloads when an idle connection takes over its second half, so it is read and written
+    /// with memory barriers by the connection and the engine.
+    /// </summary>
+    public long End
+    {
+        get => Volatile.Read(ref _end);
+        set => Volatile.Write(ref _end, value);
+    }
 
     public long Downloaded
     {
         get => Volatile.Read(ref _downloaded);
         set => Volatile.Write(ref _downloaded, value);
+    }
+
+    /// <summary>
+    /// D-90: bytes after <see cref="Position"/> that its connection has received and is writing
+    /// right now. Not stored; a split never takes them.
+    /// </summary>
+    public long Reserved
+    {
+        get => Volatile.Read(ref _reserved);
+        set => Volatile.Write(ref _reserved, value);
     }
 
     public SegmentStatus Status { get; set; } = SegmentStatus.Pending;

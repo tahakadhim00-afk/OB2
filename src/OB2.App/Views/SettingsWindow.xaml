@@ -61,7 +61,12 @@
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
                     <Label Content="{StaticResource Settings_Connections}" Target="{Binding ElementName=C1}" Style="{StaticResource FieldLabel}" />
-                    <TextBox x:Name="C1" Grid.Column="1" Width="80" HorizontalAlignment="Left" Text="{Binding Connections, UpdateSourceTrigger=PropertyChanged}" Margin="0,3" />
+                    <!-- D-90: the number above is where a download starts; this adds more while it helps. -->
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="0,3">
+                        <TextBox x:Name="C1" Width="80" Text="{Binding Connections, UpdateSourceTrigger=PropertyChanged}" />
+                        <CheckBox Content="{StaticResource Settings_AutoConnections}" IsChecked="{Binding AutoConnections}" ToolTip="{StaticResource Settings_AutoConnectionsTip}"
+                                  VerticalAlignment="Center" Margin="12,0,0,0" />
+                    </StackPanel>
                     <Label Grid.Row="1" Content="{StaticResource Settings_PerHost}" Target="{Binding ElementName=C2}" Style="{StaticResource FieldLabel}" />
                     <TextBox x:Name="C2" Grid.Row="1" Grid.Column="1" Width="80" HorizontalAlignment="Left" Text="{Binding MaxPerHost, UpdateSourceTrigger=PropertyChanged}" Margin="0,3" />
                     <Label Grid.Row="2" Content="{StaticResource Settings_Retries}" Target="{Binding ElementName=C3}" Style="{StaticResource FieldLabel}" />
