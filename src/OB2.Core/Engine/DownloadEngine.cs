@@ -79,6 +79,14 @@ public sealed partial class DownloadEngine : IDisposable
             .ConfigureAwait(false);
     }
 
+    /// <summary>D-87: a web page's HTML and its address after redirects, for Grab links to find the files it links to.</summary>
+    public Task<(string Html, Uri Url)> ReadPageAsync(Uri url, Uri? referrer, CancellationToken cancellationToken = default)
+    {
+        var options = _options();
+        return new Grabber.PageReader(_http, options.UserAgent, options.ConnectTimeout + options.ReadIdleTimeout)
+            .ReadAsync(url, referrer, cancellationToken);
+    }
+
     /// <summary>Creates the download record. Probes first unless <paramref name="probe"/> is supplied.</summary>
     public async Task<DownloadItem> AddAsync(DownloadRequest request, ProbeResult? probe = null, CancellationToken cancellationToken = default)
     {

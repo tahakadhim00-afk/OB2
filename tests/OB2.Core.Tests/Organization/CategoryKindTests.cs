@@ -40,4 +40,17 @@ public sealed class CategoryKindTests
     [Fact]
     public void Double_extensions_dots_and_case_are_read_like_the_resolver_reads_them() =>
         CategoryKinds.Of(["tar.gz", ".ZIP", " 7z "]).Should().Be(CategoryKind.Compressed);
+
+    /// <summary>D-87: Grab links sorts single files with the same table.</summary>
+    [Theory]
+    [InlineData("Talk.MP4", CategoryKind.Video)]
+    [InlineData("backup.tar.gz", CategoryKind.Compressed)]
+    [InlineData("C:\\folder.v2\\notes.pdf", CategoryKind.Documents)]
+    [InlineData("data.torrent", CategoryKind.Other)]
+    [InlineData("README", CategoryKind.Other)]
+    [InlineData("trailing.", CategoryKind.Other)]
+    [InlineData("", CategoryKind.Other)]
+    [InlineData(null, CategoryKind.Other)]
+    public void A_single_file_is_read_by_its_last_extension(string? fileName, CategoryKind expected) =>
+        CategoryKinds.OfFile(fileName).Should().Be(expected);
 }

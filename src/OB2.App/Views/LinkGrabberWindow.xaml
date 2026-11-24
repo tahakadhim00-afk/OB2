@@ -1,0 +1,191 @@
+<Window x:Class="OB2.App.Views.LinkGrabberWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:OB2.App.ViewModels"
+        mc:Ignorable="d"
+        d:DataContext="{d:DesignInstance Type=vm:LinkGrabberViewModel}"
+        Title="{StaticResource Grab_Title}"
+        Icon="/Resources/ob2.ico"
+        Width="960" Height="660" MinWidth="720" MinHeight="480"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        UseLayoutRounding="True"
+        FocusManager.FocusedElement="{Binding ElementName=PasteBox}">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+    </Window.Resources>
+
+    <!-- D-87: paste text, check every link in it, filter, tick, add to a queue. -->
+    <DockPanel Margin="12">
+        <Grid DockPanel.Dock="Top">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <Label Grid.ColumnSpan="2" Content="{StaticResource Grab_PasteLabel}" Target="{Binding ElementName=PasteBox}" Style="{StaticResource FieldLabel}" Padding="0,0,0,4" />
+            <TextBox x:Name="PasteBox" Grid.Row="1" Height="84" Text="{Binding PasteText, UpdateSourceTrigger=PropertyChanged}"
+                     AcceptsReturn="True" TextWrapping="NoWrap" VerticalContentAlignment="Top"
+                     VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+                <TextBox.InputBindings>
+                    <KeyBinding Key="Enter" Modifiers="Control" Command="{Binding FindLinksCommand}" />
+                </TextBox.InputBindings>
+            </TextBox>
+            <StackPanel Grid.Row="1" Grid.Column="1" Margin="8,0,0,0" MinWidth="120">
+                <Button Command="{Binding FindLinksCommand}" ToolTip="{StaticResource Grab_FindTip}" Padding="12,4"
+                        AutomationProperties.Name="{StaticResource Grab_Find}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource AddGlyph}" FontSize="14" VerticalAlignment="Center" Text="&#xE71B;" />
+                        <TextBlock Text="{StaticResource Grab_Find}" Margin="6,0,0,0" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+                <Button Content="{StaticResource Grab_Clear}" Command="{Binding ClearListCommand}" Padding="12,4" Margin="0,6,0,0" />
+            </StackPanel>
+            <TextBlock Grid.Row="2" Grid.ColumnSpan="2" Text="{Binding FoundText}" Style="{StaticResource Hint}" Margin="0,4,0,0" />
+        </Grid>
+
+        <!-- One box per kind the list holds; unticking one hides those links. -->
+        <DockPanel DockPanel.Dock="Top" Margin="0,8,0,6">
+            <Grid DockPanel.Dock="Right" Width="220" Margin="12,0,0,0" VerticalAlignment="Center">
+                <TextBox x:Name="SearchBox" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}" Padding="22,4,4,4"
+                         AutomationProperties.Name="{StaticResource Grab_Search}" />
+                <TextBlock Style="{StaticResource Glyph}" FontSize="12" Text="&#xE721;" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="6,0,0,0" IsHitTestVisible="False" />
+                <TextBlock Text="{StaticResource Grab_Search}" Style="{StaticResource Hint}" Margin="24,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False">
+                    <TextBlock.Visibility>
+                        <Binding Path="Text.IsEmpty" ElementName="SearchBox" Converter="{StaticResource BoolToVisibility}" />
+                    </TextBlock.Visibility>
+                </TextBlock>
+            </Grid>
+            <TextBlock Text="{StaticResource Grab_Show}" VerticalAlignment="Center" Margin="0,0,10,0"
+                       Visibility="{Binding HasLinks, Converter={StaticResource BoolToVisibility}}" />
+            <ItemsControl ItemsSource="{Binding Filters}" Focusable="False" VerticalAlignment="Center">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <CheckBox Content="{Binding Label}" IsChecked="{Binding IsShown}" Margin="0,2,14,2"
+                                  Visibility="{Binding HasLinks, Converter={StaticResource BoolToVisibility}}" />
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </DockPanel>
+
+        <!-- Where they go, and the buttons. -->
+        <Grid DockPanel.Dock="Bottom" Margin="0,10,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <TextBlock Text="{StaticResource Add_Folder}" VerticalAlignment="Center" Margin="0,0,12,0" />
+            <RadioButton Grid.Column="1" Grid.ColumnSpan="2" GroupName="Folder" Content="{StaticResource Grab_ByCategory}"
+                         IsChecked="{Binding UseCategoryFolders}" VerticalAlignment="Center" Margin="0,3" />
+            <RadioButton x:Name="OneFolder" Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" GroupName="Folder" Content="{StaticResource Grab_OneFolder}"
+                         IsChecked="{Binding UseOneFolder}" VerticalAlignment="Center" Margin="0,3" />
+            <Grid Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Margin="20,2,0,2">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBox Text="{Binding SaveFolder, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding UseOneFolder}"
+                         AutomationProperties.Name="{StaticResource Grab_OneFolder}" />
+                <Button Grid.Column="1" Content="{StaticResource Common_Browse}" Click="OnBrowse" Margin="6,0,0,0" Padding="10,0" />
+            </Grid>
+            <Label Grid.Row="3" Content="{StaticResource Add_Queue}" Target="{Binding ElementName=QueueBox}" Style="{StaticResource FieldLabel}" />
+            <ComboBox x:Name="QueueBox" Grid.Row="3" Grid.Column="1" Width="260" HorizontalAlignment="Left" Margin="0,4"
+                      ItemsSource="{Binding Queues}" SelectedItem="{Binding SelectedQueue}" />
+
+            <TextBlock Grid.Row="4" Grid.ColumnSpan="2" Style="{StaticResource ErrorText}" Text="{Binding ErrorText}" VerticalAlignment="Center" Margin="0,10,12,0" />
+            <StackPanel Grid.Row="4" Grid.Column="2" Orientation="Horizontal" Margin="0,10,0,0">
+                <Button Style="{StaticResource DialogButton}" Content="{StaticResource Add_Later}" Command="{Binding DownloadLaterCommand}"
+                        ToolTip="{StaticResource Grab_LaterTip}" />
+                <Button Style="{StaticResource DialogButton}" Content="{StaticResource Add_Now}" Command="{Binding DownloadNowCommand}"
+                        ToolTip="{StaticResource Grab_NowTip}" FontWeight="SemiBold" />
+                <Button Style="{StaticResource DialogButton}" Content="{StaticResource Common_Close}" IsCancel="True" Click="OnClose" />
+            </StackPanel>
+        </Grid>
+
+        <DockPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
+            <Button Content="{StaticResource Grab_TickAll}" Command="{Binding TickAllCommand}" Padding="10,2" />
+            <Button Content="{StaticResource Grab_TickNone}" Command="{Binding TickNoneCommand}" Padding="10,2" Margin="6,0,0,0" />
+            <TextBlock Text="{Binding SummaryText}" Style="{StaticResource Hint}" VerticalAlignment="Center" Margin="12,0,0,0" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+        </DockPanel>
+
+        <Grid>
+            <DataGrid x:Name="List" ItemsSource="{Binding LinksView}" BorderThickness="1" BorderBrush="{DynamicResource BorderBrush}"
+                      SelectionChanged="OnSelectionChanged" MouseDoubleClick="OnDoubleClick"
+                      AutomationProperties.Name="{StaticResource Grab_ListName}">
+                <DataGrid.InputBindings>
+                    <KeyBinding Key="Space" Command="{Binding ToggleSelectedCommand}" />
+                    <KeyBinding Key="Delete" Command="{Binding RemoveSelectedCommand}" />
+                    <KeyBinding Key="Enter" Command="{Binding OpenLinkCommand}" />
+                </DataGrid.InputBindings>
+                <DataGrid.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="{StaticResource Grab_Open}" Command="{Binding OpenLinkCommand}" InputGestureText="Enter" />
+                        <MenuItem Header="{StaticResource Grab_FindOnPage}" Command="{Binding FindLinksOnPageCommand}" />
+                        <MenuItem Header="{StaticResource Menu_CopyUrl}" Command="{Binding CopyAddressCommand}" />
+                        <Separator />
+                        <MenuItem Header="{StaticResource Grab_Remove}" Command="{Binding RemoveSelectedCommand}" InputGestureText="Del" />
+                    </ContextMenu>
+                </DataGrid.ContextMenu>
+                <DataGrid.Columns>
+                    <DataGridTemplateColumn Width="34" CanUserResize="False" SortMemberPath="IsChecked">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <!-- Not focusable: Space on the list ticks every selected row, as in the main list. -->
+                                <CheckBox IsChecked="{Binding IsChecked, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanTick}"
+                                          Focusable="False" HorizontalAlignment="Center" Margin="0"
+                                          AutomationProperties.Name="{Binding FileName}" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTemplateColumn Header="{StaticResource Col_FileName}" Width="2*" MinWidth="180" SortMemberPath="FileName">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <!-- The icon takes the cell's colour, so it turns white with a selected row. -->
+                                    <TextBlock Style="{StaticResource CellText}" FontFamily="{StaticResource IconFont}" FontSize="14" Width="16"
+                                               TextAlignment="Center" Margin="6,3,0,3" Text="{Binding Icon}" />
+                                    <TextBlock Style="{StaticResource CellText}" Text="{Binding FileName}" ToolTip="{Binding AddressTip}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTemplateColumn Header="{StaticResource Col_Size}" Width="90" SortMemberPath="Size">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate><TextBlock Style="{StaticResource CellTextRight}" Text="{Binding SizeText}" /></DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTemplateColumn Header="{StaticResource Col_Status}" Width="250" SortMemberPath="StatusText">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate><TextBlock Style="{StaticResource CellText}" Text="{Binding StatusText}" ToolTip="{Binding StatusTip}" /></DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTemplateColumn Header="{StaticResource Grab_Col_Site}" Width="*" MinWidth="100" SortMemberPath="Site">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate><TextBlock Style="{StaticResource CellText}" Text="{Binding Site}" ToolTip="{Binding AddressTip}" /></DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                </DataGrid.Columns>
+            </DataGrid>
+
+            <TextBlock Text="{StaticResource Grab_Empty}" Style="{StaticResource Hint}" TextAlignment="Center" MaxWidth="420"
+                       HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"
+                       Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisibility}}" />
+        </Grid>
+    </DockPanel>
+</Window>

@@ -138,6 +138,10 @@ public sealed class DownloadService : IDisposable
         return _engine.ProbeAsync(ToRequest(options, DefaultSaveFolder), cancellationToken);
     }
 
+    /// <summary>D-87: a web page's HTML, for Grab links.</summary>
+    public Task<(string Html, Uri Url)> ReadPageAsync(Uri url, Uri? referrer, CancellationToken cancellationToken = default) =>
+        _engine.ReadPageAsync(url, referrer, cancellationToken);
+
     /// <summary>Adds a download, choosing category and folder when not given, and starts it or queues it.</summary>
     public async Task<DownloadItem> AddAsync(AddDownloadOptions options, ProbeResult? probe = null, CancellationToken cancellationToken = default)
     {

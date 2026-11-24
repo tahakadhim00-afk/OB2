@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Globalization;
 using System.Net;
 using System.Security.Cryptography;
+using System.Text;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
@@ -32,7 +33,7 @@ namespace OB2.Integration.Tests.Infrastructure;
 /// <item><c>variant=N</c> shift the body by N, so the same length holds different bytes</item>
 /// <item><c>token=T&amp;uses=K</c> a signed URL: the first K GETs carrying token T succeed, later ones get 403</item>
 /// </list>
-/// <c>/redirect?to=/path</c> answers 302. <c>/status/{code}</c> answers that code.
+/// <c>/redirect?to=/path</c> answers 302. <c>/status/{code}</c> answers that code. <c>/page/{name}</c> answers with an HTML page.
 /// <c>/static/{path}</c> serves <see cref="StaticFolder"/> (D-80: a stream ffmpeg wrote), demanding
 /// <see cref="StaticHeader"/> if set, as players' servers do.
 /// <c>/sign/{size}/{name}?options</c> answers 302 to <c>/file/{size}/{name}?token=tN&amp;options</c>
@@ -92,6 +93,9 @@ public sealed class TestHttpServer : IAsyncDisposable
         server = new TestHttpServer(app, new Uri(address));
         return server;
     }
+
+    /// <summary>D-87: the HTML <c>/page/{name}</c> serves for each name; any other name gets a page without links.</summary>
+    public ConcurrentDictionary<string, string> Pages { get; } = new();
 
     /// <summary>D-80: the folder <c>/static/</c> serves.</summary>
     public string? StaticFolder { get; set; }
@@ -176,6 +180,19 @@ public sealed class TestHttpServer : IAsyncDisposable
                 break;
             case "status" when segments.Length >= 2:
                 context.Response.StatusCode = int.Parse(segments[1], CultureInfo.InvariantCulture);
+                break;
+            case "page":
+                // D-87: a web page, as a file host's "click to download" page or a sign-in form answers.
+                var html = Encoding.UTF8.GetBytes(segments.Length >= 2 && Pages.TryGetValue(segments[1], out var page)
+                    ? page
+                    : "<!doctype html><html><head><title>A page</title></head><body><p>Not a file.</p></body></html>");
+                context.Response.ContentType = "text/html; charset=utf-8";
+                context.Response.ContentLength = html.Length;
+                if (!HttpMethods.IsHead(request.Method))
+                {
+                    await context.Response.Body.WriteAsync(html);
+                }
+
                 break;
             case "static" when StaticFolder is not null:
                 await ServeStaticAsync(context, string.Join('/', segments.Skip(1)));

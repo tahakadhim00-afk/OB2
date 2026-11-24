@@ -137,6 +137,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     public void AddFromPrefill(AddDownloadPrefill prefill) => _dialogs.ShowAddDownload(prefill);
 
+    /// <summary>D-87: many links at once, from pasted text.</summary>
+    [RelayCommand]
+    private void GrabLinks() => _dialogs.ShowLinkGrabber();
+
     [RelayCommand(CanExecute = nameof(CanResume))]
     private void Resume() => _service.Start(SelectedIds);
 

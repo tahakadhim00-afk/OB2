@@ -46,6 +46,13 @@ public static class CategoryKinds
             : counts[0].Kind;
     }
 
+    /// <summary>D-87: what one file is, from its name's last extension; <see cref="CategoryKind.Other"/> when OB2 has no kind for it.</summary>
+    public static CategoryKind OfFile(string? fileName)
+    {
+        var extension = Path.GetExtension(fileName ?? string.Empty);
+        return extension.Length > 1 ? ByExtension.GetValueOrDefault(LastPart(extension)) : CategoryKind.Other;
+    }
+
     /// <summary>"tar.gz" counts as "gz"; a leading dot or upper case changes nothing.</summary>
     private static string LastPart(string extension)
     {

@@ -46,3 +46,7 @@ Items noticed during a phase but outside its scope (PRD §0). Each one names the
 | Authenticode-sign OB2.exe and host.exe, so SmartScreen and antivirus stop warning on a fresh download. The release signature (D-84) covers only what the in-app updater installs. | D-84 | Any |
 | Publish the extension to the Chrome Web Store (and Edge Add-ons), so it updates itself instead of asking for a reload in chrome://extensions after an update (D-85). | D-85 | v1.3 |
 | Going back after a failed start (D-85) cannot help once the new version has migrated the database: the previous version refuses a schema it does not know (D-8). Keep a copy of `ob2.db` before migrating, and restore it when going back. | D-85 | v1.3 |
+| Grab links from more places: text or links dropped on the main window (today only the first link is kept), "Send all to OB2" in the popup's Find downloads list and a "Grab links with OB2" page menu in Chrome (with the browser's cookies), and watching the clipboard (FR-28, off by default). | D-87 | v1.3 |
+| Grab links rules, like JDownloader's Packagizer: by type, site or name, set the folder, the queue, or leave a link out. | D-87 | v1.3 |
+| Grab links: a subfolder per pasted page (named after its title), and archive parts (`.part1.rar`…) grouped as one package. | D-87 | v1.3 |
+| Grab links reads a page's HTML as the server sends it: links a page's scripts add after loading are not found (the browser's button finds those). Pages behind a sign-in are read without cookies. | D-87 | v1.3 |

@@ -54,6 +54,9 @@ public interface IDialogService
     /// <summary>§10.3: partial files on disk that no download claims.</summary>
     void ShowOrphans();
 
+    /// <summary>D-87: Grab links, with the clipboard's text in its box when that holds a link.</summary>
+    void ShowLinkGrabber();
+
     void ShowComplete(DownloadItem item);
 
     void OpenFile(string path);

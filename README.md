@@ -55,6 +55,7 @@ OB2 uses well-known open-source libraries for plumbing; see [Tech stack](#tech-s
 - **Expired links are refreshed.** If a signed URL stops working mid-download, OB2 asks the original link for a fresh address and continues.
 - **Speed limits**, global or per download, enforced by a token bucket.
 - **Integrity checks.** Optional MD5 or SHA-256 verification, disk-space checks before starting, and a size check at the end.
+- **Grab links.** Paste any text (an email, a forum post, a list of addresses) and OB2 lists every link in it with its real name, size and whether it works. A link to a web page brings the files that page links to. Filter by kind, tick what you want, and add them all to a queue in one go.
 
 ### Organizing
 - **Categories** (Documents, Music, Video, Programs, Compressed, or your own) each save to their own folder.
@@ -160,6 +161,7 @@ Copies of OB2 update from this repository's latest GitHub release, and only if i
 | Action | How |
 |--------|-----|
 | Add a download | **Ctrl+N**, paste a link, drag a link onto the window, or `OB2.exe "https://…"` |
+| Add many links at once | **Grab Links** in the toolbar: paste text, **Find links** (**Ctrl+Enter**), tick, **Download Now** |
 | Pause or resume the selected download | **Space** |
 | Open the finished file | **Enter** |
 | Delete selected downloads | **Del** |

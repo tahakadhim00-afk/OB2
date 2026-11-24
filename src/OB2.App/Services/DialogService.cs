@@ -137,6 +137,35 @@ public sealed class DialogService : IDialogService
         window.ShowDialog();
     }
 
+    public void ShowLinkGrabber()
+    {
+        var window = new LinkGrabberWindow(new LinkGrabberViewModel(_service, this, ClipboardTextWithLinks(), [.. _settings.Capture.Extensions])) { Owner = Owner };
+        if (window.Owner is null)
+        {
+            window.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        }
+
+        window.ShowDialog();
+    }
+
+    /// <summary>
+    /// D-87: the clipboard's text when it holds a link, for Grab links' box. Only put there, never
+    /// searched: the links are requested once the user clicks Find links. A huge text (a whole
+    /// copied page) is left out; pasting it by hand still works.
+    /// </summary>
+    private static string? ClipboardTextWithLinks()
+    {
+        try
+        {
+            var text = Clipboard.ContainsText() ? Clipboard.GetText() : null;
+            return text is { Length: <= 200_000 } && OB2.Core.Grabber.LinkExtractor.ContainsLink(text) ? text : null;
+        }
+        catch (System.Runtime.InteropServices.COMException)
+        {
+            return null; // the clipboard is held by another app
+        }
+    }
+
     /// <summary>
     /// Everywhere a part file could plausibly sit: the default folder, every category's folder,
     /// and the folder of each download already listed (a download saved somewhere one-off leaves

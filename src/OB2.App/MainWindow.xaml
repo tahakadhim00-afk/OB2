@@ -37,6 +37,10 @@
                     <Button Style="{StaticResource ToolbarButton}" Command="{Binding AddUrlCommand}" ToolTip="{StaticResource Tb_Add_Tip}" AutomationProperties.Name="{StaticResource Tb_Add}">
                         <StackPanel><TextBlock Style="{StaticResource AddGlyph}" Text="&#xE710;" /><TextBlock Style="{StaticResource ToolbarLabel}" Text="{StaticResource Tb_Add}" /></StackPanel>
                     </Button>
+                    <!-- D-87: every link in a pasted text, checked, filtered and added in one go. -->
+                    <Button Style="{StaticResource ToolbarButton}" Command="{Binding GrabLinksCommand}" ToolTip="{StaticResource Tb_Grab_Tip}" AutomationProperties.Name="{StaticResource Tb_Grab}">
+                        <StackPanel><TextBlock Style="{StaticResource AddGlyph}" Text="&#xE71B;" /><TextBlock Style="{StaticResource ToolbarLabel}" Text="{StaticResource Tb_Grab}" /></StackPanel>
+                    </Button>
                     <Separator />
                     <Button Style="{StaticResource ToolbarButton}" Command="{Binding ResumeCommand}" ToolTip="{StaticResource Tb_Resume_Tip}" AutomationProperties.Name="{StaticResource Tb_Resume}">
                         <StackPanel><TextBlock Style="{StaticResource GoGlyph}" Text="&#xE768;" /><TextBlock Style="{StaticResource ToolbarLabel}" Text="{StaticResource Tb_Resume}" /></StackPanel>
