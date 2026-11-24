@@ -6,7 +6,8 @@ Requirements: Windows 10 1809 or later, or Windows 11, 64-bit. No .NET install n
 Run
 ---
 1. Unzip this folder anywhere you can write to (e.g. D:\Apps\OB2 or a USB stick).
-2. Double-click OB2.exe. On first launch it asks where downloads should be saved.
+2. Double-click OB2.exe. On first launch it installs its video tools (yt-dlp, Deno and
+   ffmpeg, downloaded from GitHub), then asks where downloads should be saved.
 3. Settings, history, and logs are kept next to OB2.exe because portable.flag is present.
    Delete portable.flag to keep them in %APPDATA%\OB2 instead. If this folder is
    read-only, OB2 uses %APPDATA%\OB2 automatically.
