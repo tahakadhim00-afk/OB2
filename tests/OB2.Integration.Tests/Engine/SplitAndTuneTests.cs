@@ -9,7 +9,9 @@ namespace OB2.Integration.Tests.Engine;
 /// D-90: every connection busy to the end (idle connections take over half of the biggest
 /// unfinished segment) and more connections while they make it faster. Every file is compared
 /// with the server's bytes; every saved set of segments must cover the file exactly once.
+/// These tests measure speed, so they run alone (see <see cref="SpeedMeasuringSerialGroup"/>).
 /// </summary>
+[Collection("Speed measuring")]
 public sealed class SplitAndTuneTests(ITestOutputHelper output) : IAsyncLifetime
 {
     private const long MB = 1024 * 1024;
@@ -200,3 +202,12 @@ public sealed class SplitAndTuneTests(ITestOutputHelper output) : IAsyncLifetime
             "a speed limit decides the speed, not the connections");
     }
 }
+
+/// <summary>
+/// Tests that decide on measured speed run after all the others, one at a time. Alongside the
+/// rest of the suite this process (and the test server inside it) sometimes stalls for a moment:
+/// one 1-second reading came out at 0.0 MB/s, another at 3.5 MB/s on two connections capped at
+/// 1 MB/s each, and the tuner rightly went back on what it measured. Alone they passed 30 of 30.
+/// </summary>
+[CollectionDefinition("Speed measuring", DisableParallelization = true)]
+public sealed class SpeedMeasuringSerialGroup;
