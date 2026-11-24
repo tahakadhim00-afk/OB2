@@ -68,7 +68,7 @@ OB2 uses well-known open-source libraries for plumbing; see [Tech stack](#tech-s
 - **"Download with OB2"** appears on every link's right-click menu.
 - **Video button.** A button appears over playing videos that have a direct file.
 - **Page link finder.** The popup lists every downloadable file on the current page, including addresses hidden in scripts.
-- **Video sites** such as YouTube: the video button lists every quality (1080p, 720p, … and audio only) with its file type and size, and the one you pick downloads like any other row (pause, resume, progress). "More choices" opens a chooser for other audio tracks.
+- **Video sites** such as YouTube: the first time OB2 opens, it downloads the free tools it uses for them (yt-dlp, Deno and ffmpeg, about 150 MB, from their official GitHub releases) before asking where to save files. The video button lists every quality (1080p, 720p, … and audio only) with its file type and size, and the one you pick downloads like any other row (pause, resume, progress). "More choices" opens a chooser for other audio tracks.
 - **Subtitles**: the same menu and the chooser list the video's subtitle tracks (the site's own, and its auto-generated captions). Each one downloads as its own row in SRT, ASS, or VTT, named after the video (`Title.en.srt`) so players load it automatically.
 
 ### Safe by default

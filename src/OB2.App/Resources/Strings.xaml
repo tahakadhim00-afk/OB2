@@ -279,6 +279,21 @@
     <sys:String x:Key="FirstRun_Portable">Portable mode: settings and history stay next to OB2.exe in {0}</sys:String>
     <sys:String x:Key="FirstRun_PerUser">Settings and history are kept in {0}</sys:String>
     <sys:String x:Key="FirstRun_FolderError">That folder cannot be used: {0}</sys:String>
+    <!-- D-89: the first-run window installs the video tools first. -->
+    <sys:String x:Key="FirstRun_Step1">Step 1 of 2</sys:String>
+    <sys:String x:Key="FirstRun_Step2">Step 2 of 2</sys:String>
+    <sys:String x:Key="FirstRun_ToolsHeading">Download the video tools</sys:String>
+    <sys:String x:Key="FirstRun_ToolsBody">To download videos from YouTube and other sites, OB2 uses three free tools. It downloads them once from their official GitHub releases, about {0}, checks their checksums, and keeps them in {1}.</sys:String>
+    <sys:String x:Key="FirstRun_ToolYtDlp">Reads YouTube and other video sites</sys:String>
+    <sys:String x:Key="FirstRun_ToolDeno">Needed by yt-dlp for YouTube</sys:String>
+    <sys:String x:Key="FirstRun_ToolFfmpeg">Joins picture and sound into one file</sys:String>
+    <sys:String x:Key="FirstRun_ToolWaiting">Waiting</sys:String>
+    <sys:String x:Key="FirstRun_ToolInstalled">Installed</sys:String>
+    <sys:String x:Key="FirstRun_ToolUnpacking">Checking and unpacking…</sys:String>
+    <sys:String x:Key="FirstRun_ToolProgress">{0} of {1}  {2}</sys:String>
+    <sys:String x:Key="FirstRun_ToolProgressNoTotal">{0}  {1}</sys:String>
+    <sys:String x:Key="FirstRun_ToolStarting">Starting…</sys:String>
+    <sys:String x:Key="FirstRun_ToolsRetry">Try again</sys:String>
 
     <!-- Startup / errors -->
     <sys:String x:Key="Startup_FailedTitle">OB2 could not start</sys:String>

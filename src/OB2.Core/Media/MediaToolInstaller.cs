@@ -6,13 +6,13 @@ using OB2.Core.Engine;
 
 namespace OB2.Core.Media;
 
-/// <summary>Progress of one tool's download, for the Download Video window.</summary>
+/// <summary>Progress of one tool's download, for the first-run window and the Download Video window.</summary>
 public sealed record ToolDownloadProgress(string Tool, long Received, long? Total, double BytesPerSecond);
 
 /// <summary>
 /// Downloads yt-dlp, Deno and ffmpeg from their official GitHub releases into
-/// <see cref="MediaTools.Folder"/> the first time a video page is opened (D-71, the owner's
-/// choice), and updates yt-dlp on request. The files come through OB2's own engine (several
+/// <see cref="MediaTools.Folder"/>: in the first-run window, before the save folder is chosen
+/// (D-89), or else the first time a video page is opened (D-71), and updates yt-dlp on request. The files come through OB2's own engine (several
 /// connections, retries, expired-link refresh), so about 150 MB also arrive on a slow line, and a
 /// stopped download continues where it was, even after a restart. Every file is checked against
 /// the SHA-256 its release publishes before it replaces anything.

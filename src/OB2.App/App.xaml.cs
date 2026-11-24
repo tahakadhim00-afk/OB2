@@ -8,6 +8,7 @@ using OB2.App.Services;
 using OB2.App.ViewModels;
 using OB2.Core.Downloads;
 using OB2.Core.Engine;
+using OB2.Core.Media;
 using OB2.Core.Organization;
 using OB2.Core.Services;
 using OB2.Core.Settings;
@@ -457,8 +458,9 @@ public partial class App : Application
     }
 
     /// <summary>
-    /// Flow D step 2: on first launch, ask where downloads go. Skipped for tray-only starts
-    /// (browser capture), which use the Downloads folder until the window is opened.
+    /// Flow D step 2: on first launch, ask where downloads go. D-89: before that, install the
+    /// video tools (required to go on). Skipped for tray-only starts (browser capture), which use
+    /// the Downloads folder until the window is opened; closed early, it comes back next start.
     /// </summary>
     private void RunFirstRunWizard(AppSettings settings, DownloadService downloads)
     {
@@ -468,7 +470,8 @@ public partial class App : Application
         }
 
         var paths = _storage!.Paths;
-        var wizard = new Views.FirstRunWindow(downloads.DefaultSaveFolder, paths.IsPortable, paths.Root);
+        var tools = new FirstRunToolsViewModel(_services!.GetRequiredService<MediaToolInstaller>());
+        var wizard = new Views.FirstRunWindow(downloads.DefaultSaveFolder, paths.IsPortable, paths.Root, tools);
         if (wizard.ShowDialog() == true && wizard.ChosenFolder is { } folder)
         {
             settings.Folders.DefaultSaveFolder = folder;

@@ -3,25 +3,63 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="{StaticResource FirstRun_Title}"
         Icon="/Resources/ob2.ico"
-        Width="520" SizeToContent="Height" ResizeMode="NoResize"
+        Width="560" SizeToContent="Height" ResizeMode="NoResize"
         WindowStartupLocation="CenterScreen">
-    <!-- Flow D step 2: pick the save folder on first launch. -->
     <StackPanel Margin="20">
         <Image Source="{DynamicResource LogoImage}" Height="48" HorizontalAlignment="Left" Margin="0,0,0,14"
                RenderOptions.BitmapScalingMode="HighQuality" AutomationProperties.Name="{StaticResource App_Title}" />
-        <TextBlock Text="{StaticResource FirstRun_Heading}" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,8" />
-        <TextBlock Text="{StaticResource FirstRun_Body}" TextWrapping="Wrap" Margin="0,0,0,14" />
-        <Label Content="{StaticResource Settings_DefaultFolder}" Target="{Binding ElementName=FolderBox}" Padding="0,0,0,4" />
-        <Grid Margin="0,0,0,8">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <TextBox x:Name="FolderBox" />
-            <Button Grid.Column="1" Content="{StaticResource Common_Browse}" Click="OnBrowse" Margin="6,0,0,0" Padding="10,2" />
-        </Grid>
-        <TextBlock x:Name="ModeText" Style="{StaticResource Hint}" Margin="0,0,0,8" />
-        <TextBlock x:Name="ErrorText" Style="{StaticResource ErrorText}" Margin="0,0,0,8" />
-        <Button Content="{StaticResource FirstRun_Start}" Style="{StaticResource DialogButton}" HorizontalAlignment="Right" IsDefault="True" Click="OnStart" />
+
+        <!-- D-89, step 1: the video tools, before anything else. Required: the window goes on only once all three are installed. -->
+        <StackPanel x:Name="ToolsStep">
+            <TextBlock Text="{StaticResource FirstRun_Step1}" Style="{StaticResource Hint}" Margin="0,0,0,2" />
+            <TextBlock Text="{StaticResource FirstRun_ToolsHeading}" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,8" />
+            <TextBlock Text="{Binding BodyText}" TextWrapping="Wrap" Margin="0,0,0,14" />
+            <ItemsControl ItemsSource="{Binding Tools}" Focusable="False" Margin="0,0,0,10">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="80" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.RowSpan="2" Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Top" />
+                            <DockPanel Grid.Column="1">
+                                <TextBlock DockPanel.Dock="Right" Text="{Binding StatusText}" Style="{StaticResource Hint}" TextWrapping="NoWrap" Margin="12,0,0,0" />
+                                <TextBlock Text="{Binding Purpose}" TextTrimming="CharacterEllipsis" />
+                            </DockPanel>
+                            <ProgressBar Grid.Row="1" Grid.Column="1" Height="6" Margin="0,4,0,0" Maximum="100" Value="{Binding Percent, Mode=OneWay}"
+                                         AutomationProperties.Name="{Binding Name}" />
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock Text="{StaticResource Media_ToolsResume}" Style="{StaticResource Hint}" Margin="0,0,0,8" />
+            <TextBlock Text="{Binding ErrorText}" Style="{StaticResource ErrorText}" Margin="0,0,0,8" />
+            <Button Content="{Binding InstallLabel}" Command="{Binding InstallCommand}" Style="{StaticResource DialogButton}"
+                    HorizontalAlignment="Right" IsDefault="True" FontWeight="SemiBold" />
+        </StackPanel>
+
+        <!-- Flow D step 2: pick the save folder on first launch. -->
+        <StackPanel x:Name="FolderStep" Visibility="Collapsed">
+            <TextBlock x:Name="FolderStepNumber" Text="{StaticResource FirstRun_Step2}" Style="{StaticResource Hint}" Margin="0,0,0,2" />
+            <TextBlock Text="{StaticResource FirstRun_Heading}" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,8" />
+            <TextBlock Text="{StaticResource FirstRun_Body}" TextWrapping="Wrap" Margin="0,0,0,14" />
+            <Label Content="{StaticResource Settings_DefaultFolder}" Target="{Binding ElementName=FolderBox}" Padding="0,0,0,4" />
+            <Grid Margin="0,0,0,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBox x:Name="FolderBox" />
+                <Button Grid.Column="1" Content="{StaticResource Common_Browse}" Click="OnBrowse" Margin="6,0,0,0" Padding="10,2" />
+            </Grid>
+            <TextBlock x:Name="ModeText" Style="{StaticResource Hint}" Margin="0,0,0,8" />
+            <TextBlock x:Name="ErrorText" Style="{StaticResource ErrorText}" Margin="0,0,0,8" />
+            <Button x:Name="StartButton" Content="{StaticResource FirstRun_Start}" Style="{StaticResource DialogButton}" HorizontalAlignment="Right" Click="OnStart" />
+        </StackPanel>
     </StackPanel>
 </Window>
