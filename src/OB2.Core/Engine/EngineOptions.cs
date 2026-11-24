@@ -31,8 +31,8 @@ public sealed record EngineOptions
 
     public TimeSpan RetryMaxDelay { get; init; } = TimeSpan.FromSeconds(30);
 
-    /// <summary>Upper bound on simultaneous connections to one host across all downloads (§16.1).</summary>
-    public int MaxConnectionsPerHost { get; init; } = 16;
+    /// <summary>Upper bound on simultaneous connections to one host across all downloads (§16.1); 32 since D-91.</summary>
+    public int MaxConnectionsPerHost { get; init; } = 32;
 
     /// <summary>Segments are never smaller than this, so small files use fewer connections.</summary>
     public long MinSegmentBytes { get; init; } = 512 * 1024;

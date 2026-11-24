@@ -172,7 +172,7 @@
     <sys:String x:Key="Settings_Connections">Connections per download (1–32)</sys:String>
     <sys:String x:Key="Settings_PerHost">Connections per server, all downloads (1–64)</sys:String>
     <sys:String x:Key="Settings_AutoConnections">Add more while it helps</sys:String>
-    <sys:String x:Key="Settings_AutoConnectionsTip">A download starts with this many connections. Every few seconds OB2 measures the speed and adds a few connections while that makes it faster, up to the per-server limit below; when more stop helping, it goes back. It never adds any while a speed limit applies or the server pushes back.</sys:String>
+    <sys:String x:Key="Settings_AutoConnectionsTip">A download starts with this many connections. Every few seconds OB2 measures the speed and adds a few connections while that makes it faster, up to the per-server limit below; when more stop helping, it goes back and tries again later. It never adds any while the downloads are at a speed limit or after the server pushes back.</sys:String>
     <sys:String x:Key="Settings_Retries">Retries per connection</sys:String>
     <sys:String x:Key="Settings_ConnectTimeout">Connect timeout (seconds)</sys:String>
     <sys:String x:Key="Settings_ReadTimeout">No-data timeout (seconds)</sys:String>

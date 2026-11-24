@@ -59,6 +59,40 @@ public sealed class SettingsValidatorTests
         settings.General.StartWithWindows.Should().BeFalse();
     }
 
+    [Fact]
+    public void Thirty_two_connections_per_server_is_the_default()
+    {
+        new AppSettings().Downloads.MaxConnectionsPerHost.Should().Be(32);
+        new OB2.Core.Engine.EngineOptions().MaxConnectionsPerHost.Should().Be(32);
+    }
+
+    [Fact]
+    public void A_settings_file_from_before_version_3_with_the_old_default_16_per_server_gets_32()
+    {
+        var settings = new AppSettings { Version = 2 };
+        settings.Downloads.MaxConnectionsPerHost = 16;
+
+        var changes = SettingsValidator.Normalize(settings);
+
+        settings.Downloads.MaxConnectionsPerHost.Should().Be(32);
+        settings.Version.Should().Be(AppSettings.CurrentVersion);
+        changes.Should().ContainSingle(c => c.Contains("maxConnectionsPerHost"));
+    }
+
+    [Theory]
+    [InlineData(2, 8)]
+    [InlineData(2, 24)]
+    [InlineData(3, 16)]
+    public void A_per_server_number_the_user_chose_stays(int version, int perHost)
+    {
+        var settings = new AppSettings { Version = version };
+        settings.Downloads.MaxConnectionsPerHost = perHost;
+
+        SettingsValidator.Normalize(settings).Should().BeEmpty();
+
+        settings.Downloads.MaxConnectionsPerHost.Should().Be(perHost);
+    }
+
     [Theory]
     [InlineData(0, 1)]
     [InlineData(-5, 1)]

@@ -6,7 +6,7 @@ namespace OB2.Core.Settings;
 /// </summary>
 public sealed class AppSettings
 {
-    public const int CurrentVersion = 2;
+    public const int CurrentVersion = 3;
 
     /// <summary>
     /// Version 2 turned <see cref="GeneralSettings.StartWithWindows"/> on by default. A file
@@ -15,6 +15,13 @@ public sealed class AppSettings
     /// the new default switch it on behind their back.
     /// </summary>
     public const int StartWithWindowsDefaultVersion = 2;
+
+    /// <summary>
+    /// D-91: version 3 raised <see cref="DownloadSettings.MaxConnectionsPerHost"/> from 16 to 32.
+    /// Every settings file stores the value, so a file from before holding the old default 16
+    /// moves to 32; any other number was the user's choice and stays.
+    /// </summary>
+    public const int PerHostDefaultVersion = 3;
 
     /// <summary>Format version of the settings file, for future migrations.</summary>
     public int Version { get; set; } = CurrentVersion;
@@ -63,8 +70,14 @@ public sealed class DownloadSettings
 
     public string UserAgent { get; set; } = DefaultUserAgent;
 
-    /// <summary>Cap on connections to one server across all downloads (§16.1).</summary>
-    public int MaxConnectionsPerHost { get; set; } = 16;
+    /// <summary>The per-server cap's default before version 3 of the settings file (D-91).</summary>
+    public const int OldDefaultMaxConnectionsPerHost = 16;
+
+    /// <summary>
+    /// Cap on connections to one server across all downloads (§16.1). D-91: 32 by default, so a
+    /// server that sends each connection little can still fill more of a fast line.
+    /// </summary>
+    public int MaxConnectionsPerHost { get; set; } = 32;
 
     /// <summary>
     /// D-90: a download starts with <see cref="Connections"/> and adds more while that makes it

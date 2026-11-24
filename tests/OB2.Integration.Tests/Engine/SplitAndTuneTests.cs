@@ -179,28 +179,86 @@ public sealed class SplitAndTuneTests(ITestOutputHelper output) : IAsyncLifetime
 
         done.Status.Should().Be(DownloadStatus.Completed, done.ErrorMessage);
         EngineFixture.Sha256OfFile(done.DestPath).Should().Be(TestHttpServer.Sha256Of(size));
-        var tuned = capture.Lines.Where(l => l.Contains("connections", StringComparison.Ordinal) && l.Contains("->", StringComparison.Ordinal)).ToList();
+        var tuned = Tuned(capture);
         output.WriteLine(string.Join(Environment.NewLine, tuned));
         string.Join(" | ", tuned).Should().ContainAll("2 -> 4", "4 -> 6", "6 -> 4");
-        tuned.Should().HaveCount(3, "after going back it never tries again: " + string.Join(" | ", tuned));
+        tuned.Count(l => l.Contains("4 -> 6", StringComparison.Ordinal)).Should().Be(
+            tuned.Count(l => l.Contains("6 -> 4", StringComparison.Ordinal)),
+            "D-91: it may try again later, but every try on a full line is undone: " + string.Join(" | ", tuned));
     }
 
     [Fact]
-    public async Task A_speed_limit_keeps_the_connections_as_they_are()
+    public async Task A_speed_limit_the_download_has_reached_keeps_the_connections_as_they_are()
     {
+        // Two connections could bring 2 MB/s; the limit lets 1.5 through, so it decides the speed.
         const long size = 6 * MB;
         var (logs, capture) = LogCapture.Create();
         _fixture.LoggerFactory = logs;
         Use(split: true, auto: true);
-        _fixture.Engine.GlobalLimiter.BytesPerSecond = 3_000_000;
+        _fixture.Engine.GlobalLimiter.BytesPerSecond = 1_500_000;
 
         var done = await _fixture.DownloadAsync(_server.FileUrl(size, "limited.bin", "bps=1000000"), connections: 2);
 
         done.Status.Should().Be(DownloadStatus.Completed, done.ErrorMessage);
         EngineFixture.Sha256OfFile(done.DestPath).Should().Be(TestHttpServer.Sha256Of(size));
-        capture.Lines.Should().NotContain(l => l.Contains("connections", StringComparison.Ordinal) && l.Contains("->", StringComparison.Ordinal),
-            "a speed limit decides the speed, not the connections");
+        Tuned(capture).Should().BeEmpty("a speed limit the download has reached decides the speed, not the connections");
     }
+
+    [Fact]
+    public async Task A_speed_limit_far_above_the_speed_does_not_stop_more_connections()
+    {
+        // D-91: the owner's 50,000 KB/s cap kept every download on its first 8 connections,
+        // though the servers gave 0.3 MB/s per connection and the downloads ran at 2.4 MB/s.
+        const long size = 24 * MB;
+        var (logs, capture) = LogCapture.Create();
+        _fixture.LoggerFactory = logs;
+        Use(split: true, auto: true, perHost: 8);
+        _fixture.Engine.GlobalLimiter.BytesPerSecond = 51_200_000;
+
+        var done = await _fixture.DownloadAsync(_server.FileUrl(size, "far-limit.bin", "bps=1000000"), connections: 2);
+
+        done.Status.Should().Be(DownloadStatus.Completed, done.ErrorMessage);
+        EngineFixture.Sha256OfFile(done.DestPath).Should().Be(TestHttpServer.Sha256Of(size));
+        var tuned = Tuned(capture);
+        output.WriteLine(string.Join(Environment.NewLine, tuned));
+        tuned.Should().Contain(l => l.Contains("2 -> 4", StringComparison.Ordinal), string.Join(Environment.NewLine, tuned));
+    }
+
+    [Fact]
+    public async Task A_resumed_download_starts_with_the_connections_it_had_reached()
+    {
+        // D-91: a resume used to start again from the configured number and climb for a while.
+        const long size = 64 * MB;
+        var (logs, capture) = LogCapture.Create();
+        _fixture.LoggerFactory = logs;
+        Use(split: true, auto: true, perHost: 8);
+        var item = await _fixture.AddAsync(_server.FileUrl(size, "reached.bin", "bps=1000000"), connections: 2);
+        _fixture.Engine.Start(item.Id).Should().BeTrue();
+        var deadline = DateTime.UtcNow.AddSeconds(30);
+        while (!Tuned(capture).Any(l => l.Contains("4 -> 6", StringComparison.Ordinal)))
+        {
+            DateTime.UtcNow.Should().BeBefore(deadline, "at 1 MB/s per connection, 2 -> 4 -> 6 takes about 4 s");
+            await Task.Delay(50);
+        }
+
+        await _fixture.Engine.PauseAsync(item.Id);
+        var reached = _fixture.Repository.Get(item.Id)!.Connections;
+        output.WriteLine($"Remembered at the pause: {reached} connections; {string.Join(" | ", Tuned(capture))}");
+        reached.Should().BeGreaterThanOrEqualTo(4, "4 had been shown to help before the pause (6 maybe not yet)");
+
+        var done = await _fixture.RunAsync(item.Id);
+
+        done.Status.Should().Be(DownloadStatus.Completed, done.ErrorMessage);
+        EngineFixture.Sha256OfFile(done.DestPath).Should().Be(TestHttpServer.Sha256Of(size));
+        ShouldCoverExactly(_fixture.Repository.GetSegments(item.Id), size);
+        capture.Lines.Should().Contain(
+            l => l.Contains($"{reached} connection(s), resume=True", StringComparison.Ordinal),
+            string.Join(Environment.NewLine, capture.Lines.Where(l => l.Contains("started", StringComparison.Ordinal))));
+    }
+
+    /// <summary>The log lines of connections added or given back.</summary>
+    private static List<string> Tuned(LogCapture capture) =>
+        [.. capture.Lines.Where(l => l.Contains("connections", StringComparison.Ordinal) && l.Contains("->", StringComparison.Ordinal))];
 }
 
 /// <summary>

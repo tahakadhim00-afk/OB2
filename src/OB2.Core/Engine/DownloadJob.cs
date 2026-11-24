@@ -38,7 +38,14 @@ internal sealed partial class DownloadJob : IDownloadJob, IDisposable
     /// checkpoint records segments either before a split or after it, never in between.
     /// </summary>
     private readonly object _splitLock = new();
+    private readonly TokenBucket _globalLimiter;
     private TokenBucket[] _limiters;
+
+    /// <summary>FR-9: this download's own limit, when it has one.</summary>
+    private TokenBucket? _ownLimiter;
+
+    /// <summary>D-91: bytes this download has received in this run, to compare with its own limit.</summary>
+    private long _ownReceived;
 
     private DownloadItem _item = null!;
 
@@ -84,6 +91,7 @@ internal sealed partial class DownloadJob : IDownloadJob, IDisposable
         _options = options;
         _hostLimiter = hostLimiter;
         _received = received;
+        _globalLimiter = globalLimiter;
         _limiters = [globalLimiter];
         _retry = new RetryPolicy(options.MaxRetries, options.RetryBaseDelay, options.RetryMaxDelay);
         _clock = clock;
@@ -144,6 +152,7 @@ internal sealed partial class DownloadJob : IDownloadJob, IDisposable
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
+            RememberConnections();
             SafeClose();
 
             // §10.3: taken while paused, because this is exactly the state a later resume has to
@@ -239,7 +248,9 @@ internal sealed partial class DownloadJob : IDownloadJob, IDisposable
         }
 
         // D-90: with ranges and a known size, idle connections split segments, so a resume runs
-        // on all its connections again rather than one per unfinished segment.
+        // on all its connections again rather than one per unfinished segment. D-91: those are
+        // the connections it had reached when it stopped (RememberConnections), not the number
+        // it first started with.
         _canSplit = _options.SplitSegments && _item.SupportsRanges && _item.TotalBytes is not null && _segments.All(s => !s.IsOpenEnded);
         _connectionLimit = _canSplit
             ? PlannedConnections()
@@ -247,7 +258,8 @@ internal sealed partial class DownloadJob : IDownloadJob, IDisposable
         if (_item.SpeedLimitBps is > 0)
         {
             // FR-9: a per-download limit applies on top of the global one.
-            _limiters = [.. _limiters, new TokenBucket(_item.SpeedLimitBps)];
+            _ownLimiter = new TokenBucket(_item.SpeedLimitBps);
+            _limiters = [.. _limiters, _ownLimiter];
         }
         _item.DownloadedBytes = _segments.Sum(s => s.Downloaded);
         _item.StartedAt ??= _clock.UtcNow;
@@ -255,10 +267,25 @@ internal sealed partial class DownloadJob : IDownloadJob, IDisposable
         _lastCheckpointTicks = Stopwatch.GetTimestamp();
         SetStatus(DownloadStatus.Downloading);
         _repository.AddHistoryEvent(_id, resume ? "resumed" : "started", resume ? _item.DownloadedBytes.ToString(System.Globalization.CultureInfo.InvariantCulture) : null);
-        LogStarted(_id, LogRedactor.Url(_item.FinalUrl), _item.TotalBytes, _segments.Count, resume);
+        LogStarted(_id, LogRedactor.Url(_item.FinalUrl), _item.TotalBytes, _segments.Count, _connectionLimit, resume);
     }
 
     private int PlannedConnections() => Math.Clamp(_item.Connections, 1, 32);
+
+    /// <summary>
+    /// D-91: when a download that was being tuned is paused, keeps the connections it had
+    /// reached, so the resume starts there instead of climbing again from the configured number.
+    /// A step not judged yet does not count, and a cut by throttling does. Saved with the status
+    /// change that follows. Not after a failure: a retry starts from the configured number.
+    /// </summary>
+    private void RememberConnections()
+    {
+        if (_tuner is { } tuner && _canSplit)
+        {
+            var reached = Math.Min(Volatile.Read(ref _connectionLimit), tuner.Proven);
+            _item.Connections = Math.Clamp(reached, 1, Settings.DownloadSettings.MaxConnections);
+        }
+    }
 
     /// <summary>
     /// Runs the segment pool. If the server turns out not to honour ranges, falls back once
@@ -473,17 +500,21 @@ internal sealed partial class DownloadJob : IDownloadJob, IDisposable
 
         using var timer = new PeriodicTimer(_options.TuneInterval);
         var lastBytes = _received.Total;
+        var lastOwn = Interlocked.Read(ref _ownReceived);
         var lastTicks = Stopwatch.GetTimestamp();
         while (!tuner.Settled && await timer.WaitForNextTickAsync(ct).ConfigureAwait(false))
         {
             var bytes = _received.Total;
+            var own = Interlocked.Read(ref _ownReceived);
             var seconds = Stopwatch.GetElapsedTime(lastTicks).TotalSeconds;
             var speed = seconds > 0 ? (bytes - lastBytes) / seconds : 0;
+            var ownSpeed = seconds > 0 ? (own - lastOwn) / seconds : 0;
             lastBytes = bytes;
+            lastOwn = own;
             lastTicks = Stopwatch.GetTimestamp();
 
             var before = Volatile.Read(ref _connectionLimit);
-            var after = tuner.Next(speed, CanGrow(before));
+            var after = tuner.Next(speed, CanGrow(before, speed, ownSpeed));
             if (after == before || (after > before && tuner.Settled))
             {
                 continue; // nothing to do, or the server pushed back meanwhile: never add then
@@ -505,11 +536,18 @@ internal sealed partial class DownloadJob : IDownloadJob, IDisposable
     }
 
     /// <summary>D-90: whether more connections could do anything for this download now.</summary>
-    private bool CanGrow(int limit)
+    /// <param name="limit">The connections it uses now.</param>
+    /// <param name="speed">How fast all downloads received in the last window (what the global limit caps).</param>
+    /// <param name="ownSpeed">How fast this one did (what its own limit caps).</param>
+    private bool CanGrow(int limit, double speed, double ownSpeed)
     {
-        if (_limiters.Any(l => l.IsLimited))
+        // A speed limit the downloads have reached decides the speed, not the connections. D-91:
+        // one far above the speed (a cap near the line's top speed) decides nothing, so it no
+        // longer keeps a slow server's download on its first connections.
+        if (ConnectionTuner.IsNearLimit(speed, _globalLimiter.BytesPerSecond) ||
+            ConnectionTuner.IsNearLimit(ownSpeed, _ownLimiter?.BytesPerSecond))
         {
-            return false; // a speed limit decides the speed, not the connections
+            return false;
         }
 
         // Enough left for every new connection to get a few pieces of its own.
@@ -714,6 +752,7 @@ internal sealed partial class DownloadJob : IDownloadJob, IDisposable
     private void OnBytes(int bytes)
     {
         _received.Add(bytes);
+        Interlocked.Add(ref _ownReceived, bytes);
         if (_item.Status == DownloadStatus.Retrying)
         {
             lock (_statusLock)
@@ -1073,8 +1112,8 @@ internal sealed partial class DownloadJob : IDownloadJob, IDisposable
         public void Dispose() => Release();
     }
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Download {Id} started: {Url}, {Total} bytes, {Segments} segment(s), resume={Resume}")]
-    private partial void LogStarted(long id, string url, long? total, int segments, bool resume);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Download {Id} started: {Url}, {Total} bytes, {Segments} segment(s), {Connections} connection(s), resume={Resume}")]
+    private partial void LogStarted(long id, string url, long? total, int segments, int connections, bool resume);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Download {Id} paused at {Bytes} bytes")]
     private partial void LogPaused(long id, long bytes);

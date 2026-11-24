@@ -34,6 +34,15 @@ public static class SettingsValidator
             changes.Add("general.startWithWindows kept off: this settings file predates it being a default");
         }
 
+        // D-91: the per-server cap's default went from 16 to 32 in version 3. The file stores the
+        // value, so the old default would stay for ever; a number the user picked stays as it is.
+        if (settings.Version < AppSettings.PerHostDefaultVersion &&
+            settings.Downloads.MaxConnectionsPerHost == DownloadSettings.OldDefaultMaxConnectionsPerHost)
+        {
+            settings.Downloads.MaxConnectionsPerHost = new DownloadSettings().MaxConnectionsPerHost;
+            changes.Add($"downloads.maxConnectionsPerHost raised from the old default {DownloadSettings.OldDefaultMaxConnectionsPerHost} to {settings.Downloads.MaxConnectionsPerHost}");
+        }
+
         if (settings.Version < AppSettings.CurrentVersion)
         {
             settings.Version = AppSettings.CurrentVersion;
