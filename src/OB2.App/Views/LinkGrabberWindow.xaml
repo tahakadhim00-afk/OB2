@@ -18,6 +18,26 @@
 
     <!-- D-87: paste text, check every link in it, filter, tick, add to a queue. -->
     <DockPanel Margin="12">
+        <!-- D-88: how to use the window, in five steps. By itself only the first time it opens; "How it works" brings it back. -->
+        <Border x:Name="Guide" DockPanel.Dock="Top" Style="{StaticResource UpdateBar}" BorderThickness="1" CornerRadius="4" Padding="14,10,10,12" Margin="0,0,0,10"
+                Visibility="{Binding IsGuideVisible, Converter={StaticResource BoolToVisibility}}"
+                AutomationProperties.Name="{StaticResource Grab_GuideTitle}">
+            <DockPanel>
+                <Button DockPanel.Dock="Right" VerticalAlignment="Top" Style="{StaticResource BarPrimaryButton}" MinWidth="80"
+                        Content="{StaticResource Grab_GuideGotIt}" Command="{Binding HideGuideCommand}" />
+                <TextBlock DockPanel.Dock="Left" Style="{StaticResource Glyph}" FontSize="20" Text="&#xE82F;" Foreground="{DynamicResource AccentBrush}"
+                           VerticalAlignment="Top" Margin="0,1,12,0" />
+                <StackPanel>
+                    <TextBlock Text="{StaticResource Grab_GuideTitle}" FontWeight="SemiBold" FontSize="14" Margin="0,0,0,6" />
+                    <TextBlock TextWrapping="Wrap" Margin="0,2"><Run Text="1." FontWeight="SemiBold" /> <Run Text="{StaticResource Grab_Guide1Title}" FontWeight="SemiBold" /> <Run Text="{StaticResource Grab_Guide1}" /></TextBlock>
+                    <TextBlock TextWrapping="Wrap" Margin="0,2"><Run Text="2." FontWeight="SemiBold" /> <Run Text="{StaticResource Grab_Guide2Title}" FontWeight="SemiBold" /> <Run Text="{StaticResource Grab_Guide2}" /></TextBlock>
+                    <TextBlock TextWrapping="Wrap" Margin="0,2"><Run Text="3." FontWeight="SemiBold" /> <Run Text="{StaticResource Grab_Guide3Title}" FontWeight="SemiBold" /> <Run Text="{StaticResource Grab_Guide3}" /></TextBlock>
+                    <TextBlock TextWrapping="Wrap" Margin="0,2"><Run Text="4." FontWeight="SemiBold" /> <Run Text="{StaticResource Grab_Guide4Title}" FontWeight="SemiBold" /> <Run Text="{StaticResource Grab_Guide4}" /></TextBlock>
+                    <TextBlock TextWrapping="Wrap" Margin="0,2"><Run Text="5." FontWeight="SemiBold" /> <Run Text="{StaticResource Grab_Guide5Title}" FontWeight="SemiBold" /> <Run Text="{StaticResource Grab_Guide5}" /></TextBlock>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
         <Grid DockPanel.Dock="Top">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
@@ -28,7 +48,15 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
-            <Label Grid.ColumnSpan="2" Content="{StaticResource Grab_PasteLabel}" Target="{Binding ElementName=PasteBox}" Style="{StaticResource FieldLabel}" Padding="0,0,0,4" />
+            <Label Content="{StaticResource Grab_PasteLabel}" Target="{Binding ElementName=PasteBox}" Style="{StaticResource FieldLabel}" Padding="0,0,0,4" />
+            <Button Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Bottom" Padding="8,1" Margin="8,0,0,4"
+                    Command="{Binding ShowGuideCommand}" AutomationProperties.Name="{StaticResource Grab_GuideShow}"
+                    Visibility="{Binding IsGuideHidden, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Style="{StaticResource Glyph}" FontSize="12" VerticalAlignment="Center" Text="&#xE897;" />
+                    <TextBlock Text="{StaticResource Grab_GuideShow}" Margin="5,0,0,0" VerticalAlignment="Center" />
+                </StackPanel>
+            </Button>
             <TextBox x:Name="PasteBox" Grid.Row="1" Height="84" Text="{Binding PasteText, UpdateSourceTrigger=PropertyChanged}"
                      AcceptsReturn="True" TextWrapping="NoWrap" VerticalContentAlignment="Top"
                      VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">

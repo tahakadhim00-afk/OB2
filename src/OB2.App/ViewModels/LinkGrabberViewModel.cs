@@ -75,6 +75,14 @@ public sealed partial class LinkGrabberViewModel : ObservableObject, IDisposable
     [NotifyCanExecuteChangedFor(nameof(DownloadNowCommand), nameof(DownloadLaterCommand), nameof(FindLinksCommand))]
     private bool _isBusy;
 
+    /// <summary>D-88: the steps panel at the top. Shown by itself the first time the window opens only.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsGuideHidden))]
+    private bool _isGuideVisible;
+
+    /// <summary>"How it works" shows while the guide is hidden.</summary>
+    public bool IsGuideHidden => !IsGuideVisible;
+
     /// <param name="initialText">Put in the paste box, not searched: the clipboard's text when it holds a link.</param>
     /// <param name="fileExtensions">The capture rules' types (Options > Browser), which count as files on a page too.</param>
     public LinkGrabberViewModel(DownloadService service, IDialogService dialogs, string? initialText, IReadOnlyCollection<string> fileExtensions)
@@ -201,6 +209,14 @@ public sealed partial class LinkGrabberViewModel : ObservableObject, IDisposable
     }
 
     private bool CanFindLinks() => !IsBusy && !string.IsNullOrWhiteSpace(PasteText);
+
+    /// <summary>"Got it": hides the guide.</summary>
+    [RelayCommand]
+    private void HideGuide() => IsGuideVisible = false;
+
+    /// <summary>"How it works": the guide again.</summary>
+    [RelayCommand]
+    private void ShowGuide() => IsGuideVisible = true;
 
     [RelayCommand]
     private void TickAll() => SetTicks(Shown, true);

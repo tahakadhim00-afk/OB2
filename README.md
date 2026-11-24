@@ -55,7 +55,7 @@ OB2 uses well-known open-source libraries for plumbing; see [Tech stack](#tech-s
 - **Expired links are refreshed.** If a signed URL stops working mid-download, OB2 asks the original link for a fresh address and continues.
 - **Speed limits**, global or per download, enforced by a token bucket.
 - **Integrity checks.** Optional MD5 or SHA-256 verification, disk-space checks before starting, and a size check at the end.
-- **Grab links.** Paste any text (an email, a forum post, a list of addresses) and OB2 lists every link in it with its real name, size and whether it works. A link to a web page brings the files that page links to. Filter by kind, tick what you want, and add them all to a queue in one go.
+- **Grab links.** Paste any text (an email, a forum post, a list of addresses) and OB2 lists every link in it with its real name, size and whether it works. A link to a web page brings the files that page links to. Filter by kind, tick what you want, and add them all to a queue in one go. A short guide explains the steps the first time the window opens.
 
 ### Organizing
 - **Categories** (Documents, Music, Video, Programs, Compressed, or your own) each save to their own folder.

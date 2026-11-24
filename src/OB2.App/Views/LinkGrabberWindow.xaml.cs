@@ -22,9 +22,30 @@ public partial class LinkGrabberWindow : Window
         viewModel.ConfirmCredentials = count =>
             MessageBox.Show(this, Loc.Format("Grab_Credentials", count), Title, MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes;
         viewModel.CloseRequested += (_, _) => Close();
-        // The clipboard's text, if it was put in the box, is selected: pasting something else replaces it.
-        Loaded += (_, _) => PasteBox.SelectAll();
+        Loaded += (_, _) =>
+        {
+            // The clipboard's text, if it was put in the box, is selected: pasting something else replaces it.
+            PasteBox.SelectAll();
+            MakeRoomForGuide();
+        };
         Closed += (_, _) => viewModel.Dispose();
+    }
+
+    /// <summary>
+    /// D-88: the guide opens with the window the first time; the window grows by its height so the
+    /// list keeps its room, within the screen's working area, and stays centred.
+    /// </summary>
+    private void MakeRoomForGuide()
+    {
+        if (!_viewModel.IsGuideVisible)
+        {
+            return;
+        }
+
+        var area = SystemParameters.WorkArea;
+        var extra = Math.Min(Guide.ActualHeight + Guide.Margin.Bottom, Math.Max(0, area.Height - Height));
+        Height += extra;
+        Top = Math.Max(area.Top, Math.Min(Top - (extra / 2), area.Bottom - Height));
     }
 
     private void OnSelectionChanged(object sender, SelectionChangedEventArgs e) =>

@@ -345,6 +345,20 @@
     <sys:String x:Key="Grab_FindOnPage">Find links on this page</sys:String>
     <sys:String x:Key="Grab_FoundOnTip">{0}&#x0a;Found on {1}</sys:String>
     <sys:String x:Key="Grab_StillChecking">{0} still being checked</sys:String>
+    <!-- D-88: the guide, shown the first time the window opens. -->
+    <sys:String x:Key="Grab_GuideTitle">How Grab links works</sys:String>
+    <sys:String x:Key="Grab_GuideGotIt">Got it</sys:String>
+    <sys:String x:Key="Grab_GuideShow">How it works</sys:String>
+    <sys:String x:Key="Grab_Guide1Title">Paste.</sys:String>
+    <sys:String x:Key="Grab_Guide1">Put any text with links in the box below: an email, a forum post, a web page's text or a list of addresses. Then click Find links, or press Ctrl&#x2060;+&#x2060;Enter.</sys:String>
+    <sys:String x:Key="Grab_Guide2Title">Check.</sys:String>
+    <sys:String x:Key="Grab_Guide2">OB2 checks each link for its name, its size and whether it works. Files are ticked once checked; web pages, broken links and links already in your downloads are not.</sys:String>
+    <sys:String x:Key="Grab_Guide3Title">Pages.</sys:String>
+    <sys:String x:Key="Grab_Guide3">A link to a web page brings the files that page links to, listed under it. Right-click a page and choose Find links on this page to go one page further.</sys:String>
+    <sys:String x:Key="Grab_Guide4Title">Choose.</sys:String>
+    <sys:String x:Key="Grab_Guide4">Untick a box above the list to hide that kind of link, or search. Space ticks the selected rows; a double-click opens one link in the Add window.</sys:String>
+    <sys:String x:Key="Grab_Guide5Title">Download.</sys:String>
+    <sys:String x:Key="Grab_Guide5">Pick the folder and the queue. Download Now adds the ticked links and starts the queue; Download Later only adds them.</sys:String>
     <sys:String x:Key="Grab_State_Checking">Checking…</sys:String>
     <sys:String x:Key="Grab_Ready">Ready</sys:String>
     <sys:String x:Key="Grab_ReadyNoResume">Ready, cannot resume</sys:String>

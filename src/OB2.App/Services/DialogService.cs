@@ -139,13 +139,36 @@ public sealed class DialogService : IDialogService
 
     public void ShowLinkGrabber()
     {
-        var window = new LinkGrabberWindow(new LinkGrabberViewModel(_service, this, ClipboardTextWithLinks(), [.. _settings.Capture.Extensions])) { Owner = Owner };
+        // D-88: the guide shows the first time only, so it is marked seen as it opens; closing
+        // the window without reading it does not bring it back (How it works does).
+        var showGuide = !_settings.General.GrabLinksGuideSeen;
+        if (showGuide)
+        {
+            _settings.General.GrabLinksGuideSeen = true;
+            _ = SaveQuietlyAsync();
+        }
+
+        var viewModel = new LinkGrabberViewModel(_service, this, ClipboardTextWithLinks(), [.. _settings.Capture.Extensions]) { IsGuideVisible = showGuide };
+        var window = new LinkGrabberWindow(viewModel) { Owner = Owner };
         if (window.Owner is null)
         {
             window.WindowStartupLocation = WindowStartupLocation.CenterScreen;
         }
 
         window.ShowDialog();
+    }
+
+    /// <summary>A preference not worth an error: on a read-only folder it is simply not remembered.</summary>
+    private async Task SaveQuietlyAsync()
+    {
+        try
+        {
+            await _store.SaveAsync(_settings);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // The guide shows again next time.
+        }
     }
 
     /// <summary>

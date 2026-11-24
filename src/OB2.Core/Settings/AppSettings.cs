@@ -175,6 +175,13 @@ public sealed class GeneralSettings
     /// the app does not change appearance on its own; Options &gt; General switches it.
     /// </summary>
     public AppTheme Theme { get; set; } = AppTheme.Light;
+
+    /// <summary>
+    /// D-88: the Grab links window has shown its guide. It shows once, the first time the window
+    /// opens (also for a copy updated from a version without Grab links); "How it works" in the
+    /// window shows it again.
+    /// </summary>
+    public bool GrabLinksGuideSeen { get; set; }
 }
 
 /// <summary>The colour schemes Options offers.</summary>
