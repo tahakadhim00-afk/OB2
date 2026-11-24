@@ -66,6 +66,12 @@ public sealed class DownloadSettings
     /// <summary>Cap on connections to one server across all downloads (§16.1).</summary>
     public int MaxConnectionsPerHost { get; set; } = 16;
 
+    /// <summary>
+    /// D-90: a download starts with <see cref="Connections"/> and adds more while that makes it
+    /// faster, up to <see cref="MaxConnectionsPerHost"/>. On by default.
+    /// </summary>
+    public bool AutoConnections { get; set; } = true;
+
     /// <summary>§11.3 / open question 3: interrupted downloads are not auto-resumed by default.</summary>
     public bool AutoResumeOnStartup { get; set; }
 
