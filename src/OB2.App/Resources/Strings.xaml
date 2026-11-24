@@ -300,6 +300,8 @@
     <!-- Startup / errors -->
     <sys:String x:Key="Startup_FailedTitle">OB2 could not start</sys:String>
     <sys:String x:Key="Startup_FailedMessage">OB2 could not prepare its data folder or database.&#x0a;&#x0a;{0}</sys:String>
+    <sys:String x:Key="Startup_OtherCopyTitle">OB2 is already running</sys:String>
+    <sys:String x:Key="Startup_OtherCopyMessage">OB2 is already running from another folder:&#x0a;{0}&#x0a;&#x0a;This copy, in {1}, will close, and the one already running will open instead. Each folder has its own settings and its own list of downloads.&#x0a;&#x0a;To use this copy, exit the other one first: right-click its icon next to the clock, then Exit.</sys:String>
     <sys:String x:Key="Error_UnexpectedTitle">Something went wrong</sys:String>
     <sys:String x:Key="Error_UnexpectedMessage">OB2 hit an unexpected error and recovered. Details were written to the log file.&#x0a;&#x0a;{0}</sys:String>
 

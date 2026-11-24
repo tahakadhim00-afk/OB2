@@ -46,6 +46,11 @@ public partial class App : Application
             // D-85: the version this one replaces holds the data folder until it has exited.
             await WaitForExitAsync(previous);
         }
+        else if (Arguments.OpenedByHand && await HandOverToOtherCopyAsync())
+        {
+            Shutdown(0);
+            return;
+        }
 
         AppPaths? paths = null;
         try
@@ -205,6 +210,39 @@ public partial class App : Application
             MessageBox.Show(Format("Update_GoBackFailed", ex.Message), Text("Update_GoBackTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
             return true; // reported already
         }
+    }
+
+    /// <summary>
+    /// D-92: a copy opened by hand while OB2 runs from another folder says so, hands its URL (or
+    /// "show yourself") to that one, and closes, so nobody ends up with two apps, two tray icons
+    /// and two download lists without knowing. Checked before this copy touches its own data
+    /// folder. Returns false, and this copy opens as before, when there is no such copy or it
+    /// does not take the request.
+    /// </summary>
+    private async Task<bool> HandOverToOtherCopyAsync()
+    {
+        var environment = AppPathEnvironment.Current;
+        RunningCopy? other;
+        try
+        {
+            other = await OtherCopies.FindAsync(environment.BaseDirectory, environment.AppDataDirectory, OtherCopies.RunningFolders(), TimeSpan.FromMilliseconds(500));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            return false; // cannot tell: open as before
+        }
+
+        if (other is null)
+        {
+            return false;
+        }
+
+        MessageBox.Show(
+            Format("Startup_OtherCopyMessage", other.Folder, Path.TrimEndingDirectorySeparator(Path.GetFullPath(environment.BaseDirectory))),
+            Text("Startup_OtherCopyTitle"),
+            MessageBoxButton.OK,
+            MessageBoxImage.Information);
+        return await ForwardToRunningInstanceAsync(other.PipeName);
     }
 
     private async Task<bool> ForwardToRunningInstanceAsync(string pipeName)
@@ -641,6 +679,13 @@ internal sealed record StartupArguments(string? Url, string? DataRoot, bool Mini
     public const string AfterUpdateOption = "--after-update";
 
     public static StartupArguments Empty { get; } = new(null, null, false, false);
+
+    /// <summary>
+    /// D-92: started by the user (from Explorer, a shortcut, or with a URL), not by the browser,
+    /// by Windows at sign-in, by an update, or with its own <c>--data</c> folder (tests and
+    /// deliberate side-by-side copies). Only such a start hands over to a copy in another folder.
+    /// </summary>
+    public bool OpenedByHand => DataRoot is null && !Minimized && !FromHost && AfterUpdatePid is null;
 
     public static StartupArguments Parse(IReadOnlyList<string> args)
     {
